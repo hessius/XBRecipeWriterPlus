@@ -67,10 +67,26 @@ here; do not "fix" them back.
 
 ### Corrections found during Task 2, counted across all 2,966 live rows
 
-- **There are five separators, not three.** Middle dot 1,666, comma 456,
-  bullet 119, katakana middle dot 76, semicolon 6. Split on all of them at
-  once, not on the first one found: four rows mix two
-  (`Ginger flower · Ripe plum · Hints of cocoa, Tangerine zest`).
+- **There are six separators, not three**, and the way to find them is a
+  census of every non-ASCII punctuation mark in every facet value, not a list
+  of the ones you expect. Middle dot 3,801, bullet 191, katakana middle dot
+  169, **ideographic comma 113**, plus ASCII comma and semicolon. The first
+  pass missed the ideographic comma, which is more common than the semicolon
+  it did include. Split on all of them at once, not on the first one found:
+  rows mix two (`Ginger flower · Ripe plum · Hints of cocoa, Tangerine zest`).
+- **En dash and em dash are not separators.** Flavour lists use them as one,
+  but origin and process use them as qualifiers (`Rwanda – Gakenke District`,
+  `Natural – Dry Fermentation`), and shredding an address is the worse mistake.
+  Fullwidth comma likewise: all seven live uses are prose.
+- **`type` is a facet wearing a string's clothes.** The server's own
+  `coffeeTypeList` has three members but the field is free text, so it carries
+  `N/A` on 11 rows, `???` on two and a joiner on 25. It goes through the same
+  cleaner and takes the first value, because it draws as one badge.
+- **A value with no letter and no digit is not a value.** A rule rather than a
+  longer list of punctuation, because whatever the next person types instead of
+  answering will not be on any list we wrote.
+- **`roast` is bounded, not just non-zero.** `roastList` has exactly five
+  entries, and a 7 would index off the end of it.
 - **`&` and `/` are not separators.** `Herbs & Spices` is one flavour,
   `Geisha/Gesha` is one varietal, `N/A` is not two of anything.
 - **The plain space is the dangerous one and the vocabulary gate is right.**
@@ -602,7 +618,7 @@ Create `library/hub/hubRow.ts`:
 import type {HubListRow} from "./hubApi";
 
 /** The separators official rows use to pre-join a facet array into one element. */
-const JOINERS = /[\u00b7\u2022\u30fb\uff65,;]/;
+const JOINERS = /[\u00b7\u2022\u30fb\uff65\u3001,;]/;
 
 /**
  * Mojibake seen in real recipe names.

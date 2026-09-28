@@ -178,6 +178,56 @@ describe("the separators the catalogue actually uses", () => {
         expect(splitFacet(["N/A"])).toEqual([]);
         expect(splitFacet(["NONE"])).toEqual([]);
         expect(splitFacet(["-"])).toEqual([]);
+        // A rule, not a longer list: whatever the next person types instead of
+        // answering will not be on any list we wrote.
+        expect(splitFacet(["???"])).toEqual([]);
+        expect(splitFacet(["\u2014"])).toEqual([]);
         expect(splitFacet(["Peach \u00b7 N/A \u00b7 Cocoa"])).toEqual(["Peach", "Cocoa"]);
+    });
+});
+
+describe("the edges the first pass missed", () => {
+    it("splits on the CJK list separator", () => {
+        // 113 live occurrences, more than the semicolon. Found by censusing
+        // every non-ASCII punctuation mark in every facet value rather than by
+        // listing the separators we expected to find, which is how the first
+        // pass missed it.
+        expect(splitFacet(["\u6843\u5b50\u3001\u8309\u8389\u82b1\u3001\u9ed1\u7cd6"]))
+            .toEqual(["\u6843\u5b50", "\u8309\u8389\u82b1", "\u9ed1\u7cd6"]);
+    });
+
+    it("leaves a dash alone, because it is a qualifier as often as a separator", () => {
+        // `Rwanda \u2013 Gakenke District` is one origin. Flavour lists do use a
+        // dash as a separator, but shredding an address is the worse mistake.
+        expect(splitFacet(["Rwanda \u2013 Gakenke District"]))
+            .toEqual(["Rwanda \u2013 Gakenke District"]);
+    });
+
+    it("cleans the coffee type the same way it cleans a facet", () => {
+        // `type` is free text but the server's own vocabulary has three
+        // members, so it carries the same junk: `N/A` on 11 rows, `???` on
+        // two, a joiner on 25. It draws as one badge, so the first value wins.
+        expect(normaliseHubRow(row({type: "N/A"})).coffeeType).toBe("");
+        expect(normaliseHubRow(row({type: "SL28, SL34"})).coffeeType).toBe("SL28");
+        expect(normaliseHubRow(row({type: "Single Origin"})).coffeeType).toBe("Single Origin");
+    });
+
+    it("refuses a roast the roast list has no word for", () => {
+        // `roastList` has exactly five entries. A 7 passing through would
+        // index off the end of it and draw nothing, or worse, draw the wrong
+        // word, and the type alone does not stop it.
+        expect(normaliseHubRow(row({roast: 7})).roast).toBeNull();
+        expect(normaliseHubRow(row({roast: 5})).roast).toBe(5);
+    });
+
+    it("cleans a value that leaked through as unparsed JSON", () => {
+        // Every live leak so far is a single plain word, but nothing promises
+        // the string somebody stringified was clean to begin with.
+        expect(splitFacet(['["Washed \u00b7 Natural"]'])).toEqual(["Washed", "Natural"]);
+        expect(splitFacet(['["N/A"]'])).toEqual([]);
+    });
+
+    it("treats a whitespace-only image URL as no image", () => {
+        expect(normaliseHubRow(row({imageUrl: "   "})).imageURL).toBeNull();
     });
 });

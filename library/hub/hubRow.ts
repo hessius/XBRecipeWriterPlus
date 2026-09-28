@@ -14,32 +14,55 @@ import type {HubListRow} from "./hubApi";
 /**
  * The separators rows use to pre-join a facet array into one element.
  *
- * Counted across all 2,966 live coffee rows: middle dot 1,666, comma 456,
- * bullet 119, katakana middle dot 76, semicolon 6. Split on all of them at
- * once rather than on the first one found, because four rows mix two
+ * Found by censusing every non-ASCII punctuation mark in every facet value of
+ * all 2,966 live coffee rows, rather than by listing the ones we expected:
+ * middle dot 3,801, bullet 191, katakana middle dot 169, ideographic comma
+ * 113, plus ASCII comma and semicolon. Split on all of them at once rather
+ * than on the first one found, because rows mix two
  * (`Ginger flower · Ripe plum · Hints of cocoa, Tangerine zest`).
  *
- * `&` and `/` are deliberately absent. `Herbs & Spices` is one flavour,
- * `Geisha/Gesha` is one varietal and `N/A` is not two of anything, so treating
- * either as a separator invents values that nobody wrote.
+ * Deliberately absent, each for its own reason:
+ * - `&` and `/`: `Herbs & Spices` is one flavour, `Geisha/Gesha` and
+ *   `Catuai / Catuaí` are one varietal spelled two ways, `N/A` is not two of
+ *   anything.
+ * - en dash and em dash: flavour uses them as separators but origin and
+ *   process use them as qualifiers (`Rwanda – Gakenke District`,
+ *   `Natural – Dry Fermentation`), so splitting would shred an address.
+ * - fullwidth comma U+FF0C: all seven uses are prose, not lists
+ *   (`红葡萄酒香，红布林般的酸质`).
  */
-const JOINERS = /[\u00b7\u2022\u30fb\uff65,;]/;
+const JOINERS = /[\u00b7\u2022\u30fb\uff65\u3001,;]/;
 
 /**
  * Mojibake seen in real recipe names.
  *
- * These are UTF-8 bytes that were decoded as Mac Roman somewhere upstream of
- * us, most often a middle dot. Repaired rather than stripped, because the
- * character is doing real work as a separator in the name.
+ * UTF-8 bytes decoded as Mac Roman somewhere upstream of us. Only the middle
+ * dot has actually been observed, on four rows
+ * (`El Salvador ¬∑ Guatemala Washed Medium - dark`), and it is repaired
+ * rather than stripped because it is doing real work as a separator.
+ *
+ * The other two are the Mac Roman forms the same pipeline would produce for a
+ * bullet and a right quote, and are defensive: neither has been seen in 2,966
+ * rows. They are listed in Mac Roman rather than Latin-1 on purpose, so the
+ * table is internally consistent with the one case that is real.
  */
 const MISDECODED: [string, string][] = [
     ["\u00ac\u2211", "\u00b7"],
-    ["\u00e2\u0080\u00a2", "\u2022"],
-    ["\u00e2\u0080\u0099", "\u2019"]
+    ["\u201a\u00c4\u00a2", "\u2022"],
+    ["\u201a\u00c4\u00f4", "\u2019"]
 ];
 
-/** Values that mean "not stated" rather than naming anything. */
-const PLACEHOLDERS = new Set(["n/a", "na", "none", "null", "unknown", "-", "--"]);
+/** Words that mean "not stated" rather than naming anything. */
+const PLACEHOLDERS = new Set(["n/a", "na", "none", "null", "unknown"]);
+
+/**
+ * Whether a value says anything at all.
+ *
+ * A rule rather than a longer list of punctuation: `-`, `--` and `???` all
+ * appear live and are all somebody declining to answer, and so is whatever
+ * the next person types instead.
+ */
+const SAYS_SOMETHING = /[\p{L}\p{N}]/u;
 
 export type HubRecipe = {
     id: number;
@@ -100,7 +123,10 @@ export function splitFacet(
             try {
                 const parsed: unknown = JSON.parse(text);
                 if (Array.isArray(parsed)) {
-                    out.push(...parsed.filter((v): v is string => typeof v === "string"));
+                    // Back through the whole cleaner, not straight out: every
+                    // live leak so far is a single plain word, but nothing
+                    // says the string somebody stringified was clean.
+                    out.push(...splitFacet(parsed as string[], vocabulary));
                     continue;
                 }
             } catch {
@@ -127,11 +153,12 @@ export function splitFacet(
     return out
         .map((value) => value.trim())
         .filter((value) => {
-            // `N/A`, `NONE` and a bare dash appear 38 times between them and
-            // are somebody declining to answer, not a value. Left in, they
-            // would become a filter chip offering to find coffees with no
-            // flavour.
-            if (value === "" || PLACEHOLDERS.has(value.toLowerCase())) return false;
+            // `N/A`, `NONE`, a bare dash and `???` appear about forty times
+            // between them and are all somebody declining to answer. Left in,
+            // they become a filter chip offering to find coffees whose
+            // flavour is "N/A".
+            if (!SAYS_SOMETHING.test(value)) return false;
+            if (PLACEHOLDERS.has(value.toLowerCase())) return false;
             if (seen.has(value)) return false;
             seen.add(value);
             return true;
@@ -141,23 +168,44 @@ export function splitFacet(
 /** What the browse and detail screens actually read. */
 export function normaliseHubRow(
     raw: HubListRow,
-    vocabulary: {origin?: readonly string[]; process?: readonly string[]} = {}
+    /**
+     * The server's own words, used only to gate the plain-space split. Best
+     * effort on purpose: it changes six values across the whole catalogue, so
+     * a page normalised before `loadHubCriteria()` resolves is not meaningfully
+     * different from the same page normalised after, and no caller has to
+     * sequence the two or re-normalise on arrival.
+     */
+    vocabulary: {
+        origin?: readonly string[];
+        process?: readonly string[];
+        coffeeType?: readonly string[];
+    } = {}
 ): HubRecipe {
-    const volume = typeof raw.volume === "number"
-        ? raw.volume
-        : typeof raw.volume === "string" && raw.volume.trim() !== ""
-            ? Number(raw.volume)
+    // Read as `unknown` first. `HubListRow.volume` is typed `string` because
+    // that is what all 2,966 rows send, so the other branches would otherwise
+    // narrow to `never` and read as dead code somebody should delete. They are
+    // not dead; they are this file doing its job.
+    const wire: unknown = raw.volume;
+    const volume = typeof wire === "number"
+        ? wire
+        : typeof wire === "string" && wire.trim() !== ""
+            ? Number(wire)
             : null;
 
     return {
         id: raw.communityRecipeId,
         name: repair(raw.recipeName ?? ""),
-        imageURL: raw.imageUrl === "" ? null : raw.imageUrl,
+        imageURL: (raw.imageUrl ?? "").trim() === "" ? null : raw.imageUrl,
         author: repair(raw.userName ?? ""),
         official: raw.official === 1,
         machine: raw.model ?? "",
         cupType: raw.cupType ?? "",
-        coffeeType: repair(raw.type ?? ""),
+        // `type` is a facet wearing a string's clothes: the server's own
+        // `coffeeTypeList` has three members, but the field is free text and
+        // carries the same junk everything else does (`N/A` on 11 rows, `???`
+        // on two, a joiner on 25). Through the same cleaner, then the first
+        // value, because this draws as one badge.
+        coffeeType: splitFacet([raw.type], vocabulary.coffeeType)[0] ?? "",
         origin: splitFacet(raw.origin, vocabulary.origin),
         varietal: splitFacet(raw.varietal),
         process: splitFacet(raw.process, vocabulary.process),
@@ -166,7 +214,7 @@ export function normaliseHubRow(
         // state. Anything that treated 0 as an index would show them all as
         // the lightest roast, which is a fact about somebody's coffee that
         // nobody told us.
-        roast: raw.roast === null || raw.roast === 0 ? null : raw.roast,
+        roast: raw.roast !== null && raw.roast >= 1 && raw.roast <= 5 ? raw.roast : null,
         dose: raw.dose,
         grind: raw.grinderSize,
         rpm: raw.rpm,
