@@ -176,12 +176,47 @@ hardcoded `1` is replaced at `library/XBloomRecipe.ts:263`,
 `api/_lib/xbloom.ts:113`, `api/_lib/xbloom.ts:169` and
 `api/_lib/payload.ts:235`.
 
+Note that `XBloomRecipe` sends `adaptedModel` only on the `byXid` pod path.
+`RecipeDetail.html`, which serves share ids, is not given one and does not need
+one.
+
 `api/_lib/payload.ts:162` currently rejects anything but 1. It becomes "1 or 2",
 and `api/__tests__/payload.test.ts:96` is updated to pin both the acceptance of
 2 and the continued rejection of 0 and 3. Only 1 and 2 return rows upstream;
 that partition is real and stays enforced.
 
-The client sends the model; the server does not infer it.
+The client sends the model; the server does not infer it. `recipeFields` in
+`api/_lib/xbloom.ts` echoes `payload.adaptedModel` rather than writing its own,
+and the mint's row lookup uses the same value it created with, because a row
+created in one partition is invisible to a lookup in the other.
+
+### 4.4 The partition is not the machine
+
+`shareLink.ts:137` records that `adaptedModel` "partitions the account's
+library". `cloudLibrary.ts:41` walks that partition to find what the service
+account holds. Those two facts together mean the setting cannot simply be
+substituted at every site.
+
+A user who mints links as a Studio owner and later corrects the setting to
+Original would have every earlier row fall out of the walk. `shareLink`'s
+fingerprint would then find no existing link for a recipe that has one, and mint
+a duplicate row into the service account, every time.
+
+So the two uses are separated:
+
+- **Minting** uses the setting. A link describes a recipe for a particular
+  machine, and an Original's grind tagged as a Studio's would be wrong for
+  whoever opens it.
+- **The library walk** in `cloudLibrary` reads **both** partitions and
+  concatenates, because the question it asks is "what has this account minted",
+  and the answer does not depend on what the user owns today. This costs a
+  second page walk and is bounded by the same `MAX_PAGES`.
+- **The mint's own row lookup** in `api/_lib/xbloom.ts` uses the model the row
+  was created with, which it now has from the payload rather than from a
+  constant.
+
+Without §4.4 this phase would quietly corrupt the shared account for anyone who
+changes the setting, which is precisely the group the setting exists for.
 
 ## 5. Phase 2: the hub
 
