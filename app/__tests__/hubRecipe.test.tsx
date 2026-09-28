@@ -200,6 +200,28 @@ describe("one catalogue recipe", () => {
         expect(screen.queryByText("Community Recipe don't exist")).toBeNull();
     });
 
+    it("says so when the link carries no recipe id, rather than loading forever",
+       async () => {
+        mockParams = {};
+
+        await renderHubRecipe();
+
+        expect(await screen.findByText("That link does not point at a hub recipe."))
+            .toBeTruthy();
+        expect(screen.queryByLabelText("Try again")).toBeNull();
+        expect(mockFetchHubDetail).not.toHaveBeenCalled();
+    });
+
+    it("says the same for an id that is not a number", async () => {
+        mockParams = {id: "not-a-number"};
+
+        await renderHubRecipe();
+
+        expect(await screen.findByText("That link does not point at a hub recipe."))
+            .toBeTruthy();
+        expect(mockFetchHubDetail).not.toHaveBeenCalled();
+    });
+
     it("saves this one recipe", async () => {
         await renderHubRecipe();
         await screen.findByLabelText("Save recipe");

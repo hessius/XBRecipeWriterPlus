@@ -13,6 +13,7 @@ import {SCREEN_PADDING} from "@/constants/layout";
 import router from "@/hooks/steadyRouter";
 import {useHubSave} from "@/hooks/useHubSave";
 import {fetchHubDetail, type HubDetailRow, HubApiError} from "@/library/hub/hubApi";
+import {criteriaVocabulary, heldHubCriteria} from "@/library/hub/hubCriteria";
 import {hubPours} from "@/library/hub/hubStages";
 import {hubAccent, normaliseHubRow, type HubRecipe} from "@/library/hub/hubRow";
 
@@ -39,10 +40,45 @@ function saveFailureMessage(names: readonly string[]): string {
 }
 
 function rowFromDetail(detail: HubDetailRow): HubRecipe {
+    // The same vocabulary the list normalised against, or this screen would
+    // split the same recipe's origin differently from the row that opened it.
     return normaliseHubRow({
         ...detail,
         pourCount: detail.pourList?.length ?? 0
-    });
+    }, criteriaVocabulary(heldHubCriteria()));
+}
+
+/**
+ * A link that does not carry a hub recipe id at all.
+ *
+ * Reachable from a malformed deep link, or from one with no `id` at all. It
+ * used to leave the screen loading for ever: the fetch never started, so
+ * nothing ever arrived to end it and nothing ever said why.
+ */
+const UNREADABLE_LINK = new Error("That link does not point at a hub recipe.");
+UNREADABLE_LINK.name = "UnreadableHubLink";
+
+/** What an error should say, and whether trying again could possibly help. */
+function saying(error: Error): {heading: string; body: string; retry: boolean} {
+    if (error === UNREADABLE_LINK) {
+        return {
+            heading: "BROKEN LINK",
+            body: "That link does not point at a hub recipe.",
+            retry: false
+        };
+    }
+    if (error instanceof HubApiError && error.isRefusal) {
+        return {
+            heading: "NO LONGER SHARED",
+            body: "This recipe is no longer shared.",
+            retry: false
+        };
+    }
+    return {
+        heading: "CONNECTION LOST",
+        body: "The hub is having trouble. Please try again.",
+        retry: true
+    };
 }
 
 function ErrorState({
@@ -52,22 +88,20 @@ function ErrorState({
     error: Error;
     onRetry: () => void;
 }) {
-    const removed = error instanceof HubApiError && error.isRefusal;
+    const said = saying(error);
     return (
         <YStack flex={1} alignItems="center" justifyContent="center"
                 gap="$4" paddingHorizontal="$6" paddingVertical="$8">
             <YStack alignItems="center" gap="$2">
                 <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
                                color={palette.dim}>
-                    {removed ? "NO LONGER SHARED" : "CONNECTION LOST"}
+                    {said.heading}
                 </DotMatrixText>
                 <Text color={palette.muted} fontSize={14} textAlign="center">
-                    {removed
-                        ? "This recipe is no longer shared."
-                        : "The hub is having trouble. Please try again."}
+                    {said.body}
                 </Text>
             </YStack>
-            {!removed && (
+            {said.retry && (
                 <Pressable accessibilityRole="button" accessibilityLabel="Try again"
                            onPress={onRetry}>
                     <XStack height={44} paddingHorizontal="$4" borderRadius="$4"
@@ -279,10 +313,11 @@ export default function HubRecipeScreen() {
     }, [recipeId, retry]);
 
     const request = `${recipeId}:${retry}`;
+    const readable = Number.isFinite(recipeId);
     const arrived = loaded !== null && loaded.request === request;
     const detail = arrived ? loaded.detail : null;
-    const error = arrived ? loaded.error : null;
-    const loading = !arrived;
+    const error = readable ? (arrived ? loaded.error : null) : UNREADABLE_LINK;
+    const loading = readable && !arrived;
     const title = detail === null ? "Recipe" : rowFromDetail(detail).name;
 
     async function saveOne() {
