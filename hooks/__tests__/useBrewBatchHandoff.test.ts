@@ -224,8 +224,8 @@ describe("useBrewBatchHandoff", () => {
         const {result} = await renderHook(() => useBrewBatchHandoff(source({
             a: {record: brew({id: "a"}), samples}
         })));
-        let first!: Promise<void>;
-        let second!: Promise<void>;
+        let first!: Promise<number | null>;
+        let second!: Promise<number | null>;
 
         await act(async () => {
             first = result.current.send(["a"]);

@@ -40,10 +40,10 @@ export function useBrewHandoff(
     const isSendingRef = useRef(false);
     const [busy, setBusy] = useState(false);
 
-    async function send(beanName?: string) {
-        if (isSendingRef.current) return;
+    async function send(beanName?: string): Promise<number | null> {
+        if (isSendingRef.current) return null;
         const opened = source();
-        if (opened === null) return;
+        if (opened === null) return null;
         isSendingRef.current = true;
         setBusy(true);
         try {
@@ -59,7 +59,7 @@ export function useBrewHandoff(
                 ({url} = encodeHandoff(envelope));
             } catch {
                 notify({tone: "error", message: HANDOFF_TOO_LARGE});
-                return;
+                return null;
             }
             // Do not preflight with canOpenURL: on iOS it returns false without
             // LSApplicationQueriesSchemes, even when Beanconqueror is installed.
@@ -69,13 +69,15 @@ export function useBrewHandoff(
                 // A share sheet can be cancelled; a deep link has no cancel
                 // outcome, so a rejection here is a real failure to surface.
                 notify({tone: "error", message: HANDOFF_OPEN_FAILED});
-                return;
+                return null;
             }
             // Recorded after the link opened, not before: a failure to open is
             // the one case where nothing can have been received, and a brew
             // marked sent that never left would make the warning on the record
             // screen a lie.
-            (store ?? sharedBrewDatabase()).markSent(opened.record.id, Date.now());
+            const sentAt = Date.now();
+            (store ?? sharedBrewDatabase()).markSent(opened.record.id, sentAt);
+            return sentAt;
         } finally {
             // The compiler bailout costs nothing measurable on a hook this
             // small, and one reset point is safer than duplicating it across

@@ -213,6 +213,33 @@ describe("useRatingPrompt", () => {
         expect(result.current.brew?.id).toBe("b1");
     });
 
+    it("rejects dismissal for a previously offered brew that is no longer current", async () => {
+        let onAppChange: ((state: string) => void) | undefined;
+        jest.spyOn(AppState, "addEventListener").mockImplementation(
+            ((event: string, handler: (state: string) => void) => {
+                if (event === "change") onAppChange = handler;
+                return {remove: () => {}};
+            }) as typeof AppState.addEventListener
+        );
+        const store = fakeStore(measuredBrew("b1"));
+        const settings = new Settings(memoryStorage());
+        const {result} = await renderHook(() => useRatingPrompt(store, settings));
+        expect(result.current.brew?.id).toBe("b1");
+
+        store.next = measuredBrew("b2");
+        await act(async () => {
+            onAppChange?.("active");
+        });
+        expect(result.current.brew?.id).toBe("b2");
+
+        await act(async () => {
+            result.current.dismiss("b1");
+        });
+
+        expect(settings.get("ratingPromptDismissed")).toBe("");
+        expect(result.current.brew?.id).toBe("b2");
+    });
+
     it("retires an offered brew when its rating window expires without re-reading", async () => {
         jest.restoreAllMocks();
         jest.useFakeTimers({now: NOW});

@@ -107,8 +107,8 @@ describe("useBrewHandoff", () => {
             () => new Promise<void>((resolve) => { release = resolve; })
         );
         const {result} = await renderHook(() => useBrewHandoff(source));
-        let first!: Promise<void>;
-        let second!: Promise<void>;
+        let first!: Promise<number | null>;
+        let second!: Promise<number | null>;
 
         await act(async () => {
             first = result.current.send();

@@ -57,18 +57,18 @@ export default function LiveBrewBar() {
         wasSilent.current = silent;
     }, [pathname, prompt]);
 
-    function clearNoting(): void {
-        if (noting !== null) setNoting(null);
-        if (noteOpen) setNoteOpen(false);
-        if (noteDraft !== "") setNoteDraft("");
-    }
-
-    function closeNoteSheet(): void {
+    function commitNoteDraft(updateLocal: boolean): void {
         Keyboard.dismiss();
         if (noting !== null && noteDraft !== (noting.note ?? "") &&
             prompt.annotate(noting.id, noteDraft)) {
-            setNoting((was) => was === null ? was : {...was, note: noteDraft});
+            if (updateLocal) {
+                setNoting((was) => was === null ? was : {...was, note: noteDraft});
+            }
         }
+    }
+
+    function closeNoteSheet(): void {
+        commitNoteDraft(true);
         setNoteOpen(false);
         const closing = noting?.id;
         if (closeTimer.current !== null) {
@@ -80,13 +80,30 @@ export default function LiveBrewBar() {
         }, EXIT_GRACE);
     }
 
+    useEffect(() => {
+        if ((SILENT.has(pathname) || run !== null) && noting !== null) {
+            Keyboard.dismiss();
+            if (noteDraft !== (noting.note ?? "")) {
+                prompt.annotate(noting.id, noteDraft);
+            }
+            const timer = setTimeout(() => {
+                if (noting !== null) setNoting(null);
+                if (noteOpen) setNoteOpen(false);
+                if (noteDraft !== "") setNoteDraft("");
+            }, 0);
+            return () => clearTimeout(timer);
+        }
+    }, [pathname, run, noting, noteDraft, noteOpen, prompt]);
+
+    useEffect(() => () => {
+        if (closeTimer.current !== null) clearTimeout(closeTimer.current);
+    }, []);
+
     if (SILENT.has(pathname)) {
-        clearNoting();
         return null;
     }
 
     if (run !== null) {
-        clearNoting();
         return (
             <BrewMiniBar
                 recipeName={run.recipe.displayName()}
@@ -142,6 +159,7 @@ export default function LiveBrewBar() {
                             closeNoteSheet();
                         }
                     }}
+                    onDone={closeNoteSheet}
                     figures={brewFigures(noting)}
                     recipeName={noting.recipeName}
                     rating={noting.rating ?? 0}

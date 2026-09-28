@@ -24,10 +24,12 @@ import {onAccent, palette} from "@/constants/colors";
  * which cup is being asked about.
  */
 export default function BrewNoteSheet({
-    open, onOpenChange, figures, recipeName, rating, note, onRate, onNote, onNoteDraft, footer
+    open, onOpenChange, onDone, figures, recipeName, rating, note, onRate, onNote, onNoteDraft,
+    footer
 }: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onDone?: () => void;
     /** `14:32 · 244 G`, already formatted by the caller. */
     figures: string;
     recipeName: string;
@@ -44,7 +46,11 @@ export default function BrewNoteSheet({
 }) {
     function close(): void {
         Keyboard.dismiss();
-        onOpenChange(false);
+        if (onDone !== undefined) {
+            onDone();
+        } else {
+            onOpenChange(false);
+        }
     }
 
     return (

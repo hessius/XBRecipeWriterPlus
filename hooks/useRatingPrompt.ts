@@ -137,7 +137,7 @@ export function useRatingPrompt(
     }
 
     function dismiss(id: string): void {
-        if (offeredBrewId(id) === null) return;
+        if (brew?.id !== id) return;
         setDismissedId(id);
     }
 

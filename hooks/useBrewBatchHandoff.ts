@@ -100,15 +100,15 @@ export function useBrewBatchHandoff(
         builtRef.current = new Map();
     }
 
-    async function send(ids: string[]): Promise<void> {
-        if (isSendingRef.current) return;
+    async function send(ids: string[]): Promise<number | null> {
+        if (isSendingRef.current) return null;
         isSendingRef.current = true;
         setBusy(true);
         try {
             const built = sendableEnvelopes(ids);
             if (built.length === 0) {
                 notify({tone: "error", message: BATCH_HANDOFF_EMPTY});
-                return;
+                return null;
             }
 
             let url: string;
@@ -116,7 +116,7 @@ export function useBrewBatchHandoff(
                 ({url} = encodeHandoffBatch(built.map(({envelope}) => envelope)));
             } catch {
                 notify({tone: "error", message: BATCH_HANDOFF_TOO_LARGE});
-                return;
+                return null;
             }
 
             // No canOpenURL preflight, for the reason useBrewHandoff gives: on
@@ -126,13 +126,14 @@ export function useBrewBatchHandoff(
                 await Linking.openURL(url);
             } catch {
                 notify({tone: "error", message: BATCH_HANDOFF_OPEN_FAILED});
-                return;
+                return null;
             }
             const sentAt = Date.now();
             const database = store ?? sharedBrewDatabase();
             built.forEach(({id}) => {
                 database.markSent(id, sentAt);
             });
+            return sentAt;
         } finally {
             isSendingRef.current = false;
             setBusy(false);

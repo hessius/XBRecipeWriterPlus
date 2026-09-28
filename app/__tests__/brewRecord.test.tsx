@@ -5,6 +5,7 @@ import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-na
 import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
+import {gunzipSync} from "fflate";
 
 import BrewRecord from "@/app/brewRecord";
 import type {RecipeLookup} from "@/app/brewRecord";
@@ -21,6 +22,7 @@ import type Recipe from "@/library/Recipe";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {planFromPours} from "@/library/brew/BrewRecord";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
+import type {HandoffEnvelope} from "@/library/brew/handoff/envelope";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
@@ -143,6 +145,23 @@ async function pressOnSheet(
         await fireEvent.press(target());
         if (landed !== undefined) expect(landed()).toBe(true);
     });
+}
+
+function decodeHandoffUrl(url: string): HandoffEnvelope {
+    const params = new URL(url).searchParams;
+    const joined = [...params.keys()]
+        .filter((key) => /^shareBrew\d+$/.test(key))
+        .map((key) => Number(key.slice("shareBrew".length)))
+        .sort((a, b) => a - b)
+        .map((index) => params.get(`shareBrew${index}`) ?? "")
+        .join("");
+    const padded = joined
+        .replace(/-/g, "+")
+        .replace(/_/g, "/")
+        .padEnd(Math.ceil(joined.length / 4) * 4, "=");
+    return JSON.parse(
+        new TextDecoder().decode(gunzipSync(Buffer.from(padded, "base64")))
+    ) as HandoffEnvelope;
 }
 
 describe("brew record", () => {
@@ -548,6 +567,108 @@ describe("brew record", () => {
             );
 
             expect(openURL).toHaveBeenCalled();
+        });
+
+        it("carries the rating given in the pre-send sheet into the handoff URL", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await pressOnSheet(
+                () => screen.getByLabelText(handoffTarget.buttonLabel),
+                () => screen.queryByTestId("brew-note-done") !== null
+            );
+            await pressOnSheet(
+                () => screen.getByLabelText("Rate 4 stars"),
+                () => mockJudgementStore.judge.mock.calls.some(
+                    ([id, verdict]) => id === "brew-1" && verdict.rating === 4
+                )
+            );
+            await pressOnSheet(
+                () => screen.getByTestId("brew-note-done"),
+                () => openURL.mock.calls.length > 0
+            );
+
+            const opened = openURL.mock.calls[0]?.[0];
+            expect(typeof opened).toBe("string");
+            expect(decodeHandoffUrl(opened as string).brew.rating).toBe(4);
+        });
+
+        it("does not ask again after the record-screen stars already rated the brew", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            await fireEvent.press(screen.getByLabelText("Rate 4 stars"));
+            await fireEvent.press(screen.getByLabelText(handoffTarget.buttonLabel));
+
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+            expect(screen.queryByTestId("brew-note-done")).toBeNull();
+        });
+
+        it("shows the already-sent line after the first send and still allows the second", async () => {
+            jest.spyOn(Date, "now").mockReturnValue(86_400_000);
+            mockOpened = {
+                record: makeBrewRecordFixture({
+                    coffee: {name: "Kenya Sakami"},
+                    rating: 4
+                }),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+            await fireEvent.press(screen.getByLabelText(handoffTarget.buttonLabel));
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
+            expect(await screen.findByText(/Sending again/)).toBeTruthy();
+
+            await fireEvent.press(screen.getByLabelText(handoffTarget.buttonLabel));
+            await waitFor(() => expect(openURL).toHaveBeenCalledTimes(2));
+        });
+
+        it("does not send when the pre-send sheet is dismissed", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await pressOnSheet(
+                () => screen.getByLabelText(handoffTarget.buttonLabel),
+                () => screen.queryByText("CLOSE") !== null
+            );
+
+            await fireEvent.press(screen.getByText("CLOSE"));
+
+            expect(openURL).not.toHaveBeenCalled();
+        });
+
+        it("commits a typed pre-send note before building the handoff URL", async () => {
+            mockOpened = {
+                record: makeBrewRecordFixture({coffee: {name: "Kenya Sakami"}}),
+                samples: []
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+            await pressOnSheet(
+                () => screen.getByLabelText(handoffTarget.buttonLabel),
+                () => screen.queryByTestId("send-without-rating") !== null
+            );
+            await fireEvent.changeText(screen.getByTestId("judgement-note"), "Bright and silky.");
+            await pressOnSheet(
+                () => screen.getByTestId("send-without-rating"),
+                () => openURL.mock.calls.length > 0
+            );
+
+            const opened = openURL.mock.calls[0]?.[0];
+            expect(typeof opened).toBe("string");
+            expect(decodeHandoffUrl(opened as string).brew.note)
+                .toContain("Bright and silky.");
         });
 
         it("does not offer the handoff without the action", async () => {
