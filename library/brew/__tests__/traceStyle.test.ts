@@ -23,6 +23,11 @@ describe("traceStyle", () => {
             .toBe(palette.warn);
     });
 
+    it("keeps the reference grey even where that brew was held", () => {
+        expect(channelStyle("water", {accent: ACCENT, holding: true, role: "reference"})
+            .stroke).toBe(referenceWaterColour);
+    });
+
     it("draws cup dotted, in the accent's complement", () => {
         expect(channelStyle("cup", {accent: ACCENT})).toEqual({
             stroke:          cupLineFor(ACCENT),
@@ -41,6 +46,15 @@ describe("traceStyle", () => {
             strokeLinecap:   undefined,
             strokeLinejoin:  undefined
         });
+    });
+
+    it("uses a caller's animated plan colour", () => {
+        expect(channelStyle("plan", {accent: ACCENT, planColour: "#ABCDEF"}).stroke)
+            .toBe("#ABCDEF");
+    });
+
+    it("keeps the plan muted without an animated plan colour", () => {
+        expect(channelStyle("plan", {accent: ACCENT}).stroke).toBe(palette.muted);
     });
 
     it("keeps the plan's dashes but lets a caller fuse them", () => {
