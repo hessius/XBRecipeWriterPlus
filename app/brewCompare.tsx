@@ -191,8 +191,8 @@ export default function BrewCompareScreen() {
         return (
             <GuardedComparison
                 testID="compare-missing"
-                title="BREW NOT FOUND"
-                body="One of these brews is no longer here."
+                title={COMPARE_GUARD.missing.title}
+                body={COMPARE_GUARD.missing.body}
             />
         );
     }

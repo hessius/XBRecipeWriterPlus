@@ -20,7 +20,6 @@ type ReadyComparison = {
     state: "ready";
     mode: CompareMode;
     setMode: (mode: CompareMode) => void;
-    swapped: boolean;
     swap: () => void;
     subject: BrewUnderComparison;
     reference: BrewUnderComparison;
@@ -122,7 +121,6 @@ export function useBrewComparison({
         state: "ready",
         mode,
         setMode,
-        swapped,
         swap: () => setSwapped((was) => !was),
         subject,
         reference,

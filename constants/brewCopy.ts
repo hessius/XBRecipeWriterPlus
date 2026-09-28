@@ -303,6 +303,10 @@ export const COMPARE_DEGRADED = {
 };
 
 export const COMPARE_GUARD = {
+    missing: {
+        title: "BREW NOT FOUND",
+        body: "One of these brews is no longer here."
+    },
     same: {
         title: "SAME BREW",
         body: "Choose two different brews to compare. One brew can only repeat itself."
