@@ -353,12 +353,22 @@ describe("maxRateOf", () => {
 describe("cupAtDrawdownFrom", () => {
     it("reads the cup at the boundary, not at the end", () => {
         const samples = ramp(20, 2);
-        expect(cupAtDrawdownFrom(samples, 10_000)).toBeCloseTo(20, 6);
+        expect(cupAtDrawdownFrom(samples, 1, 10_000)).toBeCloseTo(20, 6);
+    });
+
+    it("ignores bypass readings at the drawdown boundary", () => {
+        const samples: BrewSample[] = [
+            {at: 0, water: 0, cup: 0, pour: 1},
+            {at: 10_000, water: 20, cup: 20, pour: 1},
+            {at: 10_000, water: 60, cup: 60, pour: 2}
+        ];
+
+        expect(cupAtDrawdownFrom(samples, 1, 10_000)).toBeCloseTo(20, 6);
     });
 
     it("is 0 when the brew never drew down", () => {
-        expect(cupAtDrawdownFrom(ramp(20, 2), 0)).toBe(0);
-        expect(cupAtDrawdownFrom([], 10_000)).toBe(0);
+        expect(cupAtDrawdownFrom(ramp(20, 2), 1, 0)).toBe(0);
+        expect(cupAtDrawdownFrom([], 1, 10_000)).toBe(0);
     });
 });
 

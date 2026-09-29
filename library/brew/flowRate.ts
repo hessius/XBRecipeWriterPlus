@@ -306,14 +306,13 @@ export function maxRateOf(series: FlowPoint[]): number {
  * uses and what `drawdownRate` refuses on.
  */
 export function cupAtDrawdownFrom(
-    samples: BrewSample[], drawdownAt: number
+    samples: BrewSample[], stages: number, drawdownAt: number
 ): number {
     if (drawdownAt <= 0) return 0;
     let cup = 0;
     for (const sample of samples) {
-        if (sample.pour < 1) continue;
         if (sample.at > drawdownAt) break;
-        cup = sample.cup;
+        if (sample.pour >= 1 && sample.pour <= stages) cup = sample.cup;
     }
     return cup;
 }

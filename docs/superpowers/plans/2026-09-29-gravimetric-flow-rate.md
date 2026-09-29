@@ -483,12 +483,12 @@ function record(over: Partial<BrewRecord> = {}): BrewRecord {
 describe("cupAtDrawdownFrom", () => {
     it("reads the cup at the boundary, not at the end", () => {
         const samples = ramp(20, 2);
-        expect(cupAtDrawdownFrom(samples, 10_000)).toBeCloseTo(20, 6);
+        expect(cupAtDrawdownFrom(samples, 1, 10_000)).toBeCloseTo(20, 6);
     });
 
     it("is 0 when the brew never drew down", () => {
-        expect(cupAtDrawdownFrom(ramp(20, 2), 0)).toBe(0);
-        expect(cupAtDrawdownFrom([], 10_000)).toBe(0);
+        expect(cupAtDrawdownFrom(ramp(20, 2), 1, 0)).toBe(0);
+        expect(cupAtDrawdownFrom([], 1, 10_000)).toBe(0);
     });
 });
 
@@ -567,14 +567,13 @@ in place of the existing type-only import.
  * uses and what `drawdownRate` refuses on.
  */
 export function cupAtDrawdownFrom(
-    samples: BrewSample[], drawdownAt: number
+    samples: BrewSample[], stages: number, drawdownAt: number
 ): number {
     if (drawdownAt <= 0) return 0;
     let cup = 0;
     for (const sample of samples) {
-        if (sample.pour < 1) continue;
         if (sample.at > drawdownAt) break;
-        cup = sample.cup;
+        if (sample.pour >= 1 && sample.pour <= stages) cup = sample.cup;
     }
     return cup;
 }
@@ -703,7 +702,7 @@ spreads and next to `...(bypass === undefined ? {} : {bypass}),`, add:
             // leaves the key off the row entirely and reads back exactly like
             // a record written before this field existed.
             ...(drawdownAt > 0
-                ? {cupAtDrawdown: cupAtDrawdownFrom(this.collected, drawdownAt)}
+                ? {cupAtDrawdown: cupAtDrawdownFrom(this.collected, stages, drawdownAt)}
                 : {}),
 ```
 
