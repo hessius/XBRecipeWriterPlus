@@ -2,7 +2,7 @@
 
 **XBRW++**
 
-Last updated: 2026-09-19
+Last updated: 2026-09-29
 
 ## The short version
 
@@ -23,7 +23,9 @@ the developer to see any of it unless you choose to share a recipe.
 
 ## When XBRW++ uses the network
 
-Three cases, all of which only happen because you asked for them.
+Four cases, all of which only happen because you asked for them. The app also
+lists them on a screen of its own, under Settings → "What leaves this device",
+with what each request carries and a link to the code that makes it.
 
 **Importing a recipe.** When you paste an xBloom link or ID, the app fetches that
 recipe from xBloom's public servers. Nothing about you is sent.
@@ -64,7 +66,13 @@ Importing then asks xBloom for the recipes that account created, and writes
 them into the library on this device. Nothing is written back: XBRW++ does not
 create, change or delete anything in your xBloom account.
 
-**Those three are the only things that use the network.** Leave them alone and
+**Browsing the community catalogue.** If you open the hub, the app fetches
+xBloom's public list of shared recipes for your machine, and the detail of a
+recipe you open. A page number, the machine model and a recipe's identifier are
+all that is sent; no account, no search text and nothing from your library.
+Searching and filtering happen on your device, over the rows already fetched.
+
+**Those four are the only things that use the network.** Leave them alone and
 XBRW++ sends nothing anywhere: reading cards, writing cards, editing, backup
 and restore all work with the network off.
 

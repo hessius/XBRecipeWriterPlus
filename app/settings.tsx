@@ -442,6 +442,17 @@ export default function SettingsScreen({settings}: Props) {
                                        onPress={() => router.push("/about")}/>
                 </SettingsSection>
 
+                {/* Beside About rather than buried under Library, because it is
+                    the same kind of row: something about the app itself rather
+                    than a preference. High on the screen on purpose. A privacy
+                    claim nobody can find is a privacy claim nobody can check,
+                    and this screen is what makes the claim checkable. */}
+                <SettingsSection>
+                    <SettingsActionRow label="What leaves this device"
+                                       detail="Every request the app can make, and what it carries."
+                                       onPress={() => router.push("/network")}/>
+                </SettingsSection>
+
                 {/* Its own section rather than a line in Library. Everything
                     else under Library is about the recipes you hold; a brew
                     history is a record of what the machine did, and burying it

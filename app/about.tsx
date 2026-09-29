@@ -185,7 +185,8 @@ export default function AboutScreen({settings}: Props = {}) {
                         Importing a shared recipe sends that recipe&apos;s ID to the
                         manufacturer&apos;s service in order to fetch it. Sharing sends
                         the recipe to the XBRW++ share service to create an xBloom
-                        link. A backup goes only where you send it.
+                        link. Browsing the community catalogue asks xBloom for its
+                        public list of recipes. A backup goes only where you send it.
                     </AboutParagraph>
                     <AboutParagraph>
                         You can also sign in to your own xBloom account and
@@ -198,9 +199,13 @@ export default function AboutScreen({settings}: Props = {}) {
                         deletes all three.
                     </AboutParagraph>
                     <AboutParagraph>
-                        Those three are the only things that use the network;
-                        leave them alone and XBRW++ sends nothing anywhere.
+                        Those are the only things that use the network; leave
+                        them alone and XBRW++ sends nothing anywhere. The full
+                        list, with what each request carries and where its code
+                        lives, is a screen of its own.
                     </AboutParagraph>
+                    <LinkText label="What leaves this device"
+                              onPress={() => router.push("/network")}/>
                     <AboutParagraph>
                         Brewing uses Bluetooth to reach the machine in the room
                         with you, and it goes no further than that. Nothing
