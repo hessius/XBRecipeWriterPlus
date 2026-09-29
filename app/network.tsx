@@ -56,10 +56,10 @@ export default function NetworkScreen() {
                         what it carries.
                     </Paragraph>
                     <Paragraph>
-                        None of them happen in the background. XBRW++ has no
-                        account of its own, no analytics and no crash reporting,
-                        and it speaks to a server only when something you did
-                        asks it to.
+                        None of them happen in the background. There is no XBRW++
+                        account to sign in to, no analytics and no crash
+                        reporting, and the app speaks to a server only when
+                        something you did asks it to.
                     </Paragraph>
                 </YStack>
 

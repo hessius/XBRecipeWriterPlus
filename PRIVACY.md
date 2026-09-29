@@ -41,10 +41,11 @@ identifier, no account, no location, no usage data.
 
 That service keeps a count of how many links have been created recently, against
 a salted hash of your IP address, so that it cannot be abused. For a day it also
-remembers the link it just made, against that same hash and the one-off key your
+remembers what it just made, against that same hash and the one-off key your
 phone sent with the request, so that pressing Share again returns the link you
-already have instead of minting a second copy of the recipe. It stores no IP
-address, no recipe, and nothing else.
+already have instead of minting a second copy of the recipe. What it remembers
+is the link and the number xBloom gave the recipe. It stores no IP address, no
+recipe, and nothing else.
 
 Two things about a shared link are worth knowing before you tap it:
 

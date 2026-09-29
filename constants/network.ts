@@ -18,8 +18,28 @@
  * list, and a request that sends nothing about the user says so in words.
  */
 
+import {SHARE_API_URL} from "@/constants/share";
+
 /** Where the source of a given file can be read. */
 export const REPO_URL = "https://github.com/hessius/XBRecipeWriterPlus";
+
+/**
+ * The host the mint actually reaches in this build.
+ *
+ * `SHARE_API_URL` can be pointed elsewhere at build time, so the published
+ * hostname is a default rather than a fact about the app in your hand. Reading
+ * it here means a build aimed at a preview deployment says where it is really
+ * sending, and stops claiming the address is pinned when it is not.
+ */
+const SHARE_HOST = ((): string => {
+    try {
+        return new URL(SHARE_API_URL).host;
+    } catch {
+        return SHARE_API_URL;
+    }
+})();
+
+const SHARE_HOST_PINNED = process.env.EXPO_PUBLIC_SHARE_API_URL === undefined;
 
 /** A link to one file in this repository, on the default branch. */
 export function sourceUrl(path: string): string {
@@ -99,7 +119,7 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         owner:   "xBloom",
         carries: [
             "The session token xBloom gave you, and your xBloom account number, encrypted with xBloom's public key the way their own client does it.",
-            "The same six fixed values the sign in sends, and which page of your own recipes is being asked for, for both machine models.",
+            "The five fixed values the sign in also sends, but not the push identifier, which this call does not carry. With them, which page of your own recipes is being asked for and how many rows a page, for both machine models.",
             "Nothing is written back. XBRW++ never creates, changes or deletes anything in your xBloom account."
         ],
         source:  ["library/cloud/cloudLibrary.ts", "library/cloud/transport.ts", "library/cloud/rsa.ts"]
@@ -123,8 +143,8 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         id:      "share",
         title:   "Create a share link",
         trigger: "You tap Share on a recipe and ask for a link.",
-        host:    "xbrwplusplus.vercel.app",
-        hostPinned: true,
+        host:    SHARE_HOST,
+        hostPinned: SHARE_HOST_PINNED,
         owner:   "XBRW++",
         carries: [
             "The recipe's name, accent colour, dose, ratio, grind size, whether the grinder is on, grinder RPM, cup type, whether bypass is on and its temperature and volume.",
@@ -148,9 +168,10 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
             "The recipe goes to a small service run by XBRW++, which adds it to an xBloom " +
             "account belonging to XBRW++ and hands back a link. That service keeps a count " +
             "of recent links against a salted hash of your IP address so it cannot be abused, " +
-            "and for a day it remembers the link it just made against that hash and the " +
+            "and for a day it remembers what it just made against that hash and the " +
             "one-off key, so that pressing Share again returns the same link instead of " +
-            "minting a second copy. It stores no IP address, no recipe and nothing else. " +
+            "minting a second copy. What it remembers is the link and the number xBloom " +
+            "gave the recipe. It stores no IP address, no recipe and nothing else. " +
             "You cannot watch it do any of that, so its source is in this repository under " +
             "api/ and is linked below."
     },

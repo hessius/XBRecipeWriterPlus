@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 
 import {OUTBOUND_CALLS, SILENT_CAPABILITIES, sourceUrl} from "@/constants/network";
+import {SHARE_API_URL} from "@/constants/share";
 
 const ROOT = path.join(__dirname, "..", "..");
 
@@ -204,6 +205,19 @@ describe("the outbound inventory", () => {
                 .map((file) => fs.readFileSync(path.join(ROOT, file), "utf8"));
             expect(bodies.some((body) => body.includes(call.host))).toBe(true);
         });
+
+    it("reports the mint host this build actually sends to", () => {
+        // The published hostname is a default: EXPO_PUBLIC_SHARE_API_URL can
+        // replace the whole endpoint at build time. Reading it from the same
+        // constant the sender uses means a build aimed somewhere else cannot
+        // keep telling the user it reaches the published service. A literal
+        // here would satisfy the pinned-host test above and still be a lie.
+        const share = OUTBOUND_CALLS.find((call) => call.id === "share");
+        expect(share).toBeDefined();
+        expect(share!.host).toBe(new URL(SHARE_API_URL).host);
+        expect(share!.hostPinned)
+            .toBe(process.env.EXPO_PUBLIC_SHARE_API_URL === undefined);
+    });
 
     it("says something about every entry", () => {
         for (const call of OUTBOUND_CALLS) {
