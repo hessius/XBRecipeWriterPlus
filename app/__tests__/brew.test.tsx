@@ -10,6 +10,7 @@ import {LONGEST_ACTIVE_HEADLINE, RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {StoredBrew} from "@/library/BrewDatabase";
+import {drawdownSeconds, type BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
 import type {BypassView} from "@/library/brew/bypassState";
 import Recipe from "@/library/Recipe";
@@ -48,7 +49,7 @@ let mockPhase: BrewPhase = {name: "pouring", pour: 1, pours: 2};
 // The Labs gate, off by default here so the rest of the file describes the
 // screen a default install draws.
 let mockHandoffEnabled = false;
-let mockSamples: unknown[] = [];
+let mockSamples: BrewSample[] = [];
 let mockElapsed = 12;
 let mockStageElapsed = 12;
 let mockActiveIndex: number | null = 0;
@@ -200,6 +201,9 @@ beforeEach(() => {
     mockPush.mockClear();
     mockBack.mockClear();
     mockPhase = {name: "pouring", pour: 1, pours: 2};
+    mockRecipe.pours = [
+        new Pour(1, 40, 93, 40, 0, 0, 20),
+    ];
     mockSamples = [];
     mockElapsed = 12;
     mockStageElapsed = 12;
@@ -696,7 +700,7 @@ describe("the brew screen says true things", () => {
 
 async function renderBrew(overrides: {
     phase?: BrewPhase;
-    samples?: unknown[];
+    samples?: BrewSample[];
     bypass?: BypassView;
 } = {}) {
     if (overrides.phase !== undefined) mockPhase = overrides.phase;
@@ -704,6 +708,126 @@ async function renderBrew(overrides: {
     if (overrides.bypass !== undefined) mockBypass = overrides.bypass;
     return renderWithProviders(<Brew />);
 }
+
+function sampleStream(
+    seconds: number,
+    rates: {water: number; cup: number; pour: number},
+    start: {at: number; water: number; cup: number} = {at: 0, water: 0, cup: 0}
+): BrewSample[] {
+    const out: BrewSample[] = [];
+    for (let i = 1; i <= seconds * 10; i++) {
+        out.push({
+            at: start.at + i * 100,
+            water: start.water + rates.water * (i / 10),
+            cup: start.cup + rates.cup * (i / 10),
+            pour: rates.pour
+        });
+    }
+    return out;
+}
+
+function flatDrawdown(
+    seconds: number,
+    start: {at: number; water: number; cup: number; pour: number},
+    cupRate: number
+): BrewSample[] {
+    const out: BrewSample[] = [];
+    for (let i = 1; i <= seconds * 10; i++) {
+        out.push({
+            at: start.at + i * 100,
+            water: start.water,
+            cup: start.cup + cupRate * (i / 10),
+            pour: start.pour
+        });
+    }
+    return out;
+}
+
+describe("live flow and drawdown", () => {
+    it("shows the flow row once the bed is giving something up", async () => {
+        mockSamples = sampleStream(6, {water: 3, cup: 2, pour: 1});
+        mockElapsed = 6;
+
+        await renderWithProviders(<Brew />);
+
+        expect(await screen.findByTestId("figures-flow")).toBeTruthy();
+        expect(screen.getByText("FLOW")).toBeTruthy();
+        expect(screen.getByText("2.0 G/S")).toBeTruthy();
+        expect(screen.getByText("POUR 3.0")).toBeTruthy();
+    });
+
+    it("hides the flow row while the bypass is the only thing on the scale", async () => {
+        const brewed = sampleStream(6, {water: 3, cup: 2, pour: 1});
+        const lastBrew = brewed[brewed.length - 1];
+        mockSamples = [
+            ...brewed,
+            ...sampleStream(
+                4,
+                {water: 15, cup: 15, pour: 2},
+                {at: lastBrew.at, water: lastBrew.water, cup: lastBrew.cup}
+            )
+        ];
+        mockElapsed = 10;
+        mockPhase = {name: "bypass"};
+        mockBypass = {volume: 60, temperature: 85, delivered: 60,
+                      startedAt: 6, state: "filling"};
+
+        await renderWithProviders(<Brew />);
+
+        expect(screen.queryByTestId("figures-flow")).toBeNull();
+        expect(screen.getByTestId("figures-flow-slot")).toBeTruthy();
+    });
+
+    it("runs a drawdown clock on the last stage and converges on the record's", async () => {
+        const poured = sampleStream(6, {water: 10, cup: 3, pour: 1});
+        const lastPour = poured[poured.length - 1];
+        mockSamples = [
+            ...poured,
+            ...flatDrawdown(12, {
+                at: lastPour.at,
+                water: lastPour.water,
+                cup: lastPour.cup,
+                pour: 1
+            }, 2)
+        ];
+        mockElapsed = 18;
+        mockActiveIndex = 0;
+
+        await renderWithProviders(<Brew />);
+
+        expect(screen.getByTestId("figures-drawdown")).toHaveTextContent("DRAWDOWN 0:12");
+        expect(drawdownSeconds({
+            ...record,
+            startedAt: 0,
+            endedAt: 18_000,
+            drawdownAt: 6_000
+        })).toBeCloseTo(12, 0);
+    });
+
+    it("shows no drawdown clock during a planned pause between stages", async () => {
+        mockRecipe.pours = [
+            new Pour(1, 40, 93, 40, 0, 0, 10),
+            new Pour(2, 40, 93, 40, 0, 0, 0),
+        ];
+        const poured = sampleStream(6, {water: 6, cup: 2, pour: 1});
+        const lastPour = poured[poured.length - 1];
+        mockSamples = [
+            ...poured,
+            ...flatDrawdown(10, {
+                at: lastPour.at,
+                water: lastPour.water,
+                cup: lastPour.cup,
+                pour: 1
+            }, 1)
+        ];
+        mockElapsed = 16;
+        mockActiveIndex = 0;
+
+        await renderWithProviders(<Brew />);
+
+        expect(screen.queryByTestId("figures-drawdown")).toBeNull();
+    });
+});
 
 describe("bypass on the live brew screen", () => {
     it("shows the bypass rung while a bypass brew is running", async () => {

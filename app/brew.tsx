@@ -33,7 +33,8 @@ import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
-import {finalOutcome} from "@/library/brew/BrewRecord";
+import {drawdownFrom, finalOutcome} from "@/library/brew/BrewRecord";
+import {flowNow, flowTail} from "@/library/brew/flowRate";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
@@ -44,6 +45,9 @@ import {SCREEN_PADDING} from "@/constants/layout";
 
 const WORKING = new Set(["idle", "waking", "sending"]);
 export const BREW_BAND_GAP = 13;
+/** Half a minute of rate in two dozen buckets. See FlowSparkline. */
+const FLOW_TAIL_SECONDS = 30;
+const FLOW_TAIL_BUCKETS = 24;
 
 /** Where an export sources its record: the freshest brew in the store. */
 type ExportStore = Pick<HistoryStore, "all" | "samples">
@@ -154,6 +158,16 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // reads as having used 245.
     const scaleTotal = last?.water ?? 0;
     const brewWater = Math.max(0, scaleTotal - (bypass?.delivered ?? 0));
+    const stages = recipe.pours.length;
+    const flow = flowNow(samples, stages);
+    const flowTailValues = flow === null
+        ? []
+        : flowTail(samples, stages, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
+    const drawdownOpenedAt = drawdownFrom(samples, stages);
+    const lastStageRunning = activeIndex !== null && activeIndex >= stages - 1;
+    const liveDrawdown = running && lastStageRunning && drawdownOpenedAt > 0
+        ? Math.max(0, elapsed - drawdownOpenedAt / 1000)
+        : null;
 
     // Only a refusal for water gets the water copy. `block` names which of the
     // pre-flight checks said no, so a busy machine is no longer told to go and
@@ -381,6 +395,11 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         seconds={elapsed}
                         accent={accent}
                         bypass={bypass?.delivered}
+                        reserveFlow
+                        {...(flow === null
+                            ? {}
+                            : {flow: flow.cup, pourRate: flow.water, flowTail: flowTailValues})}
+                        {...(liveDrawdown === null ? {} : {drawdown: liveDrawdown})}
                     />
 
                             {/* Held for the whole run. Between the last pour and the
