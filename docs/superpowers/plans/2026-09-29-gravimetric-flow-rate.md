@@ -1141,6 +1141,24 @@ In `components/BrewFigures.tsx`, add to the props:
     /** The last 30 seconds of it, for the sparkline. Empty draws no line. */
     flowTail?: number[];
     /**
+     * The instantaneous pour rate in ml/s, the second figure on the same row.
+     * Same absence rule as `flow`, and it rides along rather than leading:
+     * the cup rate is the subject (spec §2), the pour rate is what the machine
+     * is doing about it. Smaller and dimmer than the cup figure, so a glance
+     * lands on the cup rate first.
+     */
+    pourRate?: number;
+    /**
+     * Reserve the row's height even when there is nothing to draw.
+     *
+     * Live only. A fit needs a full second of spanned duration, so the row
+     * genuinely arrives and leaves mid-brew, and a screen that reflows under a
+     * watching user is worse than a held gap. A finished record and the shared
+     * image cannot gain a rate later, so reserving there is dead space in a
+     * still picture. Default false.
+     */
+    reserveFlow?: boolean;
+    /**
      * The average rate across the drawdown, in g/s. Sits on the drawdown line
      * as a second term rather than on its own row: it is a property of the
      * drawdown, and a reader who does not care about rates should be able to
@@ -1163,6 +1181,11 @@ rows live in, following their exact layout (label, value, unit):
                         <SizableText size="$2" color={PALETTE.text}>
                             {flow.toFixed(1)} g/s
                         </SizableText>
+                        {pourRate === undefined ? null : (
+                            <SizableText size="$1" color={PALETTE.muted}>
+                                POUR {pourRate.toFixed(1)}
+                            </SizableText>
+                        )}
                     </XStack>
                 </XStack>
             )}
@@ -1176,8 +1199,11 @@ On the drawdown row, append the second term inside the existing value text:
 ```tsx
                         {drawdownRate === undefined
                             ? ""
-                            : `, ${drawdownRate.toFixed(1)} g/s`}
+                            : ` · ${drawdownRate.toFixed(1)} g/s`}
 ```
+
+The separator is the middle dot this app already uses to join glanceable parts
+(`BeanProfileRow`, `BrewMiniBar`), not a comma and never a dash.
 
 No em dashes, and no dashes as separators, in any of this copy.
 
@@ -1308,7 +1334,10 @@ const FLOW_TAIL_BUCKETS = 24;
 At the `BrewFigures` call site, add:
 
 ```tsx
-                    {...(flow === null ? {} : {flow: flow.cup, flowTail: flowTailValues})}
+                    reserveFlow
+                    {...(flow === null
+                        ? {}
+                        : {flow: flow.cup, pourRate: flow.water, flowTail: flowTailValues})}
                     {...(liveDrawdown === null ? {} : {drawdown: liveDrawdown})}
 ```
 
