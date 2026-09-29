@@ -834,7 +834,7 @@ describe("brew history through a backup", () => {
         expect(result.ok).toBe(true);
         if (!result.ok) return;
         expect(result.payload.brews).toHaveLength(1);
-        expect(result.payload.brews[0]).not.toHaveProperty("cupAtDrawdown");
+        expect(result.payload.brews[0].cupAtDrawdown).toBeUndefined();
     });
 
     it("accepts a non-positive drawdown cup reading", () => {

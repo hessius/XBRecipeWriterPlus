@@ -697,9 +697,7 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         startedAt: record.startedAt,
         pouringAt: record.pouringAt,
         drawdownAt: record.drawdownAt,
-        ...(typeof record.cupAtDrawdown === "number"
-            ? {cupAtDrawdown: record.cupAtDrawdown}
-            : {}),
+        cupAtDrawdown: record.cupAtDrawdown,
         endedAt: record.endedAt,
         outcome: record.outcome,
         failure: record.failure ?? null,
