@@ -73,17 +73,20 @@ create, change or delete anything in your xBloom account.
 
 **Browsing the community catalogue.** If you open the hub, the app fetches
 xBloom's public list of shared recipes for your machine, and the detail of a
-recipe you open. A page number, the machine model and a recipe's identifier are
-all that is sent; no account, no search text and nothing from your library.
-Searching and filtering happen on your device, over the rows already fetched.
+recipe you open. What is sent is a page number, a page size, a sort order, a
+fixed recipe type that keeps tea out of a coffee list, the machine model, and
+the identifier of a recipe you opened; no account, no search text and nothing
+from your library. Searching and filtering happen on your device, over the rows
+already fetched. The in-app list of every request spells those bodies out in
+full.
 
 **Loading a photo.** Recipes from xBloom carry a picture: the pod's coffee, or
 the avatar of whoever shared it. Wherever one is shown, in the hub, in an import
 preview, or on a recipe already saved in your library, the app fetches it from
 the address xBloom gave for it. Only the request itself leaves your device,
 which means your IP address and the address of the picture. The address is
-xBloom's, not ours, so it is not a fixed one; the app requires it to be HTTPS
-and sends it nothing else. This is the only case that can happen while you are
+xBloom's, not ours, so it is not a fixed one; the app drops any address that is
+not HTTPS, and sends it nothing else. This is the only case that can happen while you are
 looking only at your own library.
 
 **Those five are the only things that use the network.** Leave them alone and

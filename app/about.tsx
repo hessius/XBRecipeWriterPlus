@@ -202,9 +202,10 @@ export default function AboutScreen({settings}: Props = {}) {
                         Those are the only things that use the network, with one
                         exception worth naming: a recipe that came from xBloom
                         carries a picture, and opening it fetches that picture
-                        from xBloom. Nothing but the request itself goes with it.
-                        The full list, with what each request carries and where
-                        its code lives, is a screen of its own.
+                        from whichever address xBloom gave for it. Nothing but
+                        the request itself goes with it. The full list, with
+                        what each request carries and where its code lives, is a
+                        screen of its own.
                     </AboutParagraph>
                     <LinkText label="What leaves this device"
                               onPress={() => router.push("/network")}/>

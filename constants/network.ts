@@ -71,7 +71,7 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         carries: [
             "The recipe ID or pod code you pasted.",
             "Which xBloom you told Settings you have, so a pod returns the grind for that machine.",
-            "A handful of fixed values xBloom's endpoint requires and that say nothing about you: an interface version, the constant skey every client sends, a language, and a client version string.",
+            "A handful of fixed values xBloom's endpoint requires and that say nothing about you: an interface version, the constant skey every client sends, a language, a client version string, and a refresh flag.",
             "Nothing about you, and nothing from your library."
         ],
         source:  ["library/XBloomRecipe.ts", "library/importInput.ts"]
@@ -112,8 +112,9 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         hostPinned: true,
         owner:   "xBloom",
         carries: [
-            "A page number, a page size, a sort order, and which machine's catalogue to return.",
-            "The ID of a recipe you opened.",
+            "A page number, a page size, a sort field and direction, a fixed recipe type that keeps tea out of a coffee list, and which machine's catalogue to return.",
+            "For the list of filter values the chips are built from, an empty body.",
+            "The ID of a recipe you opened, and a fixed type saying it is a catalogue recipe.",
             "No account, no search text, and nothing from your library. Searching and filtering happen on this phone, over the rows already fetched."
         ],
         source:  ["library/hub/hubApi.ts", "library/hub/hubCatalogue.ts"]
@@ -126,9 +127,9 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         hostPinned: true,
         owner:   "XBRW++",
         carries: [
-            "The recipe's name, accent colour, dose, ratio, grind size, grinder RPM, cup type and bypass settings.",
-            "Every stage's volume, temperature, flow rate, pattern, pause and agitation.",
-            "Which xBloom the recipe is for.",
+            "The recipe's name, accent colour, dose, ratio, grind size, whether the grinder is on, grinder RPM, cup type, whether bypass is on and its temperature and volume.",
+            "How many stages there are, and every stage's volume, temperature, flow rate, pattern, pause and agitation.",
+            "Which xBloom the recipe is for, and four fixed values xBloom's own format requires: a subset id, a subset type, an app placement and a shortcut flag.",
             "A random one-off key, so pressing Share twice cannot mint two copies.",
             "No device identifier, no account, no location and no usage data."
         ],
@@ -163,7 +164,7 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         carries: [
             "Nothing but the request itself: your IP address, and the address of the picture.",
             "No recipe, no account and nothing you have typed.",
-            "The address comes from xBloom's reply rather than from this app, so it is not a fixed one. XBRW++ requires it to be https and sends it nothing.",
+            "The address comes from xBloom's reply rather than from this app, so it is not a fixed one. XBRW++ drops any address that is not https, and sends it nothing.",
             "This is the one request that can happen while you are only looking at your own library, because a recipe imported from xBloom remembers the photo that came with it."
         ],
         source:  [

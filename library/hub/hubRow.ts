@@ -10,6 +10,7 @@
  * existing share-link importer.
  */
 import {accents} from "@/constants/colors";
+import {podImageUrl} from "@/library/podCoffee";
 
 import type {HubListRow} from "./hubApi";
 
@@ -197,7 +198,10 @@ export function normaliseHubRow(
     return {
         id: raw.communityRecipeId,
         name: repair(raw.recipeName ?? ""),
-        imageURL: (raw.imageUrl ?? "").trim() === "" ? null : raw.imageUrl,
+        // https or nothing. The row is a third party's and this string goes
+        // straight into an `<Image>`, so a plain-http address would have the
+        // phone fetch a picture in the clear at whatever host the row named.
+        imageURL: podImageUrl(raw.imageUrl) ?? null,
         author: repair(raw.userName ?? ""),
         official: raw.official === 1,
         machine: raw.model ?? "",

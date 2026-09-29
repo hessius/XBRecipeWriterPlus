@@ -35,7 +35,7 @@ function walk(dir: string, out: string[] = []): string[] {
             walk(full, out);
             continue;
         }
-        if (/\.tsx?$/.test(entry.name)) out.push(rel(full));
+        if (/\.[jt]sx?$/.test(entry.name)) out.push(rel(full));
     }
     return out;
 }
@@ -66,11 +66,55 @@ function code(body: string): string {
  * screen whose entire purpose is to miss none.
  */
 const OUTBOUND_PATTERNS = [
-    /\bfetch\(/g,
+    /\bfetch\s*\(/g,
     /\bXMLHttpRequest\b/g,
-    /\bnew WebSocket\(/g,
-    /source=\{\{\s*uri/g
+    /\bnew\s+WebSocket\s*\(/g,
+    /source\s*=\s*\{\{\s*uri/g
 ];
+
+/**
+ * Every endpoint path in the app, as a literal.
+ *
+ * Counting calls is not enough on its own, because `transport.post` and
+ * `hubApi.post` are generic senders: three hub endpoints and four xBloom ones
+ * go through two `fetch(` calls between them, so a fourth hub endpoint would
+ * leave every count where it was. The paths themselves are what move when an
+ * endpoint is added, so those are pinned as well.
+ *
+ * Both shapes are matched wherever they are written, so it does not matter
+ * which file a new one is added in.
+ */
+const ENDPOINT_PATTERNS = [
+    // Matched up to the closing quote rather than from the opening one,
+    // because two of them are written as whole URLs and the rest as bare
+    // paths, and the endpoint is the part they have in common.
+    /[A-Za-z][A-Za-z0-9]*\.(?:html|thtml|tuhtml)(?=")/g,
+    /\/communityRecipe\/[^"]+(?=")/g
+];
+
+/** Endpoint paths the inventory has been written against. */
+const EXPECTED_ENDPOINTS = [
+    "/communityRecipe/index/page",
+    "/communityRecipe/recipe/criteria",
+    "/communityRecipe/recipe/detail",
+    "RecipeDetail.html",
+    "tMemberLogin.thtml",
+    "tRecipeDetailOfPods.thtml",
+    "tuMyTeaRecipeCreated.tuhtml",
+    "tuRecipeAdd.tuhtml"
+];
+
+/** Every endpoint literal the source contains, sorted and deduplicated. */
+function endpoints(): string[] {
+    const found = new Set<string>();
+    for (const file of walk(ROOT)) {
+        const body = code(fs.readFileSync(path.join(ROOT, file), "utf8"));
+        for (const pattern of ENDPOINT_PATTERNS) {
+            for (const hit of body.match(pattern) ?? []) found.add(hit);
+        }
+    }
+    return [...found].sort();
+}
 
 /** Every file that reaches the network, with how many times it does so. */
 function callSites(): Map<string, number> {
@@ -131,6 +175,12 @@ describe("the outbound inventory", () => {
 
     it.each([...callSites().keys()])("%s is named by an entry", (file) => {
         expect(listed).toContain(file);
+    });
+
+    it("reaches exactly the endpoints the inventory was written against", () => {
+        // The half of the promise a per-file count cannot keep: a fourth path
+        // posted through `hubApi.post` moves nothing else in this test.
+        expect(endpoints()).toEqual(EXPECTED_ENDPOINTS);
     });
 
     it("makes exactly the calls the inventory was written against", () => {
