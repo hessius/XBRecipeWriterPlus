@@ -5,31 +5,47 @@ import {OUTBOUND_CALLS, SILENT_CAPABILITIES, sourceUrl} from "@/constants/networ
 
 const ROOT = path.join(__dirname, "..", "..");
 
-/** Where a network call could plausibly be written. */
-const SCANNED = ["api", "app", "components", "constants", "hooks", "library"];
+/**
+ * What the walk does not enter.
+ *
+ * An exclusion list and not an allow-list of source directories. The first
+ * draft named six directories, which meant a request written in a seventh
+ * would have been invisible to the very test whose job is to find one.
+ *
+ * `tools/` is the one judgement call: it holds a separate Next.js app for
+ * generating store screenshots on a laptop. Nothing in it ships to a phone, so
+ * nothing in it can leave a user's device.
+ */
+const SKIPPED = new Set([
+    "node_modules", "__tests__", "ios", "android", ".git", ".expo",
+    "dist", "coverage", "scripts", "docs", "assets", ".github", "test-utils",
+    "tools"
+]);
+
+/** A path as the inventory writes it: forward slashes, whatever the platform. */
+function rel(full: string): string {
+    return path.relative(ROOT, full).split(path.sep).join("/");
+}
 
 function walk(dir: string, out: string[] = []): string[] {
     for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+        if (SKIPPED.has(entry.name)) continue;
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
-            if (entry.name === "__tests__" || entry.name === "node_modules") continue;
             walk(full, out);
             continue;
         }
-        if (/\.tsx?$/.test(entry.name)) out.push(path.relative(ROOT, full));
+        if (/\.tsx?$/.test(entry.name)) out.push(rel(full));
     }
     return out;
 }
 
 /**
- * Every file in the app that performs an HTTP request.
+ * Comments, stripped.
  *
- * Comments are stripped before the match, because this file, the inventory and
- * the screen all *write* about `fetch(` without calling it, and a scan that
- * counted prose would demand entries for three files that send nothing.
- *
- * `\bfetch\(` and not `fetch` on its own: `fetchHubPage(` is a call into this
- * app, not out of it, and a scan that counted it would drown the real answer.
+ * This file, the inventory and the screen all *write* about `fetch(` without
+ * calling it, and a scan that counted prose would demand entries for three
+ * files that send nothing.
  */
 function code(body: string): string {
     return body
@@ -37,12 +53,59 @@ function code(body: string): string {
         .replace(/(^|[^:])\/\/.*$/gm, "$1");
 }
 
-function callSites(): string[] {
-    return SCANNED
-        .flatMap((dir) => walk(path.join(ROOT, dir)))
-        .filter((file) =>
-            /\bfetch\(/.test(code(fs.readFileSync(path.join(ROOT, file), "utf8"))));
+/**
+ * The ways this app can cause an HTTP request.
+ *
+ * `\bfetch\(` and not `fetch` on its own: `fetchHubPage(` is a call into this
+ * app, not out of it, and a scan that counted it would drown the real answer.
+ *
+ * `source={{uri` earns its place the hard way. The first version of this guard
+ * looked for `fetch(` alone, and so could not see the five `<Image>` sites that
+ * GET a photo from a host xBloom names, two of which draw on the editor deck of
+ * a recipe already in the library. That was a whole request missing from a
+ * screen whose entire purpose is to miss none.
+ */
+const OUTBOUND_PATTERNS = [
+    /\bfetch\(/g,
+    /\bXMLHttpRequest\b/g,
+    /\bnew WebSocket\(/g,
+    /source=\{\{\s*uri/g
+];
+
+/** Every file that reaches the network, with how many times it does so. */
+function callSites(): Map<string, number> {
+    const found = new Map<string, number>();
+    for (const file of walk(ROOT)) {
+        const body = code(fs.readFileSync(path.join(ROOT, file), "utf8"));
+        const count = OUTBOUND_PATTERNS
+            .reduce((sum, pattern) => sum + (body.match(pattern)?.length ?? 0), 0);
+        if (count > 0) found.set(file, count);
+    }
+    return found;
 }
+
+/**
+ * How many outbound calls each listed file is known to make.
+ *
+ * Pinned because the file is too coarse a unit on its own: `transport.post`
+ * and `hubApi.post` are generic senders, so a new endpoint added beside an old
+ * one in a file already on the list would otherwise ship without a word to the
+ * user. A count that moves is a request that moved, and whoever moved it has
+ * to come back here and say what it now carries.
+ */
+const EXPECTED_CALLS: Record<string, number> = {
+    "api/_lib/store.ts":           2,
+    "api/_lib/xbloom.ts":          1,
+    "app/hubRecipe.tsx":           1,
+    "components/FromSection.tsx":  1,
+    "components/HubRow.tsx":       1,
+    "components/ImportResult.tsx": 1,
+    "components/PodSection.tsx":   1,
+    "hooks/useShareRecipe.ts":     1,
+    "library/XBloomRecipe.ts":     1,
+    "library/cloud/transport.ts":  1,
+    "library/hub/hubApi.ts":       1
+};
 
 const listed = new Set(OUTBOUND_CALLS.flatMap((call) => call.source));
 
@@ -51,36 +114,46 @@ const listed = new Set(OUTBOUND_CALLS.flatMap((call) => call.source));
  *
  * A screen that lists what leaves the device is a promise, and the only way to
  * keep a promise like that across a year of changes is to make breaking it
- * fail the build. So this walks the source for the thing that actually sends a
- * request and insists each file be named by an entry. Adding a request means
- * telling a user about it in the same commit.
+ * fail the build. So this walks the source for the things that actually reach
+ * a server and insists each file be named by an entry, and that each file's
+ * number of calls is the number somebody has already described.
  */
 describe("the outbound inventory", () => {
-    it("finds the files that make requests", () => {
-        // A guard on the guard. If the walk or the pattern ever stops matching,
+    const sites = callSites();
+
+    it("finds the files that reach the network", () => {
+        // A guard on the guard. If the walk or the patterns ever stop matching,
         // every check below would pass by having nothing to check.
-        const sites = callSites();
-        expect(sites.length).toBeGreaterThanOrEqual(5);
-        expect(sites).toContain(path.join("library", "hub", "hubApi.ts"));
+        expect(sites.size).toBeGreaterThanOrEqual(10);
+        expect([...sites.keys()]).toContain("library/hub/hubApi.ts");
+        expect([...sites.keys()]).toContain("components/PodSection.tsx");
     });
 
-    it.each(callSites())("%s is named by an entry", (file) => {
-        // Written with forward slashes in the data, because that is what a
-        // GitHub URL wants; normalise rather than making the data platform
-        // specific.
-        expect(listed).toContain(file.split(path.sep).join("/"));
+    it.each([...callSites().keys()])("%s is named by an entry", (file) => {
+        expect(listed).toContain(file);
+    });
+
+    it("makes exactly the calls the inventory was written against", () => {
+        // Compared whole rather than file by file, so a call site that vanishes
+        // from the scan fails as loudly as one that appears.
+        expect(Object.fromEntries([...sites.entries()].sort()))
+            .toEqual(EXPECTED_CALLS);
     });
 
     it.each(OUTBOUND_CALLS.flatMap((call) => call.source))("%s exists", (file) => {
         expect(fs.existsSync(path.join(ROOT, file))).toBe(true);
     });
 
-    it.each(OUTBOUND_CALLS)("$id names a host its own source contains", (call) => {
-        // Stops the host being prose. The string a user reads is the string
-        // that is in the code, so it can be compared against a proxy log.
-        const bodies = call.source.map((file) => fs.readFileSync(path.join(ROOT, file), "utf8"));
-        expect(bodies.some((body) => body.includes(call.host))).toBe(true);
-    });
+    it.each(OUTBOUND_CALLS.filter((call) => call.hostPinned))(
+        "$id names a host its own source contains", (call) => {
+            // Stops the host being prose. The string a user reads is the string
+            // in the code, so it can be compared against a proxy log. An entry
+            // whose host comes out of somebody else's reply is exempt by
+            // declaring `hostPinned: false`, not by silence.
+            const bodies = call.source
+                .map((file) => fs.readFileSync(path.join(ROOT, file), "utf8"));
+            expect(bodies.some((body) => body.includes(call.host))).toBe(true);
+        });
 
     it("says something about every entry", () => {
         for (const call of OUTBOUND_CALLS) {

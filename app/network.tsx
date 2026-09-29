@@ -56,9 +56,10 @@ export default function NetworkScreen() {
                         what it carries.
                     </Paragraph>
                     <Paragraph>
-                        None of them happen on their own. XBRW++ has no account of
-                        its own, no analytics and no crash reporting, and it never
-                        speaks to a server in the background.
+                        None of them happen in the background. XBRW++ has no
+                        account of its own, no analytics and no crash reporting,
+                        and it speaks to a server only when something you did
+                        asks it to.
                     </Paragraph>
                 </YStack>
 
@@ -125,12 +126,19 @@ function CallCard({call}: {call: OutboundCall}) {
             </YStack>
 
             <Field label="Goes to">
-                {/* Doto, because a hostname is a machine's fact and not prose,
-                    and because it is the one string here somebody might want to
-                    compare against a router log character by character. */}
-                <DotMatrixText fontSize={12} color={palette.text} letterSpacing={0.6}>
-                    {call.host}
-                </DotMatrixText>
+                {/* Doto only when the host is a literal in the source, because
+                    Doto is for a machine's facts: a pinned hostname is a string
+                    somebody can compare against a router log character by
+                    character, and "whichever host xBloom named" is a sentence. */}
+                {call.hostPinned ? (
+                    <DotMatrixText fontSize={12} color={palette.text} letterSpacing={0.6}>
+                        {call.host}
+                    </DotMatrixText>
+                ) : (
+                    <Text fontSize={13} lineHeight={19} color={palette.text}>
+                        {call.host}
+                    </Text>
+                )}
                 <Text fontSize={12} color={palette.muted}>{`Run by ${call.owner}`}</Text>
             </Field>
 

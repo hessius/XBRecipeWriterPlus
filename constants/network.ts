@@ -34,6 +34,16 @@ export type OutboundCall = {
     trigger: string;
     /** The host it reaches, bare, so it can be compared against a proxy log. */
     host: string;
+    /**
+     * Whether that host is a literal in this app's source.
+     *
+     * False where the address comes out of somebody else's reply: a photo on a
+     * catalogue row is fetched from whatever URL xBloom put on the row, so no
+     * hostname written here would be the whole truth. Required rather than
+     * defaulted, so a new entry cannot be waved through without the question
+     * being answered.
+     */
+    hostPinned: boolean;
     /** Whose server that is. */
     owner: string;
     /** Every value that leaves, one line each. */
@@ -56,10 +66,12 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         title:   "Look up a shared recipe",
         trigger: "You paste an xBloom link or a pod code, or share a link into the app.",
         host:    "client-api.xbloom.com",
+        hostPinned: true,
         owner:   "xBloom",
         carries: [
             "The recipe ID or pod code you pasted.",
             "Which xBloom you told Settings you have, so a pod returns the grind for that machine.",
+            "A handful of fixed values xBloom's endpoint requires and that say nothing about you: an interface version, the constant skey every client sends, a language, and a client version string.",
             "Nothing about you, and nothing from your library."
         ],
         source:  ["library/XBloomRecipe.ts", "library/importInput.ts"]
@@ -69,10 +81,12 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         title:   "Sign in to your xBloom account",
         trigger: "You enter your xBloom email and password in Settings.",
         host:    "client-api.xbloom.com",
+        hostPinned: true,
         owner:   "xBloom",
         carries: [
             "Your email address and password, over HTTPS, to xBloom's own login endpoint, the same one their app uses.",
-            "Nothing else. They go to xBloom and nowhere else, they are never logged, and the password is never written to storage."
+            "Six fixed values xBloom's endpoint requires and that say nothing about you: an interface version, the constant skey every client sends, a phone type, a client type, a language, and an empty push identifier.",
+            "Nothing else. Your credentials go to xBloom and nowhere else, they are never logged, and the password is never written to storage."
         ],
         source:  ["library/cloud/session.ts", "library/cloud/transport.ts"]
     },
@@ -81,10 +95,11 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         title:   "Bring across your account's recipes",
         trigger: "You import from your xBloom account, once you are signed in.",
         host:    "client-api.xbloom.com",
+        hostPinned: true,
         owner:   "xBloom",
         carries: [
             "The session token xBloom gave you, and your xBloom account number, encrypted with xBloom's public key the way their own client does it.",
-            "Which page of your own recipes is being asked for, for both machine models.",
+            "The same six fixed values the sign in sends, and which page of your own recipes is being asked for, for both machine models.",
             "Nothing is written back. XBRW++ never creates, changes or deletes anything in your xBloom account."
         ],
         source:  ["library/cloud/cloudLibrary.ts", "library/cloud/transport.ts", "library/cloud/rsa.ts"]
@@ -94,9 +109,10 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         title:   "Browse the community catalogue",
         trigger: "You open the hub, or open one of its recipes.",
         host:    "collective-api.xbloom.com",
+        hostPinned: true,
         owner:   "xBloom",
         carries: [
-            "A page number, and which machine's catalogue to return.",
+            "A page number, a page size, a sort order, and which machine's catalogue to return.",
             "The ID of a recipe you opened.",
             "No account, no search text, and nothing from your library. Searching and filtering happen on this phone, over the rows already fetched."
         ],
@@ -107,6 +123,7 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         title:   "Create a share link",
         trigger: "You tap Share on a recipe and ask for a link.",
         host:    "xbrwplusplus.vercel.app",
+        hostPinned: true,
         owner:   "XBRW++",
         carries: [
             "The recipe's name, accent colour, dose, ratio, grind size, grinder RPM, cup type and bypass settings.",
@@ -130,8 +147,34 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
             "The recipe goes to a small service run by XBRW++, which adds it to an xBloom " +
             "account belonging to XBRW++ and hands back a link. That service keeps a count " +
             "of recent links against a salted hash of your IP address so it cannot be abused, " +
-            "and stores no address, no recipe and no record of what you shared. You cannot " +
-            "watch it do that, so its source is in this repository under api/ and is linked below."
+            "and for a day it remembers the link it just made against that hash and the " +
+            "one-off key, so that pressing Share again returns the same link instead of " +
+            "minting a second copy. It stores no IP address, no recipe and nothing else. " +
+            "You cannot watch it do any of that, so its source is in this repository under " +
+            "api/ and is linked below."
+    },
+    {
+        id:      "images",
+        title:   "Load a photo",
+        trigger: "You open the hub, an import preview, or a saved recipe that carries a pod photo or the avatar of whoever shared it.",
+        host:    "whichever host xBloom named in its own reply",
+        hostPinned: false,
+        owner:   "xBloom, or whoever xBloom points at",
+        carries: [
+            "Nothing but the request itself: your IP address, and the address of the picture.",
+            "No recipe, no account and nothing you have typed.",
+            "The address comes from xBloom's reply rather than from this app, so it is not a fixed one. XBRW++ requires it to be https and sends it nothing.",
+            "This is the one request that can happen while you are only looking at your own library, because a recipe imported from xBloom remembers the photo that came with it."
+        ],
+        source:  [
+            "library/podCoffee.ts",
+            "library/hub/hubRow.ts",
+            "components/PodSection.tsx",
+            "components/FromSection.tsx",
+            "components/HubRow.tsx",
+            "components/ImportResult.tsx",
+            "app/hubRecipe.tsx"
+        ]
     }
 ];
 
@@ -158,7 +201,7 @@ export const SILENT_CAPABILITIES: SilentCapability[] = [
     {
         id:     "library",
         title:  "Your library",
-        detail: "Recipes, tags, shelves and notes are stored in a database on this phone. There is no sync, no account of our own, and no server that holds a copy."
+        detail: "Recipes, tags, shelves and notes are stored in a database on this phone. There is no sync, no account of our own, and no server that holds a copy. The one exception is a photo: a recipe imported from xBloom remembers where its picture came from, and opening that recipe fetches it. The Load a photo entry below says what that carries."
     },
     {
         id:     "brewing",

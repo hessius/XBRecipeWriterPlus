@@ -23,9 +23,11 @@ the developer to see any of it unless you choose to share a recipe.
 
 ## When XBRW++ uses the network
 
-Four cases, all of which only happen because you asked for them. The app also
-lists them on a screen of its own, under Settings → "What leaves this device",
-with what each request carries and a link to the code that makes it.
+Five cases, all of which only happen because of something you did. The app
+also lists them on a screen of its own, under Settings and "What leaves this
+device", with what each request carries and a link to the code that makes it.
+That screen is checked by a test that walks the source for calls to the
+network, so it cannot fall behind the code the way a document can.
 
 **Importing a recipe.** When you paste an xBloom link or ID, the app fetches that
 recipe from xBloom's public servers. Nothing about you is sent.
@@ -38,8 +40,11 @@ temperature, flow rate, pattern, pause and agitation. Nothing else — no device
 identifier, no account, no location, no usage data.
 
 That service keeps a count of how many links have been created recently, against
-a salted hash of your IP address, so that it cannot be abused. It stores no
-address, no recipe, and no log of what you shared.
+a salted hash of your IP address, so that it cannot be abused. For a day it also
+remembers the link it just made, against that same hash and the one-off key your
+phone sent with the request, so that pressing Share again returns the link you
+already have instead of minting a second copy of the recipe. It stores no IP
+address, no recipe, and nothing else.
 
 Two things about a shared link are worth knowing before you tap it:
 
@@ -72,7 +77,16 @@ recipe you open. A page number, the machine model and a recipe's identifier are
 all that is sent; no account, no search text and nothing from your library.
 Searching and filtering happen on your device, over the rows already fetched.
 
-**Those four are the only things that use the network.** Leave them alone and
+**Loading a photo.** Recipes from xBloom carry a picture: the pod's coffee, or
+the avatar of whoever shared it. Wherever one is shown, in the hub, in an import
+preview, or on a recipe already saved in your library, the app fetches it from
+the address xBloom gave for it. Only the request itself leaves your device,
+which means your IP address and the address of the picture. The address is
+xBloom's, not ours, so it is not a fixed one; the app requires it to be HTTPS
+and sends it nothing else. This is the only case that can happen while you are
+looking only at your own library.
+
+**Those five are the only things that use the network.** Leave them alone and
 XBRW++ sends nothing anywhere: reading cards, writing cards, editing, backup
 and restore all work with the network off.
 
