@@ -5,6 +5,7 @@ import {act, fireEvent, screen, within} from "@testing-library/react-native";
 import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
 
+import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {palette} from "@/constants/colors";
 import {RECIPE_HELP} from "@/constants/recipeHelp";
@@ -1455,5 +1456,24 @@ describe("the action bar", () => {
 
         const brew = screen.getByLabelText("Brew");
         expect(brew.props.accessibilityState.disabled).toBe(true);
+    });
+
+    it("brews a balanced half-ratio recipe while refusing to write it to a card", async () => {
+        rememberMachine("AA:BB");
+        await renderEditor({
+            dosage: 20,
+            ratio:  15.5,
+            pours:  [
+                new Pour(1, 155, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0),
+                new Pour(2, 155, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)
+            ]
+        });
+
+        expect(screen.getByLabelText("Brew").props.accessibilityState.disabled)
+            .toBe(false);
+        expect(screen.getByLabelText("Write card").props.accessibilityState.disabled)
+            .toBe(true);
+        expect(screen.getByText(/can still be saved and brewed over Bluetooth/i))
+            .toBeTruthy();
     });
 });

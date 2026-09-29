@@ -6,7 +6,7 @@ import {
     clampBypassTemp, isUsableBypassTemp
 } from "@/library/bypassLimits";
 import {sharedSettings} from "@/hooks/useSetting";
-import {cardWriteProblems} from "@/library/cardLimits";
+import {brewProblems, cardWriteProblems} from "@/library/cardLimits";
 import {CARD_GRIND_MIN} from "@/library/grindBands";
 import {asMachineModel} from "@/library/machine/machineModel";
 import {editsPendingSave, snapshotForSave} from "@/library/recipeDirty";
@@ -69,9 +69,10 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
 
     // Opted out of the React Compiler, and it has to be.
     //
-    // Everything this hook derives -- `balance`, `writeProblems`, and so the
-    // Write and Brew gates -- is computed by calling methods on `recipe`. The
-    // recipe is edited in place, so its reference never changes, and the
+    // Everything this hook derives -- `balance`, `writeProblems`,
+    // `brewProblemsForRecipe`, and so the Write and Brew gates -- is computed
+    // by calling methods on `recipe`. The recipe is edited in place, so its
+    // reference never changes, and the
     // compiler keys its cache on exactly that reference:
     //
     //     if ($[5] !== recipe) { t4 = recipe?.getTotalVolume() ?? 0; ... }
@@ -188,19 +189,33 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
     };
 
     /**
-     * Every reason the machine would refuse this recipe.
+     * Every reason a card write would refuse this recipe.
      *
      * Balance used to be the whole test, and it let a balanced recipe with a
      * 3100 ml stage through to `getData()`, where the volume became one byte.
      * `cardWriteProblems` includes the balance check, so this is the only
-     * question the gate has to ask.
+     * question the write gate has to ask.
      */
     const writeProblems = recipe
         ? cardWriteProblems(recipe, temperatureUnit)
         : [];
 
-    /** A recipe the machine would reject cannot be written; it can still be kept. */
+    /**
+     * Every reason a Bluetooth brew would refuse this recipe.
+     *
+     * This is deliberately not identical to the card write list: a fractional
+     * ratio cannot be encoded on a card but is never sent as a fraction over
+     * BLE, where the machine command derives the ratio byte from dose and
+     * volumes.
+     */
+    const brewProblemsForRecipe = recipe
+        ? brewProblems(recipe, temperatureUnit)
+        : [];
+
+    /** A recipe the card would reject cannot be written; it can still be kept. */
     const canWrite = writeProblems.length === 0 && !inputError && recipe !== null;
+    /** A recipe the machine would reject cannot be brewed; it can still be kept. */
+    const canBrew = brewProblemsForRecipe.length === 0 && !inputError && recipe !== null;
     /**
      * Keeping an invalid recipe is allowed; keeping an empty one is not.
      *
@@ -724,6 +739,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         inputError,
         setInputError,
         balance,
+        canBrew,
         canWrite,
         canSave,
         // Reasons a write is refused, in the unit the caller asked for. Not
