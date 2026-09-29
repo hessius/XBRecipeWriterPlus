@@ -45,6 +45,17 @@ Their *names* are copied. Their structure and two of their types are not:
   A score and a height in metres are quantities, and the whole reason this
   block exists is that a value should not decay into text on the way through.
 
+  The cost of that choice falls on `elevation`, because their string is what a
+  user pasted off a bag: `1,800`, `1800 masl`, `5900 ft`. `Number()` sees NaN
+  in all three and the field would vanish with nothing said. `elevated` in
+  `podCoffee.ts` reads them instead -- thousands separators, a trailing metre
+  or foot unit, and feet converted at 0.3048, which is exact by definition and
+  so a conversion rather than a guess. Anything that does not state exactly one
+  height is still refused: a range like `1800-2000`, an unknown unit, trailing
+  prose. The pattern is anchored, so those fall out of it rather than each
+  needing a rule. A confident wrong height is worse than a blank one, which is
+  the judgement `counted` already makes about zero.
+
 The old spellings are still read, at both doors. `library/podCoffee.ts` exports
 `LEGACY_NAMES` and applies it to stored records, so a recipe or brew written
 while the app spoke the old names does not quietly lose its process and roast
@@ -71,7 +82,7 @@ their names and meanings, so nothing already emitted changes shape.
 | `region` | `bean.region` | string | BrewMind |
 | `farm` | `bean.farm` | string | BrewMind |
 | `farmer` | `bean.farmer` | string | BrewMind |
-| `elevation` | `bean.elevation` | integer, metres | BrewMind |
+| `elevation` | `bean.elevation` | metres, read out of text (see below) | BrewMind |
 | `processing` | `bean.processing` | string | pod + BrewMind |
 | `fermentation` | `bean.fermentation` | string | BrewMind |
 | `variety` | `bean.variety` | string | pod + BrewMind |
@@ -150,7 +161,7 @@ the caps live in the URL parser where the untrusted value arrives:
 | `aromatics` | 500 |
 | `note` | 2000 |
 | `roastingDate` | ISO 8601 date, parsed, calendar checked |
-| `elevation` | integer 1..10000 |
+| `elevation` | metres, integer 1..10000 after `elevated` has read it |
 | `cupping_points` | number above 0, up to 100 |
 | `url`, `image` | https only, 2000 |
 

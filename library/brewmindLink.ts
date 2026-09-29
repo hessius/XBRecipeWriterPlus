@@ -53,6 +53,9 @@ const CAPS: Readonly<Record<string, number>> = {
     fermentation: SHORT_TEXT,
     variety: SHORT_TEXT,
     beanMix: SHORT_TEXT,
+    // Not a text field, but it arrives as text and is read by `elevated`.
+    // A height nobody could write in 120 characters is not a height.
+    elevation: SHORT_TEXT,
     aromatics: 500,
     note: 2000,
     url: MAX_URL,

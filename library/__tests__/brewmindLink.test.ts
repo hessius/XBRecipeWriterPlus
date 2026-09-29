@@ -192,4 +192,15 @@ describe("parseBrewMindLink", () => {
         }));
         expect(parsed?.coffee).toEqual({name: "X"});
     });
+
+    it("reads a height a user pasted off a bag", () => {
+        // Beanconqueror holds elevation as a string and BrewMind's value
+        // comes from whatever somebody copied, so a bare integer is the one
+        // shape we cannot count on receiving.
+        const parsed = parseBrewMindLink(valid({
+            "bean.name": "X",
+            "bean.elevation": "5,900 ft"
+        }));
+        expect(parsed?.coffee?.elevation).toBe(1798);
+    });
 });

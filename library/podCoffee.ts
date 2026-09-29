@@ -194,6 +194,42 @@ function scored(value: unknown, max: number): number | undefined {
 }
 
 /**
+ * Metres, out of however somebody wrote a height down.
+ *
+ * Beanconqueror stores elevation as a string and BrewMind's value is whatever
+ * a user copied off a bag, so `1,800`, `1800 masl` and `5900 ft` all turn up
+ * where `counted` alone would see only NaN and drop the field without telling
+ * anyone. This reads the shapes a bag actually uses.
+ *
+ * Feet are converted rather than refused, because `5900 ft` states a height
+ * unambiguously; it is only the *unit* that differs, and 0.3048 is exact by
+ * definition. What is refused is anything that does not state one height:
+ * a range (`1800-2000`), a unit this does not know, or trailing prose. The
+ * pattern is anchored, so all three fall out of it rather than needing a rule
+ * each.
+ *
+ * Deliberately not a general number parser. A confident wrong height on a bean
+ * card is worse than a blank one, which is the same judgement `counted` makes
+ * about zero.
+ */
+const METRES_PER_FOOT = 0.3048;
+const METRE_UNITS = new Set(["", "m", "masl", "amsl", "mamsl",
+                             "meter", "meters", "metre", "metres"]);
+const FOOT_UNITS = new Set(["ft", "foot", "feet"]);
+/** Digits, optionally grouped in thousands, then an optional bare unit word. */
+const HEIGHT = /^(\d{1,3}(?:,\d{3})+|\d+)\s*([a-z]*)\.?$/i;
+
+function elevated(value: unknown, max: number): number | undefined {
+    if (typeof value !== "string") return counted(value, max);
+    const match = HEIGHT.exec(value.trim());
+    if (match === null) return undefined;
+    const height = Number(match[1].replace(/,/g, ""));
+    const unit = match[2].toLowerCase();
+    if (FOOT_UNITS.has(unit)) return counted(Math.round(height * METRES_PER_FOOT), max);
+    return METRE_UNITS.has(unit) ? counted(height, max) : undefined;
+}
+
+/**
  * A flag, from a boolean or from the `1`/`0` #159 sends over a URL.
  *
  * Anything else is undefined rather than false. "Not stated" and "stated not
@@ -364,7 +400,7 @@ export function podCoffeeFromStored(value: unknown): PodCoffee | null {
     });
     if (coffee === null) return null;
 
-    const elevation = counted(record.elevation, MAX_ELEVATION);
+    const elevation = elevated(record.elevation, MAX_ELEVATION);
     const cuppingPoints = scored(record.cupping_points, MAX_CUPPING_SCORE);
     const decaffeinated = flagged(record.decaffeinated);
 

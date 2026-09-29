@@ -172,8 +172,41 @@ describe("podCoffeeFromStored, the #159 fields", () => {
         expect(stored({name: "X", url: "http://example.com"}).url).toBeUndefined();
     });
 
-    it("gives a pod none of them, because a pod carries none of them", () => {
-        // The pod map names these keys so the exhaustiveness check passes, and
+    it("reads a height however the bag wrote it", () => {
+        const height = (elevation: unknown) => stored({name: "X", elevation}).elevation;
+
+        expect(height(1750)).toBe(1750);
+        expect(height("1750")).toBe(1750);
+        expect(height("1,750")).toBe(1750);
+        expect(height("1750m")).toBe(1750);
+        expect(height("1750 MASL")).toBe(1750);
+        expect(height("1,750 metres")).toBe(1750);
+        expect(height("  1750 m. ")).toBe(1750);
+    });
+
+    it("converts a height stated in feet", () => {
+        // Only the unit differs, and 0.3048 is exact by definition, so this
+        // is a conversion rather than a guess.
+        expect(stored({name: "X", elevation: "5900 ft"}).elevation).toBe(1798);
+        expect(stored({name: "X", elevation: "5,900 feet"}).elevation).toBe(1798);
+    });
+
+    it("refuses a height that is not one height", () => {
+        const height = (elevation: unknown) => stored({name: "X", elevation}).elevation;
+
+        // A range states two, and picking an end would invent a fact.
+        expect(height("1800-2000")).toBeUndefined();
+        expect(height("1800 to 2000 masl")).toBeUndefined();
+        // A unit this does not know could be anything.
+        expect(height("1800 leagues")).toBeUndefined();
+        // European thousands separators are ambiguous against a decimal
+        // point, so 1.800 falls out as a non-integer and is dropped.
+        expect(height("1.800")).toBeUndefined();
+        expect(height("high")).toBeUndefined();
+        expect(height("")).toBeUndefined();
+    });
+
+    it("gives a pod none of them, because a pod carries none of them", () => {        // The pod map names these keys so the exhaustiveness check passes, and
         // this is the proof that naming them cannot put anything in a pod's
         // block that xBloom did not send.
         expect(podCoffeeFromPodsVo({theName: "Pod", roastDate: "2026-09-01"}))
