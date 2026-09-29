@@ -1,4 +1,4 @@
-import {PodCoffee, podCoffeeFromStored} from "@/library/podCoffee";
+import {LEGACY_NAMES, PodCoffee, httpsUrl, podCoffeeFromStored} from "@/library/podCoffee";
 
 /**
  * The deep link a coffee app hands XBRW++ (issue #159).
@@ -37,34 +37,50 @@ export const BREWMIND_SOURCE = "brewmind";
  * is roughly 3 kB before gzip against a 131 kB budget.
  */
 const SHORT_TEXT = 120;
+/** A URL's cap, shared by the coffee's link, its image, and `recipe.url`. */
+const MAX_URL = 2000;
 const CAPS: Readonly<Record<string, number>> = {
     name: SHORT_TEXT,
     roaster: SHORT_TEXT,
-    roastDate: SHORT_TEXT,
-    roastLevel: SHORT_TEXT,
+    roastingDate: SHORT_TEXT,
+    roast: SHORT_TEXT,
     origin: SHORT_TEXT,
     country: SHORT_TEXT,
     region: SHORT_TEXT,
     farm: SHORT_TEXT,
     farmer: SHORT_TEXT,
-    process: SHORT_TEXT,
+    processing: SHORT_TEXT,
     fermentation: SHORT_TEXT,
     variety: SHORT_TEXT,
     beanMix: SHORT_TEXT,
     aromatics: 500,
     note: 2000,
-    url: 2000,
-    imageUrl: 2000
+    url: MAX_URL,
+    imageUrl: MAX_URL
 };
 
 /**
  * The parameter names that differ from the field names.
  *
- * Only one does. `bean.image` is #159's spelling and `imageUrl` is the key
- * this app has stored and sent since the handoff shipped, so renaming either
- * would break a half that already works.
+ * `bean.image` is #159's spelling and `imageUrl` is the key this app has
+ * stored and sent since the handoff shipped, so renaming either would break a
+ * half that already works.
+ *
+ * The rest are #159's first table, which claimed Beanconqueror's field names
+ * and diverged on five of them. The table has been corrected, but a link is
+ * minted by a second codebase on a release schedule this one does not control,
+ * so the old spellings keep working rather than becoming a silently dropped
+ * field. They are taken from `LEGACY_NAMES` rather than listed again here:
+ * two hand-maintained copies of the same rename would eventually disagree
+ * about one field, and the one that disagreed would fail quietly.
+ *
+ * Aliasing happens before the cap is looked up, so a legacy spelling is capped
+ * exactly like the current one.
  */
-const PARAM_ALIASES: Readonly<Record<string, string>> = {image: "imageUrl"};
+const PARAM_ALIASES: Readonly<Record<string, string>> = {
+    image: "imageUrl",
+    ...LEGACY_NAMES
+};
 
 export type BrewMindLink = {
     /** The raw `share` value, still to go through `parseImportInput`. */
@@ -73,6 +89,15 @@ export type BrewMindLink = {
     coffee?: PodCoffee;
     /** The producer, as stated. Recorded rather than gated. */
     source?: string;
+    /**
+     * `recipe.url`: the producer's own page for this recipe.
+     *
+     * Not the share link and not the coffee's `url`. The share link resolves
+     * to xBloom's copy of the numbers; this is the page that says why the
+     * numbers are what they are, which is the part a recipe loses on the way
+     * through xBloom. https only, on the same reasoning as an image.
+     */
+    recipeUrl?: string;
 };
 
 /**
@@ -117,6 +142,12 @@ export function parseBrewMindLink(link: string): BrewMindLink | null {
 
     const coffee = coffeeFrom(params);
     if (coffee !== null) result.coffee = coffee;
+
+    const recipeUrl = params.get("recipe.url")?.trim();
+    if (recipeUrl !== undefined && recipeUrl.length <= MAX_URL) {
+        const checked = httpsUrl(recipeUrl);
+        if (checked !== undefined) result.recipeUrl = checked;
+    }
     return result;
 }
 

@@ -12,6 +12,8 @@ import type {PodCoffee} from "@/library/podCoffee";
 export type ImportDecoration = {
     coffee?: PodCoffee;
     source?: RecipeSource;
+    /** `recipe.url`: the producer's own page for this recipe. */
+    recipeUrl?: string;
 };
 
 /**
@@ -28,11 +30,11 @@ export type ImportDecoration = {
  */
 function tagsFrom(coffee: PodCoffee): string[] {
     const tags: string[] = [];
-    if (coffee.roastLevel !== undefined && isRoast(coffee.roastLevel)) {
-        tags.push(coffee.roastLevel);
+    if (coffee.roast !== undefined && isRoast(coffee.roast)) {
+        tags.push(coffee.roast);
     }
-    if (coffee.process !== undefined && isProcess(coffee.process)) {
-        tags.push(coffee.process);
+    if (coffee.processing !== undefined && isProcess(coffee.processing)) {
+        tags.push(coffee.processing);
     }
     if (coffee.fermentation !== undefined && isFermentation(coffee.fermentation)) {
         tags.push(coffee.fermentation);
@@ -52,8 +54,9 @@ function tagsFrom(coffee: PodCoffee): string[] {
  * recipe the user has already edited.
  */
 export function decorateImport(recipe: Recipe, decoration: ImportDecoration): Recipe {
-    const {coffee, source} = decoration;
+    const {coffee, source, recipeUrl} = decoration;
     if (source !== undefined) recipe.source = source;
+    if (recipeUrl !== undefined) recipe.recipeUrl = recipeUrl;
     if (coffee === undefined) return recipe;
 
     recipe.coffee = coffee;

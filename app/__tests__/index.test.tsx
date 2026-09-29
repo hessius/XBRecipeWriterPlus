@@ -2925,9 +2925,10 @@ describe("the import deep link", () => {
         fetched.xid = "abc123";
         mockGetRecipe = () => fetched;
         mockImportUrl = link({
-            "bean.name":    "Finca La Esperanza",
-            "bean.roaster": "Some Roastery",
-            "bean.process": "Washed"
+            "bean.name":       "Finca La Esperanza",
+            "bean.roaster":    "Some Roastery",
+            "bean.processing": "Washed",
+            "recipe.url":      "https://brewmind.coffee/recipe/esperanza"
         });
 
         await renderWithProviders(
@@ -2938,11 +2939,13 @@ describe("the import deep link", () => {
         expect(fetched.coffee).toEqual(expect.objectContaining({
             name:    "Finca La Esperanza",
             roaster: "Some Roastery",
-            process: "Washed"
+            processing: "Washed"
         }));
         // From the closed vocabulary only: the roaster is not a tag.
         expect(fetched.tags).toEqual(["Washed"]);
         expect(fetched.source).toBe("brewmind");
+        // The producer's own page, which the editor offers a way back to.
+        expect(fetched.recipeUrl).toBe("https://brewmind.coffee/recipe/esperanza");
     });
 
     it("imports once, however many times the screen renders", async () => {

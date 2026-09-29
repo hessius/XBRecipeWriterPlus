@@ -20,45 +20,78 @@ describe("parseBrewMindLink", () => {
         const parsed = parseBrewMindLink(valid({
             "bean.name": "Finca La Esperanza",
             "bean.roaster": "Some Roastery",
-            "bean.roastDate": "2026-09-01",
-            "bean.roastLevel": "Medium",
+            "bean.roastingDate": "2026-09-01",
+            "bean.roast": "Medium",
             "bean.country": "Colombia",
             "bean.region": "Huila",
             "bean.farm": "La Esperanza",
             "bean.farmer": "Ana Ruiz",
             "bean.elevation": "1750",
-            "bean.process": "Washed",
+            "bean.processing": "Washed",
             "bean.fermentation": "Anaerobic",
             "bean.variety": "Pink Bourbon",
             "bean.beanMix": "Single Origin",
             "bean.aromatics": "Peach, jasmine",
             "bean.note": "A narrative.",
-            "bean.cuppingScore": "86.5",
-            "bean.decaf": "0",
+            "bean.cupping_points": "86.5",
+            "bean.decaffeinated": "0",
             "bean.url": "https://example.com/coffee",
             "bean.image": "https://example.com/bag.png"
         }));
         expect(parsed?.coffee).toEqual({
             name: "Finca La Esperanza",
             roaster: "Some Roastery",
-            roastDate: "2026-09-01",
-            roastLevel: "Medium",
+            roastingDate: "2026-09-01",
+            roast: "Medium",
             country: "Colombia",
             region: "Huila",
             farm: "La Esperanza",
             farmer: "Ana Ruiz",
             elevation: 1750,
-            process: "Washed",
+            processing: "Washed",
             fermentation: "Anaerobic",
             variety: "Pink Bourbon",
             beanMix: "Single Origin",
             aromatics: "Peach, jasmine",
             note: "A narrative.",
-            cuppingScore: 86.5,
-            decaf: false,
+            cupping_points: 86.5,
+            decaffeinated: false,
             url: "https://example.com/coffee",
             imageUrl: "https://example.com/bag.png"
         });
+    });
+
+    it("still reads the field names #159 first published", () => {
+        // #159's first table claimed Beanconqueror's names and diverged on
+        // five of them. The table was corrected, but a link is minted by a
+        // second codebase on a release schedule this one does not control, so
+        // a link written against the old table must not lose those five
+        // fields silently.
+        const parsed = parseBrewMindLink(valid({
+            "bean.name": "X",
+            "bean.roastDate": "2026-09-01",
+            "bean.roastLevel": "Medium",
+            "bean.process": "Washed",
+            "bean.cuppingScore": "86.5",
+            "bean.decaf": "0"
+        }));
+        expect(parsed?.coffee).toEqual({
+            name: "X",
+            roastingDate: "2026-09-01",
+            roast: "Medium",
+            processing: "Washed",
+            cupping_points: 86.5,
+            decaffeinated: false
+        });
+    });
+
+    it("lets the current spelling win when a link sends both", () => {
+        const parsed = parseBrewMindLink(valid({
+            "bean.name": "X",
+            "bean.process": "Washed",
+            "bean.processing": "Natural"
+        }));
+        expect(parsed?.coffee?.processing).toBe("Natural");
     });
 
     it("refuses a version it was not built to read", () => {
@@ -128,32 +161,34 @@ describe("parseBrewMindLink", () => {
         expect(parsed?.coffee).toEqual({name: "Kept"});
     });
 
-    it("reads decaf as a three-way answer", () => {
+    it("reads decaffeinated as a three-way answer", () => {
         const decaf = (value: string) =>
-            parseBrewMindLink(valid({"bean.name": "X", "bean.decaf": value}))?.coffee?.decaf;
+            parseBrewMindLink(valid({"bean.name": "X", "bean.decaffeinated": value}))
+                ?.coffee?.decaffeinated;
         expect(decaf("1")).toBe(true);
         expect(decaf("0")).toBe(false);
         expect(decaf("maybe")).toBeUndefined();
-        expect(parseBrewMindLink(valid({"bean.name": "X"}))?.coffee?.decaf).toBeUndefined();
+        expect(parseBrewMindLink(valid({"bean.name": "X"}))
+            ?.coffee?.decaffeinated).toBeUndefined();
     });
 
-    it("refuses a roast date that is not one", () => {
+    it("refuses a roasting date that is not one", () => {
         // #159 states the type, so it is enforced at the door rather than
         // handed on for Beanconqueror to fail on.
-        const roastDate = (value: string) =>
-            parseBrewMindLink(valid({"bean.name": "X", "bean.roastDate": value}))
-                ?.coffee?.roastDate;
-        expect(roastDate("2026-09-01")).toBe("2026-09-01");
-        expect(roastDate("not-a-date")).toBeUndefined();
-        expect(roastDate("01/09/2026")).toBeUndefined();
-        expect(roastDate("2026-02-31")).toBeUndefined();
+        const roastingDate = (value: string) =>
+            parseBrewMindLink(valid({"bean.name": "X", "bean.roastingDate": value}))
+                ?.coffee?.roastingDate;
+        expect(roastingDate("2026-09-01")).toBe("2026-09-01");
+        expect(roastingDate("not-a-date")).toBeUndefined();
+        expect(roastingDate("01/09/2026")).toBeUndefined();
+        expect(roastingDate("2026-02-31")).toBeUndefined();
     });
 
     it("refuses a measurement that cannot be real", () => {
         const parsed = parseBrewMindLink(valid({
             "bean.name": "X",
             "bean.elevation": "0",
-            "bean.cuppingScore": "120"
+            "bean.cupping_points": "120"
         }));
         expect(parsed?.coffee).toEqual({name: "X"});
     });

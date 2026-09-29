@@ -25,7 +25,7 @@ describe("podCoffeeFromPodsVo", () => {
         })).toEqual({
             name: "Kenya Sakami Gloria Natural Batian",
             origin: "Nabiswa, Kenya",
-            process: "Natural",
+            processing: "Natural",
             variety: "Batian",
             aromatics: "Cherry・strawberry・blueberry",
             note: "A producer narrative.",
@@ -35,9 +35,13 @@ describe("podCoffeeFromPodsVo", () => {
     });
 
     it("does not map roast, whose meaning is unverified", () => {
+        // The pod endpoint sends a field called `roast`, and `roast` is now a
+        // field on this type too, filled by a BrewMind link. They must not be
+        // wired together: the pod's value was 1 on every pod probed, so
+        // mapping it would state a roast level nobody stated.
         const coffee = podCoffeeFromPodsVo({theName: "X", roast: 3});
         expect(coffee).not.toBeNull();
-        expect(Object.keys(coffee!)).not.toContain("degreeOfRoast");
+        expect(coffee!.roast).toBeUndefined();
     });
 
     it("drops empty strings rather than carrying them", () => {
@@ -80,7 +84,7 @@ describe("podCoffeeFromStored", () => {
         })).toEqual({
             name: "Kenya Sakami Gloria Natural Batian",
             origin: "Nabiswa, Kenya",
-            process: "Natural",
+            processing: "Natural",
             variety: "Batian",
             aromatics: "Cherry・strawberry・blueberry",
             note: "A producer narrative.",
@@ -122,40 +126,40 @@ describe("podCoffeeFromStored, the #159 fields", () => {
         expect(podCoffeeFromStored({
             name: "Finca La Esperanza",
             roaster: "Some Roastery",
-            roastDate: "2026-09-01",
-            roastLevel: "Medium",
+            roastingDate: "2026-09-01",
+            roast: "Medium",
             country: "Colombia",
             region: "Huila",
             farm: "La Esperanza",
             farmer: "Ana Ruiz",
             fermentation: "Anaerobic",
             elevation: 1750,
-            cuppingScore: 86.5,
-            decaf: false,
+            cupping_points: 86.5,
+            decaffeinated: false,
             url: "https://example.com/coffee"
         })).toEqual({
             name: "Finca La Esperanza",
             roaster: "Some Roastery",
-            roastDate: "2026-09-01",
-            roastLevel: "Medium",
+            roastingDate: "2026-09-01",
+            roast: "Medium",
             country: "Colombia",
             region: "Huila",
             farm: "La Esperanza",
             farmer: "Ana Ruiz",
             fermentation: "Anaerobic",
             elevation: 1750,
-            cuppingScore: 86.5,
-            decaf: false,
+            cupping_points: 86.5,
+            decaffeinated: false,
             url: "https://example.com/coffee"
         });
     });
 
-    it("keeps a false decaf, which is a verdict and not an absence", () => {
-        // `decaf: false` is the roaster saying caffeinated. Dropping it as
-        // falsy would turn a stated fact into an unknown.
-        expect(stored({name: "X", decaf: false}).decaf).toBe(false);
-        expect(stored({name: "X", decaf: true}).decaf).toBe(true);
-        expect(stored({name: "X"}).decaf).toBeUndefined();
+    it("keeps a false decaffeinated, which is a verdict and not an absence", () => {
+        // `decaffeinated: false` is the roaster saying caffeinated. Dropping
+        // it as falsy would turn a stated fact into an unknown.
+        expect(stored({name: "X", decaffeinated: false}).decaffeinated).toBe(false);
+        expect(stored({name: "X", decaffeinated: true}).decaffeinated).toBe(true);
+        expect(stored({name: "X"}).decaffeinated).toBeUndefined();
     });
 
     it("refuses a number that cannot be a real measurement", () => {
@@ -163,8 +167,8 @@ describe("podCoffeeFromStored, the #159 fields", () => {
         expect(stored({name: "X", elevation: -100}).elevation).toBeUndefined();
         expect(stored({name: "X", elevation: 99_000}).elevation).toBeUndefined();
         expect(stored({name: "X", elevation: 1750.4}).elevation).toBeUndefined();
-        expect(stored({name: "X", cuppingScore: 101}).cuppingScore).toBeUndefined();
-        expect(stored({name: "X", cuppingScore: NaN}).cuppingScore).toBeUndefined();
+        expect(stored({name: "X", cupping_points: 101}).cupping_points).toBeUndefined();
+        expect(stored({name: "X", cupping_points: NaN}).cupping_points).toBeUndefined();
         expect(stored({name: "X", url: "http://example.com"}).url).toBeUndefined();
     });
 
@@ -173,7 +177,7 @@ describe("podCoffeeFromStored, the #159 fields", () => {
         // this is the proof that naming them cannot put anything in a pod's
         // block that xBloom did not send.
         expect(podCoffeeFromPodsVo({theName: "Pod", roastDate: "2026-09-01"}))
-            .toEqual({name: "Pod", roastDate: "2026-09-01"});
+            .toEqual({name: "Pod", roastingDate: "2026-09-01"});
     });
 });
 

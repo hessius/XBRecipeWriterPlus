@@ -451,6 +451,7 @@ export default class BrewRecorder {
             // never answered both look like.
             ...(this.dialBefore > 0 ? {dialBefore: this.dialBefore} : {}),
             ...(recipe.coffee === undefined ? {} : {coffee: {...recipe.coffee}}),
+            ...(recipe.recipeUrl === undefined ? {} : {recipeUrl: recipe.recipeUrl}),
             // Spread rather than assigned, so a recipe with no bypass leaves
             // the key off the row entirely and reads back as an old record.
             ...(bypass === undefined ? {} : {bypass}),

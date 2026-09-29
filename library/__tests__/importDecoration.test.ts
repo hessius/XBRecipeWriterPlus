@@ -18,8 +18,8 @@ describe("decorateImport", () => {
         const decorated = decorateImport(recipe(), {
             coffee: {
                 name: "X",
-                roastLevel: "Medium",
-                process: "Washed",
+                roast: "Medium",
+                processing: "Washed",
                 fermentation: "Anaerobic",
                 roaster: "Some Roastery",
                 country: "Colombia"
@@ -35,7 +35,7 @@ describe("decorateImport", () => {
         // A miss is unset rather than invented, which is what those predicates
         // are for. "Medium-dark" is not a roast this app knows.
         const decorated = decorateImport(recipe(), {
-            coffee: {name: "X", roastLevel: "Medium-dark", process: "Carbonic maceration"}
+            coffee: {name: "X", roast: "Medium-dark", processing: "Carbonic maceration"}
         });
 
         expect(decorated.tags).toEqual([]);
@@ -45,12 +45,12 @@ describe("decorateImport", () => {
         const existing = recipe();
         existing.setTags(["Morning"]);
 
-        expect(decorateImport(existing, {coffee: {name: "X", process: "Natural"}}).tags)
+        expect(decorateImport(existing, {coffee: {name: "X", processing: "Natural"}}).tags)
             .toEqual(["Morning", "Natural"]);
     });
 
     it("does not tag a recipe twice for the same coffee", () => {
-        const coffee = {name: "X", process: "Natural"};
+        const coffee = {name: "X", processing: "Natural"};
         const once = decorateImport(recipe(), {coffee});
 
         expect(decorateImport(once, {coffee}).tags).toEqual(["Natural"]);

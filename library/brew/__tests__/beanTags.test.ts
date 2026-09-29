@@ -107,14 +107,14 @@ describe("resolving what the coffee was", () => {
         const record = brew({
             origin: "Nyeri",
             process: "Honey",
-            coffee: {name: "Pod", origin: "Huila", process: "washed"}
+            coffee: {name: "Pod", origin: "Huila", processing: "washed"}
         });
         expect(resolvedOrigin(record)).toBe("Nyeri");
         expect(resolvedProcess(record)).toBe("Honey");
     });
 
     it("falls back to the pod when the user has not said", () => {
-        const record = brew({coffee: {name: "Pod", origin: "Huila", process: "washed"}});
+        const record = brew({coffee: {name: "Pod", origin: "Huila", processing: "washed"}});
         expect(resolvedOrigin(record)).toBe("Huila");
         expect(resolvedProcess(record)).toBe("Washed");
     });
@@ -147,7 +147,7 @@ describe("resolving what the coffee was", () => {
     });
 
     it("stays unset rather than guessing at a process it cannot match", () => {
-        const record = brew({coffee: {name: "Pod", process: "experimental lot 4"}});
+        const record = brew({coffee: {name: "Pod", processing: "experimental lot 4"}});
         expect(resolvedProcess(record)).toBeUndefined();
     });
 
@@ -155,7 +155,7 @@ describe("resolving what the coffee was", () => {
         // "anaerobic natural" names both axes. Only the fruit removal term is
         // ours to read. There is deliberately no pod fermentation resolver, so
         // the fermentation stays for the user to state.
-        const record = brew({coffee: {name: "Pod", process: "anaerobic natural"}});
+        const record = brew({coffee: {name: "Pod", processing: "anaerobic natural"}});
         expect(resolvedProcess(record)).toBe("Natural");
     });
 });

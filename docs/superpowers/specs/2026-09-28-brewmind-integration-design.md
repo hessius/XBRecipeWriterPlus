@@ -22,29 +22,36 @@ native-affecting change (see §3).
 
 ## The contract, and the one place it is ambiguous
 
-#159 is a published contract. BrewMind is building the producing side and
-Beanconqueror the consuming side, both from the field table in that issue, so
-**the table is normative and this document does not improve on it.** Field names
-are taken verbatim even where a different name would read better.
+#159 said the field names were Beanconqueror's. On five of them they were not.
 
-One divergence has to be recorded rather than silently resolved.
+`Bean` and `IBeanInformation` in the Beanconqueror repository spell them
+`roastingDate`, `roast`, `processing`, `cupping_points` and `decaffeinated`;
+#159's first table said `roastDate`, `roastLevel`, `process`, `cuppingScore` and
+`decaf`. The point of this block is that it needs no mapping layer at the far
+end, and a block that is nearly their names has all the cost of matching them
+and none of the benefit.
 
-`docs/superpowers/specs/2026-09-20-beanconqueror-brew-export-design.md:462` names
-Beanconqueror's own model field `roastingDate`, and #159's table says
-`bean.roastDate`. They are not the same string. Beanconqueror's `Bean` model also
-spells several others differently from the table: `roast` for `roastLevel`,
-`processing` for `process`, `cupping_points` for `cuppingScore`,
-`decaffeinated` for `decaf`.
+**The names are Beanconqueror's, and the issue was corrected to match.** That
+is the direction the drift gets fixed in, because only one of the three sides
+has a model that already exists and is already shipped to users. BrewMind had
+not started building when this was settled.
 
-**We follow #159.** Both integrating parties are reading that table, so matching
-their published names is what keeps the three sides in agreement; matching
-Beanconqueror's internal model instead would mean BrewMind sends a key we do not
-read. The mapping from our block onto Beanconqueror's model is Beanconqueror's
-to write, which is the same division of labour the existing block already uses
-(`beanMix`, `aromatics` and `imageUrl` are already our spellings, not theirs).
+Their *names* are copied. Their structure and two of their types are not:
 
-This is called out in the PR so it can be corrected in one place if Beanconqueror
-has in fact built against `roastingDate`.
+- Beanconqueror nests the origin fields in a `bean_information[]` array,
+  because a blend has several of them. A single coffee has one, and flattening
+  it costs nothing the far end cannot undo.
+- `cupping_points` and `elevation` are strings in their model and numbers here.
+  A score and a height in metres are quantities, and the whole reason this
+  block exists is that a value should not decay into text on the way through.
+
+The old spellings are still read, at both doors. `library/podCoffee.ts` exports
+`LEGACY_NAMES` and applies it to stored records, so a recipe or brew written
+while the app spoke the old names does not quietly lose its process and roast
+level; `library/brewmindLink.ts` folds the same map into its parameter aliases,
+so a link minted against the first table still works. One map, two doors: two
+hand-maintained copies of a rename eventually disagree about one field, and the
+one that disagrees fails silently.
 
 ## 1. The bean block
 
@@ -57,22 +64,22 @@ their names and meanings, so nothing already emitted changes shape.
 | --- | --- | --- | --- |
 | `name` | `bean.name` | string, required | pod + BrewMind |
 | `roaster` | `bean.roaster` | string | BrewMind |
-| `roastDate` | `bean.roastDate` | string, ISO 8601 date | BrewMind |
-| `roastLevel` | `bean.roastLevel` | string | BrewMind |
+| `roastingDate` | `bean.roastingDate` | string, ISO 8601 date | BrewMind |
+| `roast` | `bean.roast` | string | BrewMind |
 | `origin` | none | string | pod only |
 | `country` | `bean.country` | string | BrewMind |
 | `region` | `bean.region` | string | BrewMind |
 | `farm` | `bean.farm` | string | BrewMind |
 | `farmer` | `bean.farmer` | string | BrewMind |
 | `elevation` | `bean.elevation` | integer, metres | BrewMind |
-| `process` | `bean.process` | string | pod + BrewMind |
+| `processing` | `bean.processing` | string | pod + BrewMind |
 | `fermentation` | `bean.fermentation` | string | BrewMind |
 | `variety` | `bean.variety` | string | pod + BrewMind |
 | `beanMix` | `bean.beanMix` | string | pod + BrewMind |
 | `aromatics` | `bean.aromatics` | string | pod + BrewMind |
 | `note` | `bean.note` | string | pod + BrewMind |
-| `cuppingScore` | `bean.cuppingScore` | number | BrewMind |
-| `decaf` | `bean.decaf` | boolean, from `1`/`0` | BrewMind |
+| `cupping_points` | `bean.cupping_points` | number | BrewMind |
+| `decaffeinated` | `bean.decaffeinated` | boolean, from `1`/`0` | BrewMind |
 | `url` | `bean.url` | string, https only | BrewMind |
 | `imageUrl` | `bean.image` | string, https only | pod + BrewMind |
 
@@ -89,6 +96,35 @@ simply leaves the new ones empty", read in the other direction.
 in the shipped envelope and in
 `docs/superpowers/specs/2026-09-20-beanconqueror-brew-export-design.md`, so
 renaming it would break the half of the contract that already works.
+
+### `recipe.url`, the producer's own page
+
+Requested by BrewMind on #159 and accepted. It is the canonical page for the
+recipe on the producer's own site, so somebody can go back and read why the
+recipe looks the way it does.
+
+It is **not** on the bean. It is not the share link either: a share link
+resolves to xBloom's copy of the numbers, and this is the page that explains
+them, which is exactly the part a recipe loses coming through xBloom. So it
+lives on the `Recipe` as `recipeUrl`, https only, checked by the same
+`httpsUrl` the coffee's own link goes through.
+
+It surfaces twice:
+
+- **The editor's FROM section** gains a button, labelled "View on BrewMind"
+  where the producer is known and "View the recipe page" where it is not. The
+  section used to draw only for a sharer or a pod ID; a page is now reason
+  enough on its own, because a BrewMind recipe may have neither.
+- **The Beanconqueror export note**, on a line of its own below the figures:
+  `Recipe: <url>`. Its own line because a URL is the one thing in that note
+  long enough to wrap, and Beanconqueror once rendered notes in a narrow
+  no-wrap block.
+
+For the note to carry it, the brew has to know it, so `BrewRecord` gains
+`recipeUrl` and `brews` gains a column with the `''` sentinel `coffee` already
+uses. Copied at write time for the same reason `recipeName` and `accent` are:
+an export must still say where the recipe came from after the recipe itself
+has been deleted.
 
 ### Why the pod output does not change
 
@@ -110,12 +146,12 @@ the caps live in the URL parser where the untrusted value arrives:
 
 | Field group | Cap |
 | --- | --- |
-| Short text (`name`, `roaster`, `roastLevel`, `country`, `region`, `farm`, `farmer`, `variety`, `beanMix`, `process`, `fermentation`) | 120 |
+| Short text (`name`, `roaster`, `roast`, `country`, `region`, `farm`, `farmer`, `variety`, `beanMix`, `processing`, `fermentation`) | 120 |
 | `aromatics` | 500 |
 | `note` | 2000 |
-| `roastDate` | ISO 8601 date, parsed, calendar checked |
+| `roastingDate` | ISO 8601 date, parsed, calendar checked |
 | `elevation` | integer 1..10000 |
-| `cuppingScore` | number above 0, up to 100 |
+| `cupping_points` | number above 0, up to 100 |
 | `url`, `image` | https only, 2000 |
 
 Zero is refused for both numbers rather than kept. Nothing grows at sea level
@@ -198,7 +234,7 @@ Recipe"`.
 ### Tags
 
 Derived only from the closed vocabulary in `library/brew/beanTags.ts`:
-`roastLevel` through `isRoast`, `process` through `isProcess`, `fermentation`
+`roast` through `isRoast`, `processing` through `isProcess`, `fermentation`
 through `isFermentation`. Exact matches only, and a miss is unset rather than
 invented, which is the rule those predicates already enforce.
 
@@ -252,7 +288,7 @@ build alone.
 ## Testing
 
 - `library/__tests__/brewmindLink.test.ts` — the URL grammar: version gating,
-  a missing share, every field, the caps, `1`/`0` decaf, https-only, and a
+  a missing share, every field, the caps, `1`/`0` decaffeinated, https-only, and a
   hostile link.
 - `library/__tests__/podCoffee.test.ts` — the widened parsers, including that
   pod output is unchanged.

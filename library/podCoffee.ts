@@ -7,17 +7,30 @@
  * with Beanconqueror.
  *
  * Two sources fill it, and neither fills all of it. An xPod carries what
- * xBloom's `podsVo` holds; a BrewMind link (#159) carries the rest. The field
- * names past `imageUrl` are taken verbatim from #159's table, which BrewMind
- * and Beanconqueror are both building against, so they are not renamed here
- * even where Beanconqueror's own model spells one differently (`roastingDate`
- * for `roastDate`, `processing` for `process`). Matching the published table is
- * what keeps three sides in agreement; see the design doc.
+ * xBloom's `podsVo` holds; a BrewMind link (#159) carries the rest. Every
+ * name here is Beanconqueror's own, read off their `Bean` class and
+ * `IBeanInformation`, including where that means their spelling rather than
+ * this codebase's house style (`cupping_points`, not `cuppingScore`). #159's
+ * first table claimed to use their names and quietly diverged on five of
+ * them; the point of the block is to need no mapping layer at the far end, so
+ * the table was corrected rather than the code. See the design doc.
  *
- * `roast` from a pod is still deliberately absent: it was `1` on all five pods
- * probed, so whether it is a roast level or a constant is unknown, and an
- * invented roast level is worse than none (spec §2.1.1). `roastLevel` below is
- * a different thing, a value BrewMind states outright rather than one we guess.
+ * Their structure is not copied, only their names. Beanconqueror nests the
+ * origin fields in a `bean_information[]` array because a blend has several
+ * of them; a single coffee has one, and flattening it costs nothing a reader
+ * at the far end cannot undo.
+ *
+ * Their types are not copied either, where copying them would lose something:
+ * `cupping_points` and `elevation` are strings in their model and numbers
+ * here, because a score and a height in metres are quantities, and the whole
+ * reason this block exists is that a value should not decay into text on the
+ * way through.
+ *
+ * `roast` is filled by a BrewMind link and never by a pod, though the pod
+ * endpoint sends a field of that name: it was `1` on all five pods probed, so
+ * whether it is a roast level or a constant is unknown, and an invented roast
+ * level is worse than none (spec §2.1.1). BrewMind states a roast level
+ * outright, which is a different thing from this app guessing one.
  *
  * `origin` has no #159 param on purpose. That issue replaces it with the finer
  * `country`/`region`/`farm`/`farmer`, but the pod path populates `origin` and
@@ -28,8 +41,8 @@ export type PodCoffee = {
     name: string;
     roaster?: string;
     /** ISO 8601 date. */
-    roastDate?: string;
-    roastLevel?: string;
+    roastingDate?: string;
+    roast?: string;
     origin?: string;
     country?: string;
     region?: string;
@@ -37,14 +50,14 @@ export type PodCoffee = {
     farmer?: string;
     /** Metres. */
     elevation?: number;
-    process?: string;
+    processing?: string;
     fermentation?: string;
     variety?: string;
     beanMix?: string;
     aromatics?: string;
     note?: string;
-    cuppingScore?: number;
-    decaf?: boolean;
+    cupping_points?: number;
+    decaffeinated?: boolean;
     /** Link to the coffee. https only. */
     url?: string;
     imageUrl?: string;
@@ -218,8 +231,8 @@ function podCoffeeFromRecord(value: unknown, fields: PodCoffeeFields): PodCoffee
     // the list is now long enough that fourteen near-identical lines is where
     // a copy-paste slip puts `region` into `farm` without anything noticing.
     const textFields: readonly Exclude<TextField, "name">[] = [
-        "roaster", "roastLevel", "origin", "country", "region",
-        "farm", "farmer", "process", "fermentation", "variety", "beanMix",
+        "roaster", "roast", "origin", "country", "region",
+        "farm", "farmer", "processing", "fermentation", "variety", "beanMix",
         "aromatics", "note"
     ];
     for (const field of textFields) {
@@ -231,8 +244,8 @@ function podCoffeeFromRecord(value: unknown, fields: PodCoffeeFields): PodCoffee
     if (imageUrl !== undefined) coffee.imageUrl = imageUrl;
     const url = httpsUrl(record[fields.url]);
     if (url !== undefined) coffee.url = url;
-    const roastDate = isoDate(record[fields.roastDate]);
-    if (roastDate !== undefined) coffee.roastDate = roastDate;
+    const roastingDate = isoDate(record[fields.roastingDate]);
+    if (roastingDate !== undefined) coffee.roastingDate = roastingDate;
     return coffee;
 }
 
@@ -254,15 +267,18 @@ export function podCoffeeFromPodsVo(podsVo: unknown): PodCoffee | null {
     return podCoffeeFromRecord(podsVo, {
         name: "theName",
         origin: "origin",
-        process: "process",
+        processing: "process",
         variety: "varietal",
         aromatics: "flavor",
         note: "introduce",
         beanMix: "type",
         imageUrl: "imagePath",
         roaster: "roaster",
-        roastDate: "roastDate",
-        roastLevel: "roastLevel",
+        roastingDate: "roastDate",
+        // Deliberately *not* the pod's own `roast`, which is the field the
+        // doc comment above refuses to record. This key is one the endpoint
+        // does not send, so a pod leaves the roast level empty.
+        roast: "roastLevel",
         country: "country",
         region: "region",
         farm: "farm",
@@ -290,19 +306,55 @@ export function podCoffeeFromPodsVo(podsVo: unknown): PodCoffee | null {
  * rather than of the type, so it is enforced where untrusted values arrive:
  * `library/brewmindLink.ts` for a URL.
  */
+/**
+ * The names this block used before it was corrected to Beanconqueror's own.
+ *
+ * A recipe imported while the app spoke the old names carries them in its
+ * stored JSON, and a brew recorded from one carries them in its `coffee`
+ * column. Neither is rewritten on upgrade, so both are still read here: a
+ * rename that silently emptied the process and roast level of every coffee
+ * already on a phone would be a worse bug than the drift it fixed.
+ *
+ * Applied only where the current name is absent. A record holding both was
+ * written by a newer app than the one that wrote the legacy key, so its own
+ * spelling is the one that meant something.
+ */
+export const LEGACY_NAMES: Readonly<Record<string, string>> = {
+    roastDate:    "roastingDate",
+    roastLevel:   "roast",
+    process:      "processing",
+    cuppingScore: "cupping_points",
+    decaf:        "decaffeinated"
+};
+
+function withCurrentNames(record: Record<string, unknown>): Record<string, unknown> {
+    let patched: Record<string, unknown> | undefined;
+    for (const legacy of Object.keys(LEGACY_NAMES)) {
+        const current = LEGACY_NAMES[legacy];
+        if (record[current] === undefined && record[legacy] !== undefined) {
+            patched ??= {...record};
+            patched[current] = record[legacy];
+        }
+    }
+    return patched ?? record;
+}
+
 export function podCoffeeFromStored(value: unknown): PodCoffee | null {
-    const coffee = podCoffeeFromRecord(value, {
+    if (value === null || typeof value !== "object") return null;
+    const record = withCurrentNames(value as Record<string, unknown>);
+
+    const coffee = podCoffeeFromRecord(record, {
         name: "name",
         origin: "origin",
-        process: "process",
+        processing: "processing",
         variety: "variety",
         aromatics: "aromatics",
         note: "note",
         beanMix: "beanMix",
         imageUrl: "imageUrl",
         roaster: "roaster",
-        roastDate: "roastDate",
-        roastLevel: "roastLevel",
+        roastingDate: "roastingDate",
+        roast: "roast",
         country: "country",
         region: "region",
         farm: "farm",
@@ -312,13 +364,12 @@ export function podCoffeeFromStored(value: unknown): PodCoffee | null {
     });
     if (coffee === null) return null;
 
-    const record = value as Record<string, unknown>;
     const elevation = counted(record.elevation, MAX_ELEVATION);
-    const cuppingScore = scored(record.cuppingScore, MAX_CUPPING_SCORE);
-    const decaf = flagged(record.decaf);
+    const cuppingPoints = scored(record.cupping_points, MAX_CUPPING_SCORE);
+    const decaffeinated = flagged(record.decaffeinated);
 
     if (elevation !== undefined) coffee.elevation = elevation;
-    if (cuppingScore !== undefined) coffee.cuppingScore = cuppingScore;
-    if (decaf !== undefined) coffee.decaf = decaf;
+    if (cuppingPoints !== undefined) coffee.cupping_points = cuppingPoints;
+    if (decaffeinated !== undefined) coffee.decaffeinated = decaffeinated;
     return coffee;
 }

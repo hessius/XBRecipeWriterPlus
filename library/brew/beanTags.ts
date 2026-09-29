@@ -131,5 +131,5 @@ export function resolvedOrigin(record: BrewRecord): string | undefined {
  */
 export function resolvedProcess(record: BrewRecord): Process | undefined {
     if (isProcess(record.process)) return record.process;
-    return processFromPodText(record.coffee?.process);
+    return processFromPodText(record.coffee?.processing);
 }

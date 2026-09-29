@@ -102,7 +102,7 @@ describe("buildEnvelope", () => {
         expect(buildEnvelope(brew(), samples).bean).toEqual({
             name: "Kenya Sakami Gloria Natural Batian",
             origin: "Nabiswa, Kenya",
-            process: "Natural",
+            processing: "Natural",
             variety: "Batian",
             aromatics: "Cherry・strawberry・blueberry",
             beanMix: "Single Origin",

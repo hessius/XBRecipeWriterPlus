@@ -16,21 +16,22 @@ const LINK = "xbrw://import?v=1&source=brewmind"
     + "&share=" + encodeURIComponent("https://share-h5.xbloom.com/r?id=abc123")
     + "&bean.name=" + encodeURIComponent("Finca La Esperanza")
     + "&bean.roaster=" + encodeURIComponent("Some Roastery")
-    + "&bean.roastDate=2026-09-01"
-    + "&bean.roastLevel=Medium"
+    + "&bean.roastingDate=2026-09-01"
+    + "&bean.roast=Medium"
     + "&bean.country=Colombia"
     + "&bean.region=Huila"
     + "&bean.farm=" + encodeURIComponent("La Esperanza")
     + "&bean.farmer=" + encodeURIComponent("Ana Ruiz")
     + "&bean.elevation=1750"
-    + "&bean.process=Washed"
+    + "&bean.processing=Washed"
     + "&bean.fermentation=Anaerobic"
     + "&bean.variety=" + encodeURIComponent("Pink Bourbon")
     + "&bean.beanMix=" + encodeURIComponent("Single Origin")
     + "&bean.aromatics=" + encodeURIComponent("Peach, jasmine")
-    + "&bean.cuppingScore=86.5"
-    + "&bean.decaf=0"
-    + "&bean.url=" + encodeURIComponent("https://example.com/coffee");
+    + "&bean.cupping_points=86.5"
+    + "&bean.decaffeinated=0"
+    + "&bean.url=" + encodeURIComponent("https://example.com/coffee")
+    + "&recipe.url=" + encodeURIComponent("https://brewmind.coffee/recipe/esperanza");
 
 /** Persist and read back, the way `RecipeDatabase` actually does it. */
 const stored = (recipe: Recipe) => new Recipe(undefined, JSON.stringify(recipe));
@@ -41,7 +42,14 @@ describe("a BrewMind coffee, end to end", () => {
         if (link === null) throw new Error("the fixture link should parse");
         const recipe = new Recipe();
         recipe.name = "Finca La Esperanza";
-        return {recipe: decorateImport(recipe, {coffee: link.coffee, source: "brewmind"}), link};
+        return {
+            recipe: decorateImport(recipe, {
+                coffee:    link.coffee,
+                recipeUrl: link.recipeUrl,
+                source:    "brewmind"
+            }),
+            link
+        };
     };
 
     it("survives being stored and read back", () => {
@@ -52,6 +60,7 @@ describe("a BrewMind coffee, end to end", () => {
         const reloaded = stored(recipe);
 
         expect(reloaded.coffee).toEqual(recipe.coffee);
+        expect(reloaded.recipeUrl).toBe("https://brewmind.coffee/recipe/esperanza");
         expect(reloaded.source).toBe("brewmind");
         expect(reloaded.tags).toEqual(["Medium", "Washed", "Anaerobic"]);
     });
@@ -68,33 +77,48 @@ describe("a BrewMind coffee, end to end", () => {
         expect(envelope.bean).toEqual({
             name:         "Finca La Esperanza",
             roaster:      "Some Roastery",
-            roastDate:    "2026-09-01",
-            roastLevel:   "Medium",
+            roastingDate: "2026-09-01",
+            roast:        "Medium",
             country:      "Colombia",
             region:       "Huila",
             farm:         "La Esperanza",
             farmer:       "Ana Ruiz",
             elevation:    1750,
-            process:      "Washed",
+            processing:   "Washed",
             fermentation: "Anaerobic",
             variety:      "Pink Bourbon",
             beanMix:      "Single Origin",
             aromatics:    "Peach, jasmine",
-            cuppingScore: 86.5,
-            decaf:        false,
+            cupping_points: 86.5,
+            decaffeinated:  false,
             url:          "https://example.com/coffee"
         });
     });
 
+    it("names the producer's page in the note Beanconqueror files", () => {
+        // The page is the reasoning behind the numbers, which is the part a
+        // recipe loses coming through xBloom. It reaches Beanconqueror in the
+        // note rather than the bean block, because it is about the recipe.
+        const {recipe} = imported();
+        const reloaded = stored(recipe);
+        const envelope = buildEnvelope(
+            brew({recipeUrl: reloaded.recipeUrl, coffee: reloaded.coffee}),
+            samples
+        );
+
+        expect(envelope.brew.note)
+            .toContain("Recipe: https://brewmind.coffee/recipe/esperanza");
+    });
+
     it("keeps a stated false through every step", () => {
-        // The step most likely to be lost quietly: `decaf: false` is the
-        // roaster saying caffeinated, and any link in this chain that treats it
-        // as falsy turns a stated fact into an unknown.
+        // The step most likely to be lost quietly: `decaffeinated: false`
+        // is the roaster saying caffeinated, and any link in this chain that
+        // treats it as falsy turns a stated fact into an unknown.
         const {recipe} = imported();
         const reloaded = stored(recipe);
         const envelope = buildEnvelope(brew({coffee: reloaded.coffee}), samples);
 
-        expect(reloaded.coffee?.decaf).toBe(false);
-        expect(envelope.bean).toHaveProperty("decaf", false);
+        expect(reloaded.coffee?.decaffeinated).toBe(false);
+        expect(envelope.bean).toHaveProperty("decaffeinated", false);
     });
 });

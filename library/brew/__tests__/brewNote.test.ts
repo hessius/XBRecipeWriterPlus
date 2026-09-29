@@ -300,4 +300,36 @@ Dose read from the recipe, not this recording.`);
         expect(note).toContain("Grinder read from the recipe, not this recording.");
         expect(note).not.toMatch(/grind size|rpm|used/i);
     });
+
+    describe("the producer's recipe page (#159)", () => {
+        it("gets a line of its own below the figures", () => {
+            // Its own line because a URL is the one thing here long enough to
+            // wrap, and Beanconqueror once rendered notes in a narrow no-wrap
+            // block.
+            const lines = brewNote(record({
+                recipeUrl: "https://brewmind.coffee/recipe/esperanza"
+            })).split("\n");
+
+            expect(lines[lines.length - 1])
+                .toBe("Recipe: https://brewmind.coffee/recipe/esperanza");
+            expect(lines[lines.length - 2]).toContain("xBloom");
+        });
+
+        it("says nothing at all when there is no page", () => {
+            expect(brewNote(record())).not.toContain("Recipe:");
+        });
+
+        it("sits below the backfill line rather than between the two", () => {
+            const note = brewNote(record({
+                dose:      undefined,
+                recipeUrl: "https://brewmind.coffee/recipe/esperanza"
+            }), ["dose"]);
+            const lines = note.split("\n");
+
+            expect(lines[lines.length - 2])
+                .toBe("Dose read from the recipe, not this recording.");
+            expect(lines[lines.length - 1])
+                .toBe("Recipe: https://brewmind.coffee/recipe/esperanza");
+        });
+    });
 });

@@ -2,9 +2,12 @@ import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 
 import FromSection from "@/components/FromSection";
+import {openLink} from "@/components/openLink";
 import {palette} from "@/constants/colors";
 import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
+
+jest.mock("@/components/openLink", () => ({openLink: jest.fn()}));
 
 function recipeWith(over: Partial<Recipe> = {}): Recipe {
     return Object.assign(new Recipe(), over);
@@ -100,5 +103,63 @@ describe("FromSection", () => {
         expect(screen.queryByTestId("from-avatar")).toBeNull();
         expect(screen.getByTestId("from-mark")).toBeTruthy();
         expect(screen.getByText("Arrived from BrewMind")).toBeTruthy();
+    });
+
+    describe("the producer's recipe page (#159)", () => {
+        const page = "https://brewmind.coffee/recipe/esperanza";
+
+        it("names the producer when the recipe says who it was", async () => {
+            await renderWithProviders(
+                <FromSection {...props({
+                    recipe: recipeWith({source: "brewmind", recipeUrl: page})
+                })}/>
+            );
+
+            expect(screen.getByText("View on BrewMind")).toBeTruthy();
+        });
+
+        it("still offers the page when the producer cannot be named", async () => {
+            await renderWithProviders(
+                <FromSection {...props({
+                    recipe: recipeWith({source: "import", recipeUrl: page})
+                })}/>
+            );
+
+            expect(screen.getByText("View the recipe page")).toBeTruthy();
+        });
+
+        it("opens the page through the shared link handler", async () => {
+            // Through `openLink`, so a system that will not take the URL says
+            // so instead of failing silently.
+            await renderWithProviders(
+                <FromSection {...props({
+                    recipe: recipeWith({source: "brewmind", recipeUrl: page})
+                })}/>
+            );
+
+            await fireEvent.press(screen.getByTestId("from-recipe-page"));
+
+            expect(openLink).toHaveBeenCalledWith(page);
+        });
+
+        it("draws the section for a page even with nobody to name", async () => {
+            // A BrewMind recipe fetched by XID has no sharer, and the section
+            // used to be absent without one. The page is reason enough.
+            await renderWithProviders(
+                <FromSection {...props({
+                    recipe: recipeWith({source: "brewmind", recipeUrl: page})
+                })}/>
+            );
+
+            expect(screen.getByTestId("about-from")).toBeTruthy();
+        });
+
+        it("says nothing when there is no page", async () => {
+            await renderWithProviders(
+                <FromSection {...props({recipe: recipeWith({sharedBy: "Someone"})})}/>
+            );
+
+            expect(screen.queryByTestId("from-recipe-page")).toBeNull();
+        });
     });
 });
