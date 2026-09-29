@@ -42,32 +42,6 @@ jest.mock("@/components/BrewStageLadder", () => {
     };
 });
 
-let traceProps: Record<string, unknown> = {};
-jest.mock("@/components/BrewTrace", () => {
-    const actual = jest.requireActual("@/components/BrewTrace");
-    return {
-        __esModule: true,
-        ...actual,
-        default: (props: Record<string, unknown>) => {
-            traceProps = props;
-            return actual.default(props);
-        }
-    };
-});
-
-let rateChartProps: Record<string, unknown> = {};
-jest.mock("@/components/BrewRateChart", () => {
-    const actual = jest.requireActual("@/components/BrewRateChart");
-    return {
-        __esModule: true,
-        ...actual,
-        default: (props: Record<string, unknown>) => {
-            rateChartProps = props;
-            return actual.default(props);
-        }
-    };
-});
-
 function pours(count: number): Pour[] {
     return Array.from({length: count}, (_, i) =>
         new Pour(i + 1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 10));
@@ -98,6 +72,11 @@ async function draw(overrides: Partial<React.ComponentProps<typeof BrewSummary>>
             {...overrides}
         />
     );
+}
+
+function pathPoints(path: string): {x: number; y: number}[] {
+    return [...path.matchAll(/[ML]\s*([-\d.]+)\s+([-\d.]+)/g)]
+        .map((match) => ({x: Number(match[1]), y: Number(match[2])}));
 }
 
 describe("BrewSummary", () => {
@@ -202,14 +181,21 @@ describe("BrewSummary", () => {
     it("draws the rate chart on the same time axis as the trace", async () => {
         await draw({
             rateSeries: [
-                {at: 2000, cup: 1.6, water: 3.2},
-                {at: 2100, cup: 1.7, water: 3.2}
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
             ]
         });
 
         expect(screen.getByTestId("rate-chart")).toBeTruthy();
-        expect(rateChartProps.maxT)
-            .toBe((traceProps.timeParts as {maxT: number}).maxT);
+        const traceX = pathPoints(screen.getByTestId("trace-water").props.d as string)[1].x;
+        const rateX = pathPoints(screen.getByTestId("rate-chart-water").props.d as string)[1].x;
+        expect(rateX).toBeCloseTo(traceX, 1);
+    });
+
+    it("leaves no rate chart wrapper when the chart cannot draw", async () => {
+        await draw({rateSeries: [{at: 60_000, cup: 1.7, water: 3.2}]});
+
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
     });
 });
 

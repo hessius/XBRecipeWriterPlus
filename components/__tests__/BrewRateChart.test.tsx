@@ -1,6 +1,6 @@
 import React from "react";
 
-import BrewRateChart, {RATE_HEIGHT} from "@/components/BrewRateChart";
+import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
 import {palette} from "@/constants/colors";
 import {traceTimeExtent} from "@/library/brew/brewShape";
@@ -36,6 +36,16 @@ function pathPoints(path: string): {x: number; y: number}[] {
         .map((match) => ({x: Number(match[1]), y: Number(match[2])}));
 }
 
+function svgText(node: {props: {children?: unknown}}): string | undefined {
+    const child = node.props.children;
+    if (typeof child === "string") return child;
+    if (React.isValidElement<{children?: unknown}>(child)
+        && typeof child.props.children === "string") {
+        return child.props.children;
+    }
+    return undefined;
+}
+
 function sample(at: number, water: number, cup: number, pour: number): BrewSample {
     return {at, water, cup, pour};
 }
@@ -62,6 +72,7 @@ describe("BrewRateChart", () => {
         );
 
         expect(getByTestId("rate-chart")).toBeTruthy();
+        expect(svgText(getByTestId("rate-chart-label"))).toBe("FLOW RATE");
         expect(getByTestId("rate-chart-cup")).toBeTruthy();
         expect(getByTestId("rate-chart-water")).toBeTruthy();
     });
@@ -155,11 +166,15 @@ describe("BrewRateChart", () => {
     });
 
     it("honours a negotiated maximum so two charts can be compared", async () => {
-        const {getByTestId} = await renderWithProviders(
+        const shortAxis = await renderWithProviders(
+            <BrewRateChart series={series} accent={ACCENT} width={WIDTH} maxT={5} maxRate={4} />
+        );
+        const tallAxis = await renderWithProviders(
             <BrewRateChart series={series} accent={ACCENT} width={WIDTH} maxT={5} maxRate={12} />
         );
 
-        const d = getByTestId("rate-chart-cup").props.d as string;
-        expect(Math.min(...yValues(d))).toBeGreaterThan(RATE_HEIGHT * 0.8);
+        const shortPath = shortAxis.getByTestId("rate-chart-cup").props.d as string;
+        const tallPath = tallAxis.getByTestId("rate-chart-cup").props.d as string;
+        expect(Math.min(...yValues(tallPath))).toBeGreaterThan(Math.min(...yValues(shortPath)));
     });
 });

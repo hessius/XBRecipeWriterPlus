@@ -180,6 +180,16 @@ function decodeHandoffUrl(url: string): HandoffEnvelope {
     ) as HandoffEnvelope;
 }
 
+function svgText(node: {props: {children?: unknown}}): string | undefined {
+    const child = node.props.children;
+    if (typeof child === "string") return child;
+    if (React.isValidElement<{children?: unknown}>(child)
+        && typeof child.props.children === "string") {
+        return child.props.children;
+    }
+    return undefined;
+}
+
 describe("brew record", () => {
     beforeEach(() => {
         mockPush.mockReset();
@@ -1263,6 +1273,30 @@ describe("brew record's story card", () => {
         expect(card.getByTestId("story-coffee")).toHaveTextContent(/Huila/);
         expect(card.getByTestId("story-rating")).toBeTruthy();
         expect(card.getByTestId("story-tags")).toHaveTextContent(/filter/);
+    });
+
+    it("keeps the rate chart inside the fixed story frame", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating: 4,
+                origin: "Huila",
+                roast:  "Medium",
+                tags:   ["filter", "washed"],
+                plan:   planFromPours(twoPours.pours)
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+
+        const card = within(screen.getByTestId("brew-story-card"));
+        expect(card.getByTestId("rate-chart")).toBeTruthy();
+        expect(svgText(card.getByTestId("rate-chart-label"))).toBe("FLOW RATE");
+        const style = StyleSheet.flatten(
+            screen.getByTestId("brew-story-card").props.style as StyleProp<ViewStyle>
+        );
+        expect(style?.overflow).toBe("hidden");
     });
 
     it("hides the screen from a screen reader while the card is up", async () => {

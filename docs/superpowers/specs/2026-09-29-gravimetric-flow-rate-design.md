@@ -278,11 +278,20 @@ card to uphold and the chart can simply be part of it.
 - Both channels on one rate axis, on the same real-seconds time axis the trace
   uses, so the two charts line up vertically and a feature in one can be found
   in the other.
+- The chart carries one visible label, `FLOW RATE`, above the plot. It does not
+  repeat `WATER` and `CUP`, because those colours have already been named on
+  the trace immediately above. It also does not print a numeric y-axis label:
+  the axis has a deliberate 4 G/S floor and is there to compare shapes, not to
+  invite exact reading from an unmarked scale.
 - The bypass interval is **omitted from the cup channel** rather than smoothed
   across, because a smoothed bypass is an invented reading.
 - Gated on `hasStream`. A record whose samples the retention sweep took omits
   the section entirely. It does not draw an empty box, and there is no control
   to disable.
+- The summary does not duplicate the chart's two-point drawing threshold. It
+  asks for the section whenever `hasStream` is true, and `BrewRateChart`
+  returns null when the retained rate series cannot honestly form a line. That
+  null return leaves no wrapper, no border and no spacer behind.
 
 Amendment, 2026-09-30: the rate chart's horizontal axis is not sized from its
 own last point. It is handed the same time extent the volume trace uses, the

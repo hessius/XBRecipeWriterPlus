@@ -1,7 +1,9 @@
 import React from "react";
 import {View} from "react-native";
-import Svg, {G, Path} from "react-native-svg";
+import Svg, {G, Path, Text as SvgText} from "react-native-svg";
 
+import {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
+import {palette} from "@/constants/colors";
 import {type Box, type Point, toPath} from "@/library/brew/brewShape";
 import {maxRateOf, type FlowPoint} from "@/library/brew/flowRate";
 import {channelStyle} from "@/library/brew/traceStyle";
@@ -17,6 +19,8 @@ export const RATE_HEIGHT = 84;
 
 /** Never scale a nearly flat brew up into a mountain range. */
 const MIN_AXIS = 4;
+const RATE_LABEL_SIZE = 9;
+const RATE_LABEL_ROW = Math.ceil(drawnFontSize(RATE_LABEL_SIZE) * 1.35);
 
 /**
  * The recorder samples at about 10 Hz, and every stream fixture that models
@@ -89,7 +93,7 @@ export default function BrewRateChart({series, accent, width, maxT, maxRate}: Pr
     const verticalInset = Math.max(waterStyle.strokeWidth, cupStyle.strokeWidth) / 2;
     const box: Box = {
         width,
-        height: Math.max(RATE_HEIGHT - verticalInset * 2, 0),
+        height: Math.max(RATE_HEIGHT - RATE_LABEL_ROW - verticalInset * 2, 0),
         maxT,
         maxV: Math.max(MIN_AXIS, maxRate ?? maxRateOf(series))
     };
@@ -109,7 +113,16 @@ export default function BrewRateChart({series, accent, width, maxT, maxRate}: Pr
                 accessibilityRole="image"
                 accessibilityLabel="Brew rate chart"
             >
-                <G y={verticalInset}>
+                <SvgText
+                    testID="rate-chart-label"
+                    x={0}
+                    y={drawnFontSize(RATE_LABEL_SIZE)}
+                    fill={palette.dim}
+                    {...dotMatrixSvgProps({fontSize: RATE_LABEL_SIZE, letterSpacing: 1.2})}
+                >
+                    FLOW RATE
+                </SvgText>
+                <G y={RATE_LABEL_ROW + verticalInset}>
                     {waterPath !== "" && (
                         <Path
                             testID="rate-chart-water"

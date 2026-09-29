@@ -166,7 +166,6 @@ export default function BrewSummary({
                     selectedIndex={selectedIndex}
                     onSelectStage={onSelectStage}
                     bypass={bypass}
-                    timeParts={traceTimes}
                 />
             ) : (
                 <YStack height={TRACE_HEIGHT} alignItems="center"
@@ -182,9 +181,9 @@ export default function BrewSummary({
                 </YStack>
             )}
 
-            {hasStream && rateSeries !== undefined && rateSeries.length >= 2 && (
+            {hasStream && (
                 <BrewRateChart
-                    series={rateSeries}
+                    series={rateSeries ?? []}
                     accent={accent}
                     width={traceWidth}
                     maxT={traceTimes.maxT}
