@@ -3,6 +3,7 @@ import {Platform} from "react-native";
 import {screen, fireEvent} from "@testing-library/react-native";
 
 import NfcOverlay from "@/components/NfcOverlay";
+import {HOLD_CARD} from "@/constants/copy";
 import {renderWithProviders} from "@/test-utils/render";
 
 jest.mock("react-native-nfc-manager", () => ({
@@ -50,9 +51,10 @@ describe("NfcOverlay", () => {
         it("teaches placement without drawing an antenna position", async () => {
             // The antenna is not in the same place on every device, so a
             // drawing would be wrong on some of them. The copy is right
-            // everywhere.
+            // everywhere -- and it is not the same sentence on both platforms,
+            // which is why this asserts the constant rather than the words.
             await renderWithProviders(<NfcOverlay {...props()}/>);
-            expect(screen.getByText(/hold the card to the top of the phone/i)).toBeTruthy();
+            expect(screen.getByText(HOLD_CARD)).toBeTruthy();
         });
 
         it("can be cancelled", async () => {

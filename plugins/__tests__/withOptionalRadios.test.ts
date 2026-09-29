@@ -19,7 +19,6 @@ const declareOptionalFeatures: (m: Manifest) => Required<Manifest> =
     plugin.declareOptionalFeatures;
 const OPTIONAL_FEATURES: string[] = plugin.OPTIONAL_FEATURES;
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const app = require("@/app.json");
 
 const nameOf = (f: Feature) => f.$["android:name"];

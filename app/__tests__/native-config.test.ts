@@ -21,8 +21,8 @@ describe("native release configuration", () => {
      * updates are ever adopted, that second sentence stops being true and the
      * first one carries the whole weight.
      */
-    it("ships as 2.0.0, on the appVersion runtime policy", () => {
-        expect(appConfig.expo.version).toBe("2.0.0");
+    it("ships as 2.1.0, on the appVersion runtime policy", () => {
+        expect(appConfig.expo.version).toBe("2.1.0");
         expect(appConfig.expo.runtimeVersion.policy).toBe("appVersion");
     });
 

@@ -1,3 +1,5 @@
+const os = require("node:os");
+
 // jest-expo's allow-list does not know about the packages this app pulls in that
 // ship untranspiled ESM, so extend the first (and only broad) pattern rather
 // than replacing the list wholesale.
@@ -64,6 +66,19 @@ const project = (name, presetPath) => ({
     )
 });
 
+/**
+ * Half the cores, but never more than jest would have used anyway.
+ *
+ * A flat "50%" is wrong on a small CI runner: jest's own default is one worker
+ * per core less one, so on a two-core box half-the-cores would ask for *more*
+ * parallelism than the default and reintroduce the very contention this is
+ * here to remove. The `min` keeps it a reduction on every machine.
+ */
+function halfTheCores() {
+    const cores = os.availableParallelism?.() ?? os.cpus().length;
+    return Math.max(1, Math.min(cores - 1, Math.floor(cores / 2)));
+}
+
 module.exports = {
     // Jest's 5 s default is a guess about how fast the machine is, not a budget
     // these tests were written to. The heaviest screen suites render the whole
@@ -87,7 +102,7 @@ module.exports = {
     // not a defect. Fewer workers is the honest fix; a longer timeout would
     // only move the cliff. Run a single project with `npm run test:ios` or
     // `npm run test:android` when you want the whole machine on one platform.
-    maxWorkers: "50%",
+    maxWorkers: halfTheCores(),
     projects: [
         project("ios", "jest-expo"),
         project("android", "jest-expo/android")

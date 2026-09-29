@@ -295,3 +295,68 @@ Flagged as needing confirmation in Play Console at submission time, because Goog
 changes them without notice: the exact closed-testing tester count and duration, the
 16 KB page-size deadline wording, and the identity-verification and D-U-N-S
 requirements.
+
+---
+
+## Amendment: what the implementation did, and what it did not
+
+Written after executing the plan in
+`docs/superpowers/plans/2026-09-29-android-support.md`, so that a green suite is
+not mistaken for a working app.
+
+### What is now proven
+
+Both jest projects are green, and the Android one is new. The suite runs 604
+files twice rather than once, and `Platform.OS` is no longer `"ios"` everywhere.
+That turned an unknown into a measurement: 40 tests failed the first time the
+Android project ran, and every one of them has been dealt with.
+
+Four things are fixed rather than merely tested.
+
+1. The Bluetooth permission gate now distinguishes an ordinary refusal from a
+   permanent one and offers app settings for the second, which was previously a
+   silent dead end: Connect did nothing and nothing on screen said why.
+2. `readMultipleBlocks` falls back to single-block reads when the controller
+   rejects the 0x23 frame outright, not only when the tag answers and refuses.
+   A 40-block card asks for 161 bytes back, and a controller whose transceive
+   buffer is smaller rejects rather than answering, so the card looked
+   unreadable.
+3. The app asks whether the phone has NFC and whether it is switched on before
+   opening a ceremony, and says which it is. It previously assumed both.
+4. The manifest declares NFC, Bluetooth and Bluetooth LE as optional, so the
+   Play listing stops inheriting a device filter from `BLUETOOTH_ADMIN` that
+   nobody wrote down. Verified against a generated manifest, not assumed.
+
+### What is not proven, and cannot be here
+
+**The three hardware items from §C stand unchanged.** Nothing in this work
+brings them closer, because no amount of test coverage can:
+
+- reading a genuine card on an Android phone,
+- writing a genuine card, on at least two NFC controller vendors, since the
+  0x23/0x20 split is a controller behaviour and one vendor proves nothing,
+- brewing on a real machine over Android BLE.
+
+Writing deserves the most of that time. Android reader mode drops its tag handle
+on brief signal loss more readily than Core NFC does, and writes go block by
+block, so the likely failure is a half-written genuine card whose 32-byte
+signature cannot be regenerated.
+
+### What was in scope and was deliberately left
+
+- **Edge-to-edge and window insets.** Android 15 enforces edge-to-edge, and this
+  app draws its own headers. Whether anything collides with the status bar or
+  the gesture bar is a visual question, and a screenshot from an emulator would
+  answer it. Not attempted.
+- **Predictive back.** Android 16 makes it the default. The brew flow has states
+  that a back gesture should not silently leave, and the current behaviour under
+  a predictive back is unknown.
+- **The Android share sheet.** `expo-share-intent` is configured and the text
+  filters are generated, but no Android share has been exercised end to end.
+- **Play Store logistics** (§F): account, closed testing, targetSdk deadline.
+  Untouched, and none of it is code.
+
+### One thing found along the way
+
+`expo-doctor` reports four Expo packages one patch behind. It is upstream drift,
+present on `main` as well, and was left alone rather than folded into this work.
