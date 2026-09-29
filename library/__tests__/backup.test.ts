@@ -800,6 +800,56 @@ describe("brew history through a backup", () => {
         expect(result.payload.brews[0].drawdownAt).toBe(150_000);
     });
 
+    it("carries the drawdown cup reading through a round trip", () => {
+        const text = buildBackup([recipeNamed("A", "u1")], {}, "2.6.0",
+                                 [brewNamed("b1", {
+                                     drawdownAt: 90_000,
+                                     cupAtDrawdown: 118.5
+                                 })]);
+        const result = parseBackup(text);
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews[0].cupAtDrawdown).toBeCloseTo(118.5, 6);
+    });
+
+    it("refuses a backup whose drawdown cup reading is not a number", () => {
+        const result = parseBackup(backupFileWithBrewFields({cupAtDrawdown: "fast"}));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toEqual([]);
+        expect(result.payload.skippedBrews).toBe(1);
+    });
+
+    it("accepts a backup written before the drawdown cup reading existed", () => {
+        const envelope = JSON.parse(buildBackup(
+            [recipeNamed("A", "u1")], {}, "2.6.0",
+            [brewNamed("b1", {drawdownAt: 90_000, cupAtDrawdown: 118.5})]
+        ));
+        delete envelope.brews[0].cupAtDrawdown;
+
+        const result = parseBackup(JSON.stringify(envelope));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toHaveLength(1);
+        expect(result.payload.brews[0]).not.toHaveProperty("cupAtDrawdown");
+    });
+
+    it("accepts a non-positive drawdown cup reading", () => {
+        const zero = parseBackup(backupFileWithBrewFields({cupAtDrawdown: 0}));
+        const negative = parseBackup(backupFileWithBrewFields({cupAtDrawdown: -1}));
+
+        expect(zero.ok).toBe(true);
+        expect(negative.ok).toBe(true);
+        if (!zero.ok || !negative.ok) return;
+        expect(zero.payload.brews[0].cupAtDrawdown).toBe(0);
+        expect(negative.payload.brews[0].cupAtDrawdown).toBe(-1);
+        expect(zero.payload.skippedBrews).toBe(0);
+        expect(negative.payload.skippedBrews).toBe(0);
+    });
+
     it("reads a backup written before brews were carried", () => {
         const text = buildBackup([recipeNamed("A", "u1")], {});
         const envelope = JSON.parse(text);
