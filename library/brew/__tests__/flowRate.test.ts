@@ -1,5 +1,13 @@
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {FLOW_WINDOW_MS, flowAt, flowNow, flowSeries, flowTail, maxRateOf}
+import {
+    FLOW_MIN_WINDOW_MS,
+    FLOW_WINDOW_MS,
+    flowAt,
+    flowNow,
+    flowSeries,
+    flowTail,
+    maxRateOf
+}
     from "@/library/brew/flowRate";
 
 /** A stream at 10 Hz. `slope` is g/s and ml/s; both channels get it. */
@@ -14,6 +22,48 @@ function ramp(seconds: number, slope: number, from = 0, at0 = 0): BrewSample[] {
         });
     }
     return out;
+}
+
+function directSlope(window: BrewSample[], of: "cup" | "water"): number | null {
+    if (
+        window.length < 2 ||
+        window[window.length - 1].at - window[0].at < FLOW_MIN_WINDOW_MS
+    ) {
+        return null;
+    }
+
+    let sumT = 0;
+    let sumV = 0;
+    for (const sample of window) {
+        sumT += sample.at / 1000;
+        sumV += sample[of];
+    }
+    const meanT = sumT / window.length;
+    const meanV = sumV / window.length;
+
+    let covariance = 0;
+    let variance = 0;
+    for (const sample of window) {
+        const dt = sample.at / 1000 - meanT;
+        covariance += dt * (sample[of] - meanV);
+        variance += dt * dt;
+    }
+    if (variance === 0) return null;
+    const fitted = covariance / variance;
+    return Number.isFinite(fitted) ? fitted : null;
+}
+
+function directFlowAt(samples: BrewSample[], stages: number, at: number) {
+    const from = at - FLOW_WINDOW_MS;
+    const window = samples.filter((sample) =>
+        sample.pour >= 1 &&
+        sample.pour <= stages &&
+        sample.at >= from &&
+        sample.at <= at
+    );
+    const cup = directSlope(window, "cup");
+    const water = directSlope(window, "water");
+    return cup === null || water === null ? null : {at, cup, water};
 }
 
 describe("flowAt", () => {
@@ -62,6 +112,34 @@ describe("flowAt", () => {
     it("is null before there is enough of a window to fit", () => {
         expect(flowAt([], 1, 0)).toBeNull();
         expect(flowAt(ramp(0, 2), 1, 0)).toBeNull();
+    });
+
+    it("is null when the window is only a few milliseconds wide", () => {
+        const samples: BrewSample[] = [
+            {at: 0, water: 0, cup: 0, pour: 1},
+            {at: 5, water: 0.5, cup: 0.5, pour: 1}
+        ];
+
+        expect(flowAt(samples, 1, 5)).toBeNull();
+    });
+
+    it("is null when one channel cannot produce a finite slope", () => {
+        const samples = ramp(3, 2).map((sample, i) => ({
+            ...sample,
+            cup: i === 10 ? Number.NaN : sample.cup
+        }));
+
+        expect(flowAt(samples, 1, 3000)).toBeNull();
+    });
+
+    it("is null when all samples in the window share one timestamp", () => {
+        const samples: BrewSample[] = [
+            {at: 1000, water: 1, cup: 1, pour: 1},
+            {at: 1000, water: 2, cup: 2, pour: 1},
+            {at: 1000, water: 3, cup: 3, pour: 1}
+        ];
+
+        expect(flowAt(samples, 1, 1000)).toBeNull();
     });
 
     it("never lets the bypass into the cup channel", () => {
@@ -114,7 +192,47 @@ describe("flowSeries", () => {
             pour: 2
         }));
         const series = flowSeries([...brew, ...bypass], 1);
+        expect(series.length).toBeGreaterThan(0);
         expect(series.every((point) => point.cup < 3)).toBe(true);
+    });
+
+    it("does not report the opening scale tick as a real flow rate", () => {
+        const samples: BrewSample[] = [
+            {at: 0, water: 0, cup: 0, pour: 1},
+            {at: 80, water: 0.5, cup: 0.5, pour: 1}
+        ];
+        for (let i = 1; i <= 30; i++) {
+            const at = 80 + i * 100;
+            const value = 0.5 + 2 * ((at - 80) / 1000);
+            samples.push({at, water: value, cup: value, pour: 1});
+        }
+
+        const series = flowSeries(samples, 1);
+
+        expect(series.length).toBeGreaterThan(0);
+        expect(Math.max(...series.slice(0, 4).map((point) => point.cup))).toBeLessThan(2.6);
+    });
+
+    it("matches direct mean-centred fits on a long realistic stream", () => {
+        const samples = ramp(240, 2).map((sample, i) => {
+            const wobble = i % 10 === 0 ? 0.18 : i % 3 === 0 ? -0.12 : 0.08;
+            return {
+                ...sample,
+                cup: sample.cup + wobble,
+                water: sample.water - wobble / 2
+            };
+        });
+        const direct = new Map(
+            [60_000, 120_000, 180_000, 240_000]
+                .map((at) => [at, directFlowAt(samples, 1, at)])
+        );
+        const series = new Map(flowSeries(samples, 1).map((point) => [point.at, point]));
+
+        for (const [at, point] of direct) {
+            expect(point).not.toBeNull();
+            expect(Math.abs(series.get(at)!.cup - point!.cup)).toBeLessThan(1e-8);
+            expect(Math.abs(series.get(at)!.water - point!.water)).toBeLessThan(1e-8);
+        }
     });
 });
 
@@ -127,6 +245,45 @@ describe("flowTail", () => {
 
     it("is empty when there is nothing to fit", () => {
         expect(flowTail([], 1, 30, 24)).toEqual([]);
+    });
+
+    it("is empty when asked for a non-positive time span", () => {
+        const samples = ramp(60, 2);
+
+        expect(flowTail(samples, 1, 0, 24)).toEqual([]);
+        expect(flowTail(samples, 1, -1, 24)).toEqual([]);
+    });
+
+    it("can return more buckets than there are rate points", () => {
+        const tail = flowTail(ramp(3, 2), 1, 30, 200);
+
+        expect(tail).toHaveLength(200);
+        expect(tail.every(Number.isFinite)).toBe(true);
+    });
+
+    it("borrows the previous value for an empty bucket", () => {
+        const first = ramp(3, 1);
+        const second = ramp(3, 3, 3, 7000).slice(1);
+        const samples = [...first, ...second];
+
+        const tail = flowTail(samples, 1, 10, 10);
+
+        expect(tail).toHaveLength(10);
+        expect(tail[4]).toBeCloseTo(tail[3], 6);
+        expect(tail[5]).toBeCloseTo(tail[3], 6);
+        expect(tail[9]).toBeGreaterThan(tail[3]);
+    });
+
+    it("ages out the tail while the stream is in bypass", () => {
+        const brew = ramp(60, 2);
+        const bypass = Array.from({length: 400}, (_, i) => ({
+            at: 60_000 + (i + 1) * 100,
+            water: 120 + (i + 1) * 1.5,
+            cup: 120 + (i + 1) * 1.5,
+            pour: 2
+        }));
+
+        expect(flowTail([...brew, ...bypass], 1, 30, 24)).toEqual([]);
     });
 });
 
@@ -143,5 +300,11 @@ describe("maxRateOf", () => {
 describe("FLOW_WINDOW_MS", () => {
     it("is two seconds, which half of the arithmetic above assumes", () => {
         expect(FLOW_WINDOW_MS).toBe(2000);
+    });
+});
+
+describe("FLOW_MIN_WINDOW_MS", () => {
+    it("is one second, keeping a half millilitre tick below a quarter of a 2 g/s signal", () => {
+        expect(FLOW_MIN_WINDOW_MS).toBe(1000);
     });
 });

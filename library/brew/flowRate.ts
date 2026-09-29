@@ -19,6 +19,16 @@ export const FLOW_WINDOW_MS = 2000;
 const MIN_WINDOW_SAMPLES = 2;
 
 /**
+ * Below this much time, a window is still mostly scale noise.
+ *
+ * The scale's noise floor is 0.5 ml. Across one second, even the worst
+ * endpoint-only reading can only donate 0.5 g/s of noise, a quarter of a
+ * typical 2 g/s bed flow, and the least-squares fit usually does better than
+ * that. Shorter spans make the first settling tick look like a real surge.
+ */
+export const FLOW_MIN_WINDOW_MS = 1000;
+
+/**
  * A windowed rate pair at one instant.
  *
  * `at` is on the sample clock, milliseconds since the first drop. `cup` is
@@ -44,6 +54,61 @@ function brewOnly(samples: BrewSample[], stages: number): BrewSample[] {
     return samples.filter((s) => s.pour >= 1 && s.pour <= stages);
 }
 
+type SlopeSums = {
+    count: number;
+    sumT: number;
+    sumTT: number;
+    sumCup: number;
+    sumWater: number;
+    sumTCup: number;
+    sumTWater: number;
+};
+
+function emptySums(): SlopeSums {
+    return {
+        count: 0,
+        sumT: 0,
+        sumTT: 0,
+        sumCup: 0,
+        sumWater: 0,
+        sumTCup: 0,
+        sumTWater: 0
+    };
+}
+
+function addSample(sums: SlopeSums, sample: BrewSample, sign: 1 | -1): void {
+    const t = sample.at / 1000;
+    sums.count += sign;
+    sums.sumT += sign * t;
+    sums.sumTT += sign * t * t;
+    sums.sumCup += sign * sample.cup;
+    sums.sumWater += sign * sample.water;
+    sums.sumTCup += sign * t * sample.cup;
+    sums.sumTWater += sign * t * sample.water;
+}
+
+function slopeFromSums(
+    sums: SlopeSums, spanMs: number, of: "cup" | "water"
+): number | null {
+    if (sums.count < MIN_WINDOW_SAMPLES || spanMs < FLOW_MIN_WINDOW_MS) return null;
+
+    const sumV = of === "cup" ? sums.sumCup : sums.sumWater;
+    const sumTV = of === "cup" ? sums.sumTCup : sums.sumTWater;
+    const covariance = sumTV - (sums.sumT * sumV) / sums.count;
+    const variance = sums.sumTT - (sums.sumT * sums.sumT) / sums.count;
+    if (variance === 0) return null;
+
+    const fitted = covariance / variance;
+    return Number.isFinite(fitted) ? fitted : null;
+}
+
+function fitFromSums(sums: SlopeSums, spanMs: number, at: number): FlowPoint | null {
+    const cup = slopeFromSums(sums, spanMs, "cup");
+    const water = slopeFromSums(sums, spanMs, "water");
+    if (cup === null || water === null) return null;
+    return {at, cup, water};
+}
+
 /**
  * The least-squares slope of one field over a set of readings, per second.
  *
@@ -55,6 +120,7 @@ function brewOnly(samples: BrewSample[], stages: number): BrewSample[] {
  */
 function slope(window: BrewSample[], of: "cup" | "water"): number | null {
     if (window.length < MIN_WINDOW_SAMPLES) return null;
+    if (window[window.length - 1].at - window[0].at < FLOW_MIN_WINDOW_MS) return null;
 
     let sumT = 0;
     let sumV = 0;
@@ -73,7 +139,8 @@ function slope(window: BrewSample[], of: "cup" | "water"): number | null {
         variance += dt * dt;
     }
     if (variance === 0) return null;
-    return covariance / variance;
+    const fitted = covariance / variance;
+    return Number.isFinite(fitted) ? fitted : null;
 }
 
 /**
@@ -125,8 +192,19 @@ export function flowNow(
  */
 export function flowSeries(samples: BrewSample[], stages: number): FlowPoint[] {
     const out: FlowPoint[] = [];
-    for (const sample of brewOnly(samples, stages)) {
-        const point = flowAt(samples, stages, sample.at);
+    const brew = brewOnly(samples, stages);
+    const sums = emptySums();
+    let left = 0;
+
+    for (const sample of brew) {
+        addSample(sums, sample, 1);
+        const from = sample.at - FLOW_WINDOW_MS;
+        while (left < brew.length && brew[left].at < from) {
+            addSample(sums, brew[left], -1);
+            left++;
+        }
+
+        const point = fitFromSums(sums, sample.at - brew[left].at, sample.at);
         if (point !== null) out.push(point);
     }
     return out;
@@ -138,20 +216,24 @@ export function flowSeries(samples: BrewSample[], stages: number): FlowPoint[] {
  * Fixed rather than one point per sample, because the sparkline is a few dozen
  * points wide and the stream is thousands: a path with more vertices than
  * pixels costs work on every frame of a live brew and draws the same picture.
- * Empty when there is no rate to draw, which is what the row is hidden on.
+ * Empty when there is no rate to draw, which is what the row is hidden on. It
+ * holds a rate across empty buckets because the sparkline is just numbers and
+ * cannot draw a gap; the full chart gets the gap instead.
  */
 export function flowTail(
     samples: BrewSample[], stages: number, seconds: number, buckets: number
 ): number[] {
-    const series = flowSeries(samples, stages);
-    const last = series[series.length - 1];
-    if (last === undefined || buckets < 1) return [];
+    const lastSample = samples[samples.length - 1];
+    if (lastSample === undefined || seconds <= 0 || buckets < 1) return [];
 
-    const from = last.at - seconds * 1000;
+    const series = flowSeries(samples, stages);
+    if (series.length === 0) return [];
+
+    const from = lastSample.at - seconds * 1000;
     const recent = series.filter((point) => point.at >= from);
     if (recent.length === 0) return [];
 
-    const span = Math.max(1, last.at - from);
+    const span = Math.max(1, lastSample.at - from);
     const sums = new Array<number>(buckets).fill(0);
     const counts = new Array<number>(buckets).fill(0);
     for (const point of recent) {
