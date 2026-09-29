@@ -105,6 +105,32 @@ describe("capturing attribution at import", () => {
     });
 
     /**
+     * The backup path checks these too, but a device upgraded from an older
+     * build already has rows in its own database that never passed any check.
+     * Hydration is the one gate both of those roads go through, so the rule
+     * lives there and this is the half the backup tests cannot cover.
+     */
+    it.each([
+        ["http, a downgrade the user cannot see", "http://example.com/a.jpg"],
+        ["a file URL aimed at the device", "file:///etc/passwd"],
+        ["a data URL carrying its own payload", "data:image/png;base64,AAAA"],
+        ["something that is not a URL at all", "not a url"]
+    ])("drops a stored avatar that is %s", async (_label, value) => {
+        const stored = JSON.parse(JSON.stringify(importedRecipe(detailResponse())));
+        stored.sharedByAvatar = value;
+        stored.imageURL = value;
+
+        const revived = new Recipe(undefined, JSON.stringify(stored));
+
+        expect(revived.sharedByAvatar).toBeUndefined();
+        expect(revived.imageURL).toBeUndefined();
+        // Dropped, not rejected: the picture must not cost the recipe.
+        expect(revived.sharedBy).toBe("XBRW++");
+        expect(revived.dosage).toBe(18);
+        expect(revived.pours).toHaveLength(2);
+    });
+
+    /**
      * They are metadata. The card is the part that cannot be un-written, so
      * these must not reach it -- not as bytes and not through the checksum.
      */
