@@ -33,11 +33,12 @@ import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
-import {drawdownFrom, finalOutcome} from "@/library/brew/BrewRecord";
+import {finalOutcome} from "@/library/brew/BrewRecord";
 import {flowNow, flowTail} from "@/library/brew/flowRate";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
+import {liveDrawdown} from "@/library/brew/liveDrawdown";
 import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
 import Recipe from "@/library/Recipe";
@@ -163,11 +164,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const flowTailValues = flow === null
         ? []
         : flowTail(samples, stages, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
-    const drawdownOpenedAt = drawdownFrom(samples, stages);
-    const lastStageRunning = activeIndex !== null && activeIndex >= stages - 1;
-    const liveDrawdown = running && lastStageRunning && drawdownOpenedAt > 0
-        ? Math.max(0, elapsed - drawdownOpenedAt / 1000)
-        : null;
+    const liveDrawdownFigure = liveDrawdown(samples, stages, elapsed, running);
 
     // Only a refusal for water gets the water copy. `block` names which of the
     // pre-flight checks said no, so a busy machine is no longer told to go and
@@ -399,7 +396,10 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         {...(flow === null
                             ? {}
                             : {flow: flow.cup, pourRate: flow.water, flowTail: flowTailValues})}
-                        {...(liveDrawdown === null ? {} : {drawdown: liveDrawdown})}
+                        reserveDrawdown={liveDrawdownFigure.reserveDrawdown}
+                        {...(liveDrawdownFigure.drawdown === null
+                            ? {}
+                            : {drawdown: liveDrawdownFigure.drawdown})}
                     />
 
                             {/* Held for the whole run. Between the last pour and the

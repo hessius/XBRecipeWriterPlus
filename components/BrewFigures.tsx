@@ -12,10 +12,15 @@ import {formatFlowRate} from "@/library/brew/flowRate";
 
 const DOTO_LINE_HEIGHT = 1.35;
 const FLOW_ROW_VERTICAL_ROOM = 4;
+const DRAWDOWN_ROW_VERTICAL_ROOM = 0;
 
 export function flowRowMinHeight(): number {
     const cupRateHeight = Math.ceil(drawnFontSize(14) * DOTO_LINE_HEIGHT);
     return Math.max(FLOW_SPARKLINE_HEIGHT, cupRateHeight) + FLOW_ROW_VERTICAL_ROOM;
+}
+
+export function drawdownRowMinHeight(): number {
+    return Math.ceil(drawnFontSize(10) * DOTO_LINE_HEIGHT) + DRAWDOWN_ROW_VERTICAL_ROOM;
 }
 
 type Props = {
@@ -69,6 +74,13 @@ type Props = {
      */
     reserveFlow?: boolean;
     /**
+     * Reserve the live drawdown row's height before the clock may print.
+     *
+     * Live only. Records and shared images either have a drawdown line or do
+     * not, but the live screen can learn it a second after the boundary.
+     */
+    reserveDrawdown?: boolean;
+    /**
      * The average rate across the drawdown, in g/s.
      *
      * It sits on the drawdown line because it is a property of that same
@@ -115,8 +127,8 @@ function Figure({label, value, color, badge}: {
 export default function BrewFigures(
     {
         water, cup, seconds, accent, bypass, drawdown = null, flow = null,
-        flowTail, pourRate = null, reserveFlow = false, drawdownRate = null,
-        dial = null
+        flowTail, pourRate = null, reserveFlow = false, reserveDrawdown = false,
+        drawdownRate = null, dial = null
     }: Props
 ) {
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
@@ -194,11 +206,17 @@ export default function BrewFigures(
                 interrupted never drew down and a record written before the
                 boundary was kept cannot say, and printing 0:00 for either
                 would invent a figure somebody might dial a grind against. */}
-            {drawdownText !== null && (
-                <DotMatrixText testID="figures-drawdown" fontSize={10} weight="bold"
-                               letterSpacing={1.6} color={palette.dim}>
-                    {drawdownText}
-                </DotMatrixText>
+            {(drawdownText !== null || reserveDrawdown) && (
+                <YStack testID="figures-drawdown-slot"
+                        minHeight={reserveDrawdown ? drawdownRowMinHeight() : undefined}
+                        justifyContent="center">
+                    {drawdownText !== null && (
+                        <DotMatrixText testID="figures-drawdown" fontSize={10} weight="bold"
+                                       letterSpacing={1.6} color={palette.dim}>
+                            {drawdownText}
+                        </DotMatrixText>
+                    )}
+                </YStack>
             )}
             {dial !== null && (
                 <DotMatrixText testID="figures-dial" fontSize={10} weight="bold"

@@ -126,9 +126,32 @@ export function drawdownRate(record: BrewRecord): number | null;
 `stages` rather than a bypass object, so the module needs to know only the one
 fact that separates a bypass sample from a brew sample.
 
-The live drawdown clock (§5.1) adds nothing here. It calls the existing
-`drawdownFrom` in `BrewRecord.ts`, which is the same function the recorder
-uses, so the boundary has exactly one definition in the codebase.
+Amendment, 2026-09-30: the finished record and the live screen cannot share
+`drawdownFrom` directly. A review found the finished helper is a whole-stream
+argmax, which is stable enough when it runs once at the end but visibly wrong
+when it runs every render on a growing, noisy stream. The live screen now uses
+`library/brew/liveDrawdown.ts`:
+
+```ts
+export const DRAWDOWN_OPEN_MARGIN_MS = 1000;
+export type LiveDrawdown = {
+    drawdownAt: number;
+    drawdown: number | null;
+    reserveDrawdown: boolean;
+};
+export function liveDrawdownFrom(samples: BrewSample[], stages: number): number;
+export function liveDrawdown(
+    samples: BrewSample[],
+    stages: number,
+    elapsedSeconds: number,
+    running: boolean
+): LiveDrawdown;
+```
+
+It keeps the same physical boundary as `drawdownFrom`, the point where the last
+stage's brew water stopped rising, but retakes that boundary only after a rise
+greater than the scale noise floor. The record still uses `drawdownFrom`; the
+live helper exists because a live stream is not finished yet.
 
 `drawdownRate` is
 
@@ -191,13 +214,26 @@ clock started there would report 8 seconds for a drawdown that ran over a
 minute. That is the precise error `drawdownAt` exists to prevent, and it must
 not be reintroduced on the live screen.
 
-**The gate.** `drawdownFrom` resets on every rise in brew water and runs
-whenever water is flat, so on its own it would also run through every planned
-pause. The live screen knows one thing a replayed stream does not foreground:
-which stage is running. So the clock is **computed always and revealed only
-once the last stage is the running stage**, which the screen already knows as
-`activeIndex >= pours.length - 1`. Flat water in the last stage cannot be
-followed by more water.
+**The gate.** Amendment, 2026-09-30: the original gate,
+`activeIndex >= pours.length - 1`, was insufficient. It opened at the first
+final-stage sample, which printed `DRAWDOWN 0:00` for the whole final pour; it
+closed throughout `bypass`, even though the verified frame log puts bypass
+inside the drawdown; and the whole-stream argmax reset the clock on sub-ml
+scale wobble.
+
+The clock is now computed by `liveDrawdown(samples, stages, elapsed, running)`.
+The boundary is final-stage only, so a planned pause between earlier stages
+still cannot open it. The boundary is retaken only by a water rise greater
+than `NOISE_FLOOR_ML`, so plateau wobble does not move it forward. The row is
+visible only once the boundary is at least `DRAWDOWN_OPEN_MARGIN_MS` behind
+the current sample clock.
+
+`DRAWDOWN_OPEN_MARGIN_MS` is 1000 ms. The machine reports around ten scale
+frames a second, and the water channel's own noise floor is 0.5 ml. One second
+therefore means ten consecutive readings have failed to exceed the boundary by
+more than the noise floor. That hides the first second of a real drawdown, but
+it stops a final pour from announcing a drawdown before water has actually
+stopped.
 
 Hidden is hidden, not reset: the clock keeps accumulating underneath, so it
 appears already reading the elapsed drawdown rather than starting from zero at

@@ -2,7 +2,7 @@ import React from "react";
 import {screen} from "@testing-library/react-native";
 import {PixelRatio} from "react-native";
 
-import BrewFigures, {flowRowMinHeight} from "@/components/BrewFigures";
+import BrewFigures, {drawdownRowMinHeight, flowRowMinHeight} from "@/components/BrewFigures";
 import {FLOW_SPARKLINE_HEIGHT} from "@/components/FlowSparkline";
 import {accents} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
@@ -214,6 +214,18 @@ describe("BrewFigures", () => {
             <BrewFigures water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
         );
         expect(screen.queryByTestId("figures-flow-slot")).toBeNull();
+    });
+
+    it("reserves the live drawdown row height when asked", async () => {
+        await renderWithProviders(
+            <BrewFigures
+                water={120} cup={90} seconds={60} accent={TEST_ACCENT}
+                reserveDrawdown
+            />
+        );
+        expect(screen.getByTestId("figures-drawdown-slot"))
+            .toHaveStyle({minHeight: drawdownRowMinHeight()});
+        expect(screen.queryByTestId("figures-drawdown")).toBeNull();
     });
 
     it("puts the average rate on the drawdown line", async () => {

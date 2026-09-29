@@ -1266,11 +1266,25 @@ for driving a fake machine through a brew.
         await pauseFor(machine, 10);
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
     });
+
+    it("does not show drawdown while the final pour is still rising", async () => {
+        const machine = await startBrewInTest();
+        await pourInto(machine, {seconds: 6, cupRate: 2, waterRate: 10});
+        expect(screen.queryByTestId("figures-drawdown")).toBeNull();
+    });
+
+    it("does not reset the live drawdown on a noisy plateau", async () => {
+        const machine = await startBrewInTest();
+        await pourAllStages(machine);
+        await drawDownFor(machine, 12, {waterWobbleMl: 0.4});
+        expect(screen.getByTestId("figures-drawdown")).toHaveTextContent(/12/);
+    });
 ```
 
-Adapt the helper names to whatever the file already has. The four assertions
-are the contract: present when pouring, absent under bypass, a clock that
-converges on the stored figure, and silence during a planned pause.
+Adapt the helper names to whatever the file already has. The assertions are
+the contract: present when pouring, absent under bypass, a clock that
+converges on the stored figure, silence during a planned pause, no 0:00 line
+during the final pour, and no reset on sub-noise plateau wobble.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -1293,32 +1307,23 @@ In `app/brew.tsx`, near the existing derivations (`samples`, `elapsed`,
         ? []
         : flowTail(samples, recipe.pours.length, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
 
-    // The live drawdown clock. The record gets a drawdown figure only after
-    // the fact, and a drawdown is the one stretch of a brew where nothing else
-    // on the screen moves, so this is where the reading is wanted most.
-    //
-    // Gated on the last stage, because between stages the machine is pausing
-    // on purpose and calling that a drawdown would be a different claim: a
-    // planned pause is not the bed finishing.
-    const drawdownOpenedAt = drawdownFrom(samples, recipe.pours.length);
-    const lastStageRunning =
-        activeIndex !== null && activeIndex >= recipe.pours.length - 1;
-    const liveDrawdown = running && lastStageRunning && drawdownOpenedAt > 0
-        ? Math.max(0, elapsed - drawdownOpenedAt / 1000)
-        : null;
+    const liveDrawdownFigure = liveDrawdown(
+        samples, recipe.pours.length, elapsed, running
+    );
 ```
 
-`elapsed` is the last sample's `at` in seconds and `BrewSample.at` is the same
-clock, so the subtraction is sound, and the clock freezes when samples stop
-exactly as TIME already does. `activeIndex` equals `pours.length` once the
-machine is settling or done, so `>= pours.length - 1` covers both the last
-stage and everything after it.
+Amendment, 2026-09-30: do not gate this on `activeIndex`. `activeIndex` is
+`null` during bypass, and the verified frame log puts bypass inside the
+drawdown. The live helper gates on a stable final-stage boundary instead:
+planned pauses before the final stage never produce one, final-pour samples do
+not open the clock until the boundary is at least 1000 ms behind the sample
+clock, and a plateau wobbling within `NOISE_FLOOR_ML` cannot retake it.
 
 Add the imports:
 
 ```tsx
 import {flowNow, flowTail} from "@/library/brew/flowRate";
-import {drawdownFrom} from "@/library/brew/BrewRecord";
+import {liveDrawdown} from "@/library/brew/liveDrawdown";
 ```
 
 and, beside the file's other layout constants:
@@ -1338,7 +1343,10 @@ At the `BrewFigures` call site, add:
                     {...(flow === null
                         ? {}
                         : {flow: flow.cup, pourRate: flow.water, flowTail: flowTailValues})}
-                    {...(liveDrawdown === null ? {} : {drawdown: liveDrawdown})}
+                    reserveDrawdown={liveDrawdownFigure.reserveDrawdown}
+                    {...(liveDrawdownFigure.drawdown === null
+                        ? {}
+                        : {drawdown: liveDrawdownFigure.drawdown})}
 ```
 
 Keep the existing props as they are. Spread rather than passing `undefined`
