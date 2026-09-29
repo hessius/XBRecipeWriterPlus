@@ -1,7 +1,7 @@
 import NFC from "./NFC";
 import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
-import {podCoffeeFromStored, type PodCoffee} from "./podCoffee";
+import {podCoffeeFromStored, podImageUrl, type PodCoffee} from "./podCoffee";
 import Pour, {AGITATION, POUR_PATTERN} from "./Pour";
 import {BYPASS_DEFAULT_TEMPERATURE, isUsableBypassTemp} from "./bypassLimits";
 import {tagKey} from "./tagKey";
@@ -361,10 +361,13 @@ class Recipe {
             // than a throw. Recipes stored before these existed are the common
             // case, not an error, and they must keep loading.
             if (typeof jsonRecipe.sharedBy === "string") this.sharedBy = jsonRecipe.sharedBy;
-            if (typeof jsonRecipe.sharedByAvatar === "string") {
-                this.sharedByAvatar = jsonRecipe.sharedByAvatar;
-            }
-            if (typeof jsonRecipe.imageURL === "string") this.imageURL = jsonRecipe.imageURL;
+            // Both are addresses the app will later GET a picture from, and
+            // both may have been stored before that rule existed, so they are
+            // re-checked on the way out of the database rather than only on the
+            // way in. An installation upgraded from an older build must not
+            // keep fetching a legacy plain-HTTP avatar.
+            this.sharedByAvatar = podImageUrl(jsonRecipe.sharedByAvatar);
+            this.imageURL = podImageUrl(jsonRecipe.imageURL);
             // Read the forgiving way the three above are: a wrong type means
             // the default, not a throw. Every recipe stored before M5 is this
             // case, so this is the ordinary path rather than the hostile one.

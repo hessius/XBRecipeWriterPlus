@@ -105,8 +105,13 @@ export class XBloomRecipe {
             if (typeof detail.shareMemberName === "string") {
                 recipe.sharedBy = detail.shareMemberName;
             }
-            if (typeof detail.shareMemberHead === "string") {
-                recipe.sharedByAvatar = detail.shareMemberHead;
+            // Through the same https rule as every other picture. A restore
+            // already strips a non-https avatar (`backup.ts`), and an import is
+            // no more trustworthy a source: the URL is a third party's and it
+            // ends up in an `<Image>`, which would fetch it in the clear.
+            const avatar = podImageUrl(detail.shareMemberHead);
+            if (avatar !== undefined) {
+                recipe.sharedByAvatar = avatar;
             }
             const podsVo = this.xbRecipeJSON.recipeVo.podsVo;
             applyPodCoffee(recipe, podsVo);
