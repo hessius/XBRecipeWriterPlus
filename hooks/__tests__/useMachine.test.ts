@@ -9,6 +9,8 @@ import {sharedSettings} from "@/hooks/useSetting";
 import {DEFAULTS} from "@/library/Settings";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
 import Machine, {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Machine";
+import {BluetoothPermissionError} from "@/library/machine/errors";
+import type {BluetoothPermissionResult} from "@/library/machine/Transport";
 
 // `library/machine/Transport` (imported transitively by the hook) builds a
 // BleManager singleton at module load, which throws under Jest. These tests
@@ -173,7 +175,7 @@ describe("the machine link", () => {
             recordMachine: (reading: MachineReading) => { recorded.push(reading); return false; }
         };
 
-        await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => true);
+        await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => ({granted: true} as const));
 
         expect(recorded).toEqual([{model: "XB-MYSTERY-9", name: "XBLOOM-77"}]);
     });
@@ -190,7 +192,7 @@ describe("the machine link", () => {
             recordMachine: (reading: MachineReading) => { recorded.push(reading); return false; }
         };
 
-        await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => true);
+        await openLink(new Machine(transport, {frameGapMs: 0}), store, async () => ({granted: true} as const));
 
         expect(recorded).toHaveLength(1);
     });
@@ -208,7 +210,7 @@ describe("the machine link", () => {
         };
         const machine = new Machine(transport, {frameGapMs: 0});
 
-        await expect(openLink(machine, store, async () => true)).resolves.toBeUndefined();
+        await expect(openLink(machine, store, async () => ({granted: true} as const))).resolves.toBeUndefined();
 
         expect(transport.connectedTo).not.toBeNull();
         expect(remembered).toHaveLength(1);
@@ -575,7 +577,7 @@ describe("connecting to a machine that is already paired", () => {
             recordMachine: () => false
         };
 
-        await connectRememberedMachine(machine, store, async () => true);
+        await connectRememberedMachine(machine, store, async () => ({granted: true} as const));
 
         expect(transport.connectedTo).toBe("AA:BB");
     });
@@ -586,7 +588,7 @@ describe("connecting to a machine that is already paired", () => {
         // nobody asked for. It also means no scan, and no Bluetooth prompt.
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
-        const permission = jest.fn(async () => true);
+        const permission = jest.fn(async () => ({granted: true} as const));
         const store = {
             rememberedId: () => "",
             rememberId: jest.fn(),
@@ -612,7 +614,7 @@ describe("connecting to a machine that is already paired", () => {
         };
 
         await expect(connectRememberedMachine(
-            machine, store, async () => true, {wait: async () => {}}
+            machine, store, async () => ({granted: true} as const), {wait: async () => {}}
         )).resolves.toBeUndefined();
     });
 });
@@ -633,7 +635,7 @@ describe("opening a link that does not want to open", () => {
         transport.refuseNextConnections = 4;
         const machine = new Machine(transport, {frameGapMs: 0});
 
-        await openLink(machine, store(), async () => true, {wait: noWait});
+        await openLink(machine, store(), async () => ({granted: true} as const), {wait: noWait});
 
         expect(transport.connectedTo).toBe("AA:BB");
     });
@@ -646,7 +648,7 @@ describe("opening a link that does not want to open", () => {
         transport.refuseConnection = true;
         const machine = new Machine(transport, {frameGapMs: 0});
 
-        await expect(openLink(machine, store(), async () => true, {wait: noWait}))
+        await expect(openLink(machine, store(), async () => ({granted: true} as const), {wait: noWait}))
             .rejects.toThrow(/another app/i);
     });
 
@@ -655,7 +657,7 @@ describe("opening a link that does not want to open", () => {
         const machine = new Machine(transport, {frameGapMs: 0});
         const waited = jest.fn(async () => {});
 
-        await openLink(machine, store(), async () => true, {wait: waited});
+        await openLink(machine, store(), async () => ({granted: true} as const), {wait: waited});
 
         expect(waited).not.toHaveBeenCalled();
         expect(transport.connectedTo).toBe("AA:BB");
@@ -666,7 +668,10 @@ describe("opening a link that does not want to open", () => {
         // already denied helps nobody.
         const transport = new FakeTransport();
         const machine = new Machine(transport, {frameGapMs: 0});
-        const permission = jest.fn(async () => false);
+        const permission = jest.fn(
+            async (): Promise<BluetoothPermissionResult> =>
+                ({granted: false, permanentlyDenied: false})
+        );
 
         await expect(openLink(machine, store(), permission, {wait: noWait}))
             .rejects.toThrow(/permission/i);
@@ -674,12 +679,46 @@ describe("opening a link that does not want to open", () => {
         expect(permission).toHaveBeenCalledTimes(1);
     });
 
+    it("sends a permanently denied user to Settings rather than asking again", async () => {
+        // Android only. Refuse the system dialog twice and it never appears
+        // again, so "grant permission" is advice the OS will now ignore.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const permission = async (): Promise<BluetoothPermissionResult> =>
+            ({granted: false, permanentlyDenied: true});
+
+        let failure: BluetoothPermissionError | undefined;
+        await openLink(machine, store(), permission, {wait: noWait})
+            .catch((e: unknown) => { failure = e as BluetoothPermissionError; });
+
+        expect(failure).toBeInstanceOf(BluetoothPermissionError);
+        expect(failure?.canOpenSettings).toBe(true);
+        expect(failure?.message).toMatch(/settings/i);
+    });
+
+    it("does not send a first refusal to Settings", async () => {
+        // The dialog will appear again, so asking again is the remedy and
+        // Settings would be the long way round to the same place.
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0});
+        const permission = async (): Promise<BluetoothPermissionResult> =>
+            ({granted: false, permanentlyDenied: false});
+
+        let failure: BluetoothPermissionError | undefined;
+        await openLink(machine, store(), permission, {wait: noWait})
+            .catch((e: unknown) => { failure = e as BluetoothPermissionError; });
+
+        expect(failure).toBeInstanceOf(BluetoothPermissionError);
+        expect(failure?.canOpenSettings).toBe(false);
+        expect(failure?.message).not.toMatch(/settings/i);
+    });
+
     it("keeps trying at launch too, not only when a button was pressed", async () => {
         const transport = new FakeTransport();
         transport.refuseNextConnections = 3;
         const machine = new Machine(transport, {frameGapMs: 0});
 
-        await connectRememberedMachine(machine, store(), async () => true, {wait: noWait});
+        await connectRememberedMachine(machine, store(), async () => ({granted: true} as const), {wait: noWait});
 
         expect(transport.connectedTo).toBe("AA:BB");
     });
@@ -698,7 +737,7 @@ describe("opening a link that does not want to open", () => {
             recordMachine: () => false
         };
 
-        const opening = openLink(machine0(transport), store, async () => true, {
+        const opening = openLink(machine0(transport), store, async () => ({granted: true} as const), {
             wait: async () => { id = ""; }
         });
 
@@ -711,7 +750,7 @@ describe("opening a link that does not want to open", () => {
         transport.refuseNextConnections = CONNECT_DELAYS_MS.length;
         const machine = new Machine(transport, {frameGapMs: 0});
 
-        await expect(openLink(machine, store(), async () => true, {wait: noWait}))
+        await expect(openLink(machine, store(), async () => ({granted: true} as const), {wait: noWait}))
             .rejects.toThrow();
     });
 });

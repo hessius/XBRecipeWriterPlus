@@ -11,3 +11,22 @@ export class RadioUnavailableError extends Error {
         this.name = "RadioUnavailableError";
     }
 }
+
+/**
+ * The radio is there, but this phone will not let the app use it.
+ *
+ * Separate from `RadioUnavailableError` because the remedy is different and,
+ * on Android, there are two remedies. Refuse the system dialog twice and it
+ * never appears again; after that the only way back is the app's own page in
+ * Settings. `canOpenSettings` is what lets the UI offer that route instead of
+ * asking again for something that can no longer be asked for.
+ */
+export class BluetoothPermissionError extends Error {
+    readonly canOpenSettings: boolean;
+
+    constructor(message: string, canOpenSettings: boolean) {
+        super(message);
+        this.name = "BluetoothPermissionError";
+        this.canOpenSettings = canOpenSettings;
+    }
+}

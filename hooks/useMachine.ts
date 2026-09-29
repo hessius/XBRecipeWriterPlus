@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {AppState} from "react-native";
+import {AppState, Linking} from "react-native";
 
 import {CONNECT_DELAYS_MS, STUDIO_MODEL_STRINGS} from "@/constants/machine";
 import {sharedSettings, useSetting} from "@/hooks/useSetting";
@@ -9,7 +9,12 @@ import Machine, {
 } from "@/library/machine/Machine";
 import {asMachineModel, type MachineModel} from "@/library/machine/machineModel";
 import type {Settings} from "@/library/Settings";
-import {BleTransport, ensureBluetoothPermission} from "@/library/machine/Transport";
+import {BluetoothPermissionError} from "@/library/machine/errors";
+import {
+    BleTransport,
+    ensureBluetoothPermission,
+    type BluetoothPermissionResult
+} from "@/library/machine/Transport";
 
 export type LinkStatus = "idle" | "disconnected" | "connecting" | "connected" | "failed";
 
@@ -263,7 +268,7 @@ export function holdLinkAcrossAppState(
 export async function connectRememberedMachine(
     machine: Machine,
     store: LinkStore,
-    ensurePermission: () => Promise<boolean> = ensureBluetoothPermission,
+    ensurePermission: () => Promise<BluetoothPermissionResult> = ensureBluetoothPermission,
     options: RetryOptions = {}
 ): Promise<void> {
     if (store.rememberedId() === "") return;
@@ -312,14 +317,27 @@ export function __resetSharedMachine(): void {
 export async function openLink(
     machine: Machine,
     store: LinkStore,
-    ensurePermission: () => Promise<boolean> = ensureBluetoothPermission,
+    ensurePermission: () => Promise<BluetoothPermissionResult> = ensureBluetoothPermission,
     options: RetryOptions = {}
 ): Promise<void> {
     if (machine.isConnected()) return;
     // Outside the retrying on purpose. Waiting fourteen seconds to be told the
     // app needs permission it has already been denied helps nobody.
-    if (!await ensurePermission()) {
-        throw new Error("XBRW++ needs permission to use Bluetooth.");
+    const permission = await ensurePermission();
+    if (!permission.granted) {
+        // Two different refusals on Android, and only one of them can be
+        // undone by asking again. "Grant permission" is bad advice to somebody
+        // whose second refusal has already turned the system dialog off for
+        // good; the only route left is the app's own page in Settings.
+        throw permission.permanentlyDenied
+            ? new BluetoothPermissionError(
+                "Bluetooth permission is off for XBRW++. Turn it on in Settings to reach the machine.",
+                true
+            )
+            : new BluetoothPermissionError(
+                "XBRW++ needs permission to use Bluetooth to reach the machine.",
+                false
+            );
     }
 
     const delays = options.delays ?? CONNECT_DELAYS_MS;
@@ -415,6 +433,16 @@ export type MachineLink = {
     connect: () => Promise<void>;
     forget: () => Promise<void>;
     /**
+     * Whether the failure in `error` is one only the system settings can undo.
+     *
+     * Android only, and always false on iOS, which has no permanently-denied
+     * state: refuse the Bluetooth dialog twice on Android and it never appears
+     * again, so asking again is not a remedy and should not be offered as one.
+     */
+    canOpenSettings: boolean;
+    /** Send the user to the app's own page in the system settings. */
+    openSettings: () => void;
+    /**
      * Which machine the user says this is. The setting, not a reading.
      *
      * Narrowed here so a consumer does not have to. Nothing in the app reads
@@ -442,6 +470,15 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         machine.isConnected() ? "connected" : "idle"
     );
     const [error, setError] = useState<string | null>(null);
+    /**
+     * Whether the failure on screen is one the user can only undo in Settings.
+     *
+     * Carried beside `error` rather than read out of its text, because the
+     * message is copy and copy gets rewritten. It is the error's own flag that
+     * decides, and only Android ever sets it: iOS has no permanently-denied
+     * state to escape from.
+     */
+    const [canOpenSettings, setCanOpenSettings] = useState(false);
 
     // Bumped whenever the machine says something about itself, so a view
     // holding `machine.info` repaints. The info blob is mutated in place on the
@@ -474,6 +511,7 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         }
         setStatus("connecting");
         setError(null);
+        setCanOpenSettings(false);
         try {
             await openLink(machine, {
                 rememberedId: () => remembered,
@@ -484,6 +522,9 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
             setStatus("connected");
         } catch (e) {
             setError((e as Error).message);
+            setCanOpenSettings(
+                e instanceof BluetoothPermissionError && e.canOpenSettings
+            );
             setStatus("failed");
             throw e;
         }
@@ -494,11 +535,15 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         setRemembered("");
         forgetMachineReadings(options.settings ?? sharedSettings());
         setError(null);
+        setCanOpenSettings(false);
         setStatus("idle");
     }
 
     return {
         machine, status, error, remembered, connect, forget,
+        canOpenSettings,
+        /** Send the user to the app's own page in the system settings. */
+        openSettings: () => { void Linking.openSettings(); },
         // `SettingValue` widens the stored union back to `string`, so this has
         // to be narrowed rather than asserted. Coerced rather than refused,
         // because there is a correct answer to fall back on.

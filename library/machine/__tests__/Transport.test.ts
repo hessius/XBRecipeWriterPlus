@@ -7,7 +7,7 @@
  * getting it wrong shipped a milestone that connected, read the machine's info
  * correctly, and then could not brew.
  */
-import {Platform} from "react-native";
+import {PermissionsAndroid, Platform} from "react-native";
 import BleManager from "react-native-ble-manager";
 
 import {
@@ -19,7 +19,7 @@ import {
 } from "@/constants/machine";
 import {buildType1, buildType1Bytes} from "@/library/machine/protocol";
 import {RadioUnavailableError} from "@/library/machine/errors";
-import {BleTransport} from "@/library/machine/Transport";
+import {BleTransport, ensureBluetoothPermission} from "@/library/machine/Transport";
 
 jest.mock("react-native-ble-manager", () => ({
     __esModule: true,
@@ -421,5 +421,107 @@ describe("waiting for the radio", () => {
         } finally {
             jest.useRealTimers();
         }
+    });
+});
+
+/**
+ * The Android permission gate.
+ *
+ * Never run until the suite gained an Android project. It used to reach
+ * `PermissionsAndroid` through a dynamic `import("react-native")`, which jest
+ * cannot service, so these tests could not have been written before.
+ */
+describe("asking for the radio", () => {
+    const {BLUETOOTH_SCAN, BLUETOOTH_CONNECT, ACCESS_FINE_LOCATION} =
+        PermissionsAndroid.PERMISSIONS;
+    const requestMultiple = PermissionsAndroid.requestMultiple as jest.Mock;
+
+    /**
+     * `Platform.Version` is a getter with no setter, and under jest it answers
+     * `undefined`, so plain assignment reads back as the legacy branch and the
+     * API 31 test would pass for the wrong reason.
+     */
+    function sayApiLevel(level: number | undefined): void {
+        Object.defineProperty(Platform, "Version", {
+            configurable: true, get: () => level
+        });
+    }
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        Platform.OS = "android";
+        sayApiLevel(34);
+    });
+
+    afterEach(() => {
+        Platform.OS = "ios";
+        sayApiLevel(undefined);
+    });
+
+    /** Answer every requested permission with the same verdict. */
+    function answer(verdict: string): void {
+        requestMultiple.mockImplementation(async (names: string[]) =>
+            Object.fromEntries(names.map((name) => [name, verdict]))
+        );
+    }
+
+    it("is granted when the user allows everything", async () => {
+        answer(PermissionsAndroid.RESULTS.GRANTED);
+
+        await expect(ensureBluetoothPermission()).resolves.toEqual({granted: true});
+    });
+
+    it("reports a refusal the user can be asked about again", async () => {
+        answer(PermissionsAndroid.RESULTS.DENIED);
+
+        await expect(ensureBluetoothPermission())
+            .resolves.toEqual({granted: false, permanentlyDenied: false});
+    });
+
+    it("reports a refusal only Settings can undo", async () => {
+        // Denied twice, and the system dialog never appears again. Telling this
+        // user to grant permission invites them to do a thing the OS will now
+        // silently ignore.
+        answer(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
+
+        await expect(ensureBluetoothPermission())
+            .resolves.toEqual({granted: false, permanentlyDenied: true});
+    });
+
+    it("counts a partial grant as a refusal", async () => {
+        requestMultiple.mockResolvedValue({
+            [BLUETOOTH_SCAN]:    PermissionsAndroid.RESULTS.GRANTED,
+            [BLUETOOTH_CONNECT]: PermissionsAndroid.RESULTS.DENIED
+        });
+
+        await expect(ensureBluetoothPermission())
+            .resolves.toEqual({granted: false, permanentlyDenied: false});
+    });
+
+    it("asks for the radio's own permissions from API 31", async () => {
+        sayApiLevel(31);
+        answer(PermissionsAndroid.RESULTS.GRANTED);
+
+        await ensureBluetoothPermission();
+
+        expect(requestMultiple).toHaveBeenCalledWith([BLUETOOTH_SCAN, BLUETOOTH_CONNECT]);
+    });
+
+    it("asks for location below API 31, where scanning counted as locating", async () => {
+        // Asking only for the newer pair on Android 11 grants nothing at all,
+        // and the scan comes back empty with no explanation.
+        sayApiLevel(30);
+        answer(PermissionsAndroid.RESULTS.GRANTED);
+
+        await ensureBluetoothPermission();
+
+        expect(requestMultiple).toHaveBeenCalledWith([ACCESS_FINE_LOCATION]);
+    });
+
+    it("asks iOS for nothing, because iOS asks for itself", async () => {
+        Platform.OS = "ios";
+
+        await expect(ensureBluetoothPermission()).resolves.toEqual({granted: true});
+        expect(requestMultiple).not.toHaveBeenCalled();
     });
 });

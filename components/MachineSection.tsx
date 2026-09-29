@@ -71,7 +71,8 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     // when it recognises a Studio, and a test that injected a store while the
     // hook wrote to the shared one would watch the correction land somewhere
     // this row cannot see.
-    const {machine, status, error, remembered, connect, forget} = useMachine(undefined, {settings});
+    const {machine, status, error, remembered, connect, forget, canOpenSettings, openSettings}
+        = useMachine(undefined, {settings});
     const [autoStart, setAutoStart] = useSetting("machineAutoStart", settings);
     const [animateBrewChart, setAnimateBrewChart] = useSetting("animateBrewChart", settings);
     const [askForRatings, setAskForRatings] = useSetting("askForRatings", settings);
@@ -133,6 +134,20 @@ export default function MachineSection({settings}: {settings?: Settings}) {
                         )}
                     </YStack>
                 </Pressable>
+            )}
+
+            {/*
+              * Android only. A Bluetooth permission refused twice can no longer
+              * be asked for, so Connect would do nothing at all and the message
+              * above would be the end of the road. Offered as its own row
+              * rather than inside the status block, which is the seven-tap
+              * console entry and must stay a single target.
+              */}
+            {canOpenSettings && (
+                <SettingsActionRow
+                    label="Open app settings"
+                    detail="Bluetooth permission can only be turned back on there."
+                    onPress={openSettings}/>
             )}
 
             <SettingsActionRow

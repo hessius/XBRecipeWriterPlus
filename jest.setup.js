@@ -132,3 +132,41 @@ jest.mock("expo-clipboard", () => ({
     isPasteButtonAvailable: false,
     ClipboardPasteButton:   () => null
 }));
+
+/**
+ * `PermissionsAndroid` needs a native module behind it, and under jest there is
+ * none: touching `requestMultiple` throws "PermissionsAndroid is not installed
+ * correctly". That did not matter while the suite only ran as an iPhone,
+ * because `ensureBluetoothPermission` returns early on iOS and never reaches
+ * it. Running as Android, every test that connects to the machine goes through
+ * it.
+ *
+ * The default answer is "granted", so an Android run of a test about something
+ * else keeps testing that thing rather than a permission prompt. Tests about
+ * the gate itself spy on this and say what they want it to answer.
+ */
+jest.mock("react-native/Libraries/PermissionsAndroid/PermissionsAndroid", () => {
+    const PERMISSIONS = {
+        BLUETOOTH_SCAN:       "android.permission.BLUETOOTH_SCAN",
+        BLUETOOTH_CONNECT:    "android.permission.BLUETOOTH_CONNECT",
+        ACCESS_FINE_LOCATION: "android.permission.ACCESS_FINE_LOCATION",
+    };
+    const RESULTS = {
+        GRANTED:         "granted",
+        DENIED:          "denied",
+        NEVER_ASK_AGAIN: "never_ask_again",
+    };
+    const PermissionsAndroid = {
+        PERMISSIONS,
+        RESULTS,
+        check: jest.fn(async () => true),
+        request: jest.fn(async () => RESULTS.GRANTED),
+        requestMultiple: jest.fn(async (names) =>
+            Object.fromEntries(names.map((name) => [name, RESULTS.GRANTED]))
+        ),
+    };
+    // React Native's index re-exports the `default` binding of this module, so
+    // a mock without one leaves `PermissionsAndroid` undefined at every call
+    // site that imports it from "react-native".
+    return {__esModule: true, default: PermissionsAndroid, ...PermissionsAndroid};
+});

@@ -79,6 +79,15 @@ module.exports = {
     // added to stop, so `library/__tests__/platformHarness.test.ts` asserts
     // the resolved value rather than trusting the shape of this file.
     testTimeout: 20_000,
+    // Two projects means twice the suites through one worker pool, and the
+    // heaviest screen suites are memory-hungry rather than CPU-hungry: they
+    // render the whole library through Tamagui. At jest's default of one worker
+    // per core minus one, enough of those land together that a handful of
+    // suites time out -- and they pass one at a time, so it is contention and
+    // not a defect. Fewer workers is the honest fix; a longer timeout would
+    // only move the cliff. Run a single project with `npm run test:ios` or
+    // `npm run test:android` when you want the whole machine on one platform.
+    maxWorkers: "50%",
     projects: [
         project("ios", "jest-expo"),
         project("android", "jest-expo/android")

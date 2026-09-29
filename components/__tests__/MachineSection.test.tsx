@@ -19,13 +19,17 @@ const mockLink: {
     remembered: string;
     connect: jest.Mock;
     forget: jest.Mock;
+    canOpenSettings: boolean;
+    openSettings: jest.Mock;
 } = {
     machine: {info: null, askHowItIsDoing: mockAsk},
     status: "disconnected",
     error: null,
     remembered: "",
     connect: jest.fn(),
-    forget: jest.fn()
+    forget: jest.fn(),
+    canOpenSettings: false,
+    openSettings: jest.fn()
 };
 
 jest.mock("@/hooks/useMachine", () => ({
@@ -51,6 +55,9 @@ describe("the machine section", () => {
         mockLink.status = "disconnected";
         mockLink.remembered = "";
         mockLink.machine = {info: null, askHowItIsDoing: mockAsk};
+        mockLink.error = null;
+        mockLink.canOpenSettings = false;
+        mockLink.openSettings.mockClear();
     });
 
     it("asks the machine how it is doing when the settings screen opens", async () => {
@@ -232,5 +239,54 @@ describe("the machine section", () => {
         await waitFor(() =>
             expect(screen.getByText(/Only the Studio has been tested/)).toBeTruthy());
         expect(screen.queryByText(/Your xBloom Studio has to be switched on/)).toBeNull();
+    });
+});
+
+/**
+ * The Android dead end.
+ *
+ * Refuse the Bluetooth dialog twice on Android and it never appears again, so
+ * Connect does nothing at all and the error line is the end of the road. iOS
+ * has no such state, which is why the row is driven by the link's own flag
+ * rather than by `Platform.OS` here.
+ */
+describe("a Bluetooth permission only Settings can undo", () => {
+    beforeEach(() => {
+        mockLink.status = "failed";
+        mockLink.remembered = "";
+        mockLink.machine = {info: null, askHowItIsDoing: mockAsk};
+        mockLink.error = "Bluetooth permission is off for XBRW++. Turn it on in Settings to reach the machine.";
+        mockLink.canOpenSettings = true;
+        mockLink.openSettings.mockClear();
+    });
+
+    it("offers the way out", async () => {
+        await renderWithProviders(<MachineSection/>);
+
+        expect(await screen.findByText(/Open app settings/)).toBeTruthy();
+    });
+
+    it("opens the system settings when it is taken", async () => {
+        await renderWithProviders(<MachineSection/>);
+
+        await fireEvent.press(await screen.findByText(/Open app settings/));
+
+        expect(mockLink.openSettings).toHaveBeenCalled();
+    });
+
+    it("says why the permission cannot simply be granted again", async () => {
+        await renderWithProviders(<MachineSection/>);
+
+        expect(await screen.findByText(/Bluetooth permission can only be turned back on there/))
+            .toBeTruthy();
+    });
+
+    it("offers nothing when the refusal can still be asked about again", async () => {
+        mockLink.error = "XBRW++ needs permission to use Bluetooth to reach the machine.";
+        mockLink.canOpenSettings = false;
+
+        await renderWithProviders(<MachineSection/>);
+
+        await waitFor(() => expect(screen.queryByText(/Open app settings/)).toBeNull());
     });
 });
