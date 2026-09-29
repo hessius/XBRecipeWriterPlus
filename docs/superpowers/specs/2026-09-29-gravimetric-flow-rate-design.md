@@ -119,6 +119,10 @@ export function drawdownRate(record: BrewRecord): number | null;
 `stages` rather than a bypass object, so the module needs to know only the one
 fact that separates a bypass sample from a brew sample.
 
+The live drawdown clock (§5.1) adds nothing here. It calls the existing
+`drawdownFrom` in `BrewRecord.ts`, which is the same function the recorder
+uses, so the boundary has exactly one definition in the codebase.
+
 `drawdownRate` is
 
 ```
@@ -133,12 +137,14 @@ to make.
 
 ## 5. The live screen
 
-One new row in `BrewFigures`, in the slot the drawdown line already proved
-works:
+One new row in `BrewFigures`, in the slot the record's drawdown line already
+proved works, plus a drawdown clock of its own (§5.1) which is hidden until
+the gate described there opens:
 
 ```
 WATER 240      CUP 186      TIME 2:41
 FLOW  ▁▂▄▆▇▆▄  1.8 g/s   POUR 3.1
+DRAWDOWN 0:38
 ```
 
 - A sparkline of the last 30 seconds of cup rate, then the current value, then
@@ -148,12 +154,55 @@ FLOW  ▁▂▄▆▇▆▄  1.8 g/s   POUR 3.1
   stream, and a row reading `0.0 g/s` through waking, sending and grinding
   would be a measurement of nothing presented as a measurement. The row appears
   with the first drop, on the same condition the stage counter already uses.
-- The live screen draws **no drawdown rate**. It has no drawdown yet, and
-  `drawdownRate` takes a finished record rather than a live stream. The live
-  screen does not draw the `DRAWDOWN` line today either.
+- The live screen draws **no drawdown rate**. `drawdownRate` averages over a
+  finished drawdown, and an average of a thing still happening is a figure that
+  changes meaning as it is read. The live rate is the FLOW row's instantaneous
+  one, and the two must not be conflated.
 - No new band, so `bands.ts` is untouched and no height is taken from the trace
   or the ladder.
 - No control, no mode, nothing to operate with wet hands and a timer running.
+
+### 5.1 The live drawdown clock
+
+The live screen gains a **drawdown clock**, counting up, in the same
+`DRAWDOWN` line the record uses. It is a clock only: no rate beside it.
+
+It is the record's own derivation, run on the partial stream:
+
+```
+drawdownFrom(samplesSoFar, stages)
+```
+
+No new function and no second definition of the boundary. Because the live
+clock and the stored figure are the same derivation over the same samples, the
+clock **converges exactly** on `drawdownSeconds(record)`. There is no moment
+where the screen says 0:41 and the record it writes says 0:38.
+
+**Rejected: the machine's own `settling` phase.** It opens on `BREWER_STOP`,
+which the verified frame log puts about 69 seconds after the real boundary. A
+clock started there would report 8 seconds for a drawdown that ran over a
+minute. That is the precise error `drawdownAt` exists to prevent, and it must
+not be reintroduced on the live screen.
+
+**The gate.** `drawdownFrom` resets on every rise in brew water and runs
+whenever water is flat, so on its own it would also run through every planned
+pause. The live screen knows one thing a replayed stream does not foreground:
+which stage is running. So the clock is **computed always and revealed only
+once the last stage is the running stage**, which the screen already knows as
+`activeIndex >= pours.length - 1`. Flat water in the last stage cannot be
+followed by more water.
+
+Hidden is hidden, not reset: the clock keeps accumulating underneath, so it
+appears already reading the elapsed drawdown rather than starting from zero at
+the moment the gate opens.
+
+**Rejected: gating on the last stage reaching its planned volume.** It invents
+a second boundary definition alongside `drawdownFrom`, and it goes silent
+precisely on a stage that stops short, which is the brew somebody most wants
+to watch.
+
+The clock is absent before the gate opens and absent on a brew that failed or
+was cancelled before pouring, on the same rule as the FLOW row.
 
 Rejected: a fourth and fifth column in the figures row. That row has already
 refused a fourth column twice on the record, and both refusals are written into
@@ -220,7 +269,8 @@ record that already merges by `id` and never overwrites.
   term on the drawdown line it already draws: `DRAWDOWN 0:38 · 1.68 g/s`. The
   rate is dropped and the line reads as it does today whenever `drawdownRate`
   is null, which is the same rule the drawdown figure itself already follows.
-  Not on the live screen, which has no drawdown line and no drawdown yet.
+  Not on the live screen, whose drawdown line (§5.1) is a clock only: a rate
+  averaged over a drawdown still happening changes meaning as it is read.
 - The **history list row** gains one figure, `1.68 g/s`, beside the water and
   cup figures it already draws and before the stars. Silent when null, exactly
   as the pin and the rating already are. It joins the row's accessibility
@@ -288,6 +338,13 @@ So the flow rate is already exported, and has been since the handoff shipped.
 `BrewRecorder` tests pin that `cupAtDrawdown` is written at the same boundary
 `drawdownAt` is taken from, and that a brew which never drew down writes
 neither.
+
+The live drawdown clock is pinned by a convergence test rather than by a
+mockup: feed a stream through the live derivation sample by sample, finish the
+brew, and assert the last live reading equals `drawdownSeconds(record)`. A
+second test feeds a stream with a planned pause in a middle stage and asserts
+the clock stays hidden through it. A third asserts the clock, once revealed,
+reads the elapsed drawdown rather than zero.
 
 Component tests assert on rendered text, test IDs and accessible labels only.
 RNTL v14 has removed `UNSAFE_getAllByType` and `root.findAllByType`, so a test
