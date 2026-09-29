@@ -624,6 +624,8 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     grindSize:   isNumber,
     grinderRpm:  isNumber,
     grinderUsed: (v) => typeof v === "boolean",
+    dialBefore:  isNumber,
+    dialAfter:   isNumber,
     coffee:      isPlainObject
 };
 
@@ -722,6 +724,8 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         grindSize: record.grindSize,
         grinderRpm: record.grinderRpm,
         grinderUsed: record.grinderUsed,
+        dialBefore: record.dialBefore,
+        dialAfter: record.dialAfter,
         coffee: record.coffee,
         ...beanFieldsFrom(record),
         ...(record.tags !== undefined ? {tags: record.tags} : {})

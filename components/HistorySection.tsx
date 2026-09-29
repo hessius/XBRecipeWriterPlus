@@ -42,6 +42,21 @@ export default function HistorySection({summary, onRate}: {
                     {line(summary)}
                 </Text>
 
+                {/* What the machine's dial read after the last brew that
+                    took a reading. It is here because the problem is recall
+                    at the next brew: a figure buried in a brew record does
+                    not answer "what was the grinder set to last time".
+
+                    Worded as an observation and nothing more. The dial proves
+                    where the dial was, not how the coffee was ground, and
+                    somebody using a hand grinder has one sitting wherever it
+                    was last left. */}
+                {summary.lastDial !== null && (
+                    <Text testID="history-dial" fontSize={12} color={palette.dim}>
+                        {`Machine dial was at ${summary.lastDial} after the last brew.`}
+                    </Text>
+                )}
+
                 {onRate !== undefined && (
                     <XStack alignItems="center" gap="$3">
                         {/* Rounded, because the stars summarise several brews

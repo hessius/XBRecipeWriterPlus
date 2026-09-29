@@ -15,7 +15,9 @@ jest.mock("@/hooks/useBrew", () => ({
 declare global {
     var __brewer: Omit<ReturnType<typeof import("@/hooks/useBrew").useBrew>, "machine">
         & {machine: import("@/library/brew/BrewRecorder").RecorderMachine
-            & {phase: BrewPhase}};
+            & {phase: BrewPhase}
+            & {info?: {grindSize: number} | null;
+               askHowItIsDoing?: () => Promise<boolean>}};
 }
 
 function recipe(): Recipe {

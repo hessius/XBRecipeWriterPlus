@@ -88,3 +88,22 @@ describe("BrewFigures", () => {
         expect(screen.queryByTestId("figures-bypass")).toBeNull();
     });
 });
+
+describe("the grind dial", () => {
+    it("shows the line the record gave it", async () => {
+        await renderWithProviders(
+            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
+                         dial="MACHINE DIAL 47" />
+        );
+        expect(screen.getByTestId("figures-dial")).toHaveTextContent("MACHINE DIAL 47");
+    });
+
+    it("draws no line at all for a brew that took no reading", async () => {
+        // Absent, never zero. A dial of 0 is not a setting, and printing one
+        // would be an invented fact next to three measured ones.
+        await renderWithProviders(
+            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT} />
+        );
+        expect(screen.queryByTestId("figures-dial")).toBeNull();
+    });
+});

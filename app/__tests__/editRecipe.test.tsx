@@ -40,7 +40,7 @@ jest.mock("@/library/RecipeDatabase");
 // hook reads is covered by its own test.
 let mockBrewSummary = {
     times: 0, lastAt: 0, avgRating: 0, rated: 0,
-    timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
+    timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0, lastDial: null
 };
 const mockRate = jest.fn();
 const mockRefreshBeanProfile = jest.fn();
@@ -387,7 +387,7 @@ describe("the editor", () => {
     it("refreshes the bean profile after rating the recipe", async () => {
         mockBrewSummary = {
             times: 1, lastAt: 1, avgRating: 0, rated: 0,
-            timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0
+            timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0, lastDial: null
         };
 
         await renderEditor();

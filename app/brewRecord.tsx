@@ -6,6 +6,8 @@ import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
+import BrewStoryCard from "@/components/BrewStoryCard";
+import BrewStorySheet from "@/components/BrewStorySheet";
 import BrewSummary from "@/components/BrewSummary";
 import CompareWithSheet from "@/components/CompareWithSheet";
 import StageDetail from "@/components/StageDetail";
@@ -29,8 +31,10 @@ import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {brewFigures} from "@/library/brew/brewFigures";
 import {drawdownSeconds, poursFromPlan} from "@/library/brew/BrewRecord";
+import {dialNote} from "@/library/brew/dialAfterBrew";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
+import {storyCoffeeLine} from "@/library/brew/storyCard";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
@@ -137,6 +141,12 @@ export default function BrewRecord({recipeLookup}: Props) {
     // here and not in the batch path: once is a courtesy, once per brew across
     // a selection is a questionnaire.
     const [pickingComparison, setPickingComparison] = useState(false);
+    const [storyOpen, setStoryOpen] = useState(false);
+    // A second export, not a second mechanism. The story card is a different
+    // composition at a different ratio and so needs a capture target of its
+    // own, but it shares the guard, the filename and the share sheet with the
+    // in-place export by joining the same hook.
+    const story = useBrewExport(() => opened);
     const [comparisonCandidates, setComparisonCandidates] = useState<StoredBrew[]>([]);
 
     // Seeded from the record that is already in memory, so the screen shows
@@ -264,7 +274,32 @@ export default function BrewRecord({recipeLookup}: Props) {
     }
 
     const screenCovered = handoff.namingBean || handoff.ratingBeforeSend || pickingComparison
-        || ratingNoteOpen;
+        || ratingNoteOpen || storyOpen;
+
+    // The one description of this brew, given to both drawings of it. The
+    // record screen adds its width, its measured height and its taps; the
+    // story card adds its own width and nothing else. Neither works the
+    // figures out a second time.
+    const summary = {
+        recipeName:        record.recipeName,
+        hasStream:         record.hasStream,
+        samples,
+        stages,
+        accent,
+        plannedSeconds:    plannedSecs,
+        water:             brewWater,
+        cup:               record.cupTotal,
+        seconds:           durationSeconds,
+        activeIndex:       ladderFrontier(record.outcome, delivered),
+        stageWater:        delivered,
+        stalls:            record.stalls ?? stages.map(() => []),
+        note:              record.outcome === "endedOnMachine"
+            ? ENDED_ON_MACHINE_NOTE : undefined,
+        stagesUnavailable: snapshot.length === 0 && recipe === null,
+        bypass,
+        drawdown:          drawdownSeconds(record),
+        dial:              dialNote(record)
+    };
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -309,22 +344,8 @@ export default function BrewRecord({recipeLookup}: Props) {
             {watched ? (
                 <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
                     <BrewSummary
-                        recipeName={record.recipeName}
-                        hasStream={record.hasStream}
-                        samples={samples}
-                        stages={stages}
-                        accent={accent}
+                        {...summary}
                         width={width}
-                        plannedSeconds={plannedSecs}
-                        water={brewWater}
-                        cup={record.cupTotal}
-                        seconds={durationSeconds}
-                        activeIndex={ladderFrontier(record.outcome, delivered)}
-                        stageWater={delivered}
-                        stalls={record.stalls ?? stages.map(() => [])}
-                        note={record.outcome === "endedOnMachine"
-                            ? ENDED_ON_MACHINE_NOTE : undefined}
-                        stagesUnavailable={snapshot.length === 0 && recipe === null}
                         // `busy` is set synchronously at the press, before the
                         // paint the export waits for, so the name is already
                         // parked at its start by the time the shutter falls.
@@ -332,8 +353,6 @@ export default function BrewRecord({recipeLookup}: Props) {
                         selectedIndex={selectedIndex}
                         onSelectStage={(index) =>
                             setSelectedIndex((was) => (was === index ? null : index))}
-                        bypass={bypass}
-                        drawdown={drawdownSeconds(record)}
                         availableHeight={recordHeight}
                     />
                 </ViewShot>
@@ -410,6 +429,11 @@ export default function BrewRecord({recipeLookup}: Props) {
                         <ExportButton label="Export the data" busy={busy}
                                       onPress={() => void shareData()} />
                     </XStack>
+                    <XStack>
+                        <ExportButton label="Make a story card" busy={story.busy}
+                                      accessibilityLabel="Make a story card to share"
+                                      onPress={() => setStoryOpen(true)} />
+                    </XStack>
                     {hasComparisonCandidate && (
                         <XStack>
                             <ExportButton label="Compare" busy={false}
@@ -479,6 +503,32 @@ export default function BrewRecord({recipeLookup}: Props) {
                         </DotMatrixText>
                     </XStack>
                 }/>
+            <BrewStorySheet open={storyOpen} onOpenChange={setStoryOpen}
+                            shotRef={story.shotRef} busy={story.busy}
+                            onShare={() => void story.shareImage()}>
+                {(cardWidth) => (
+                    <BrewStoryCard
+                        width={cardWidth}
+                        when={`${formatBrewDate(record.startedAt)} · ${formatBrewTime(record.startedAt)}`}
+                        accent={accent}
+                        rating={judgement.rating}
+                        coffee={storyCoffeeLine(record)}
+                        tags={record.tags ?? []}
+                        summary={
+                            <BrewSummary
+                                {...summary}
+                                width={cardWidth}
+                                testID="story-capture"
+                                // Always still: a capture taken mid-travel
+                                // freezes the name half-scrolled, and unlike
+                                // the screen's own summary there is no moment
+                                // here when the card is not about to be shot.
+                                nameStill
+                            />
+                        }
+                    />
+                )}
+            </BrewStorySheet>
             <CompareWithSheet
                 open={pickingComparison}
                 candidates={comparisonCandidates}

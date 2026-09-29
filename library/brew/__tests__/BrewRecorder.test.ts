@@ -10,12 +10,15 @@ import Recipe from "@/library/Recipe";
 function fakeMachine() {
     let notify: (n: Notification) => void = () => {};
     let phase: (p: BrewPhase) => void = () => {};
+    let dial: number | null = null;
     const machine: RecorderMachine = {
         onNotification: (l) => { notify = l; return () => { notify = () => {}; }; },
-        onPhase: (l) => { phase = l; return () => { phase = () => {}; }; }
+        onPhase: (l) => { phase = l; return () => { phase = () => {}; }; },
+        readDial: () => dial
     };
     return {
         machine,
+        setDial: (to: number | null) => { dial = to; },
         water: (grams: number) => notify({kind: "waterWeight", grams}),
         cup: (grams: number) => notify({kind: "cupWeight", grams}),
         event: (code: number, value?: number) => notify({kind: "event", code, value}),
@@ -40,8 +43,10 @@ function clock(start = 1_000_000) {
 function build(overrides: Partial<{
     onRecord: (r: BrewRecord, s: BrewSample[]) => void;
     recipe: Recipe;
+    dial: number;
 }> = {}) {
     const fake = fakeMachine();
+    if (overrides.dial !== undefined) fake.setDial(overrides.dial);
     const time = clock();
     const records: {record: BrewRecord; samples: BrewSample[]}[] = [];
     const recorder = new BrewRecorder({
@@ -295,6 +300,68 @@ describe("BrewRecorder", () => {
         expect(records[0].record.outcome).toBe("endedOnMachine");
         expect(records[0].record.drawdownAt).toBe(20_000);
         expect(drawdownSeconds(records[0].record)).toBe(15);
+    });
+
+    it("takes the machine's dial at the first phase past waking", () => {
+        // `brew()` asks how the machine is doing while the phase is still
+        // `waking`, and sends once it has an answer. So `sending` is the first
+        // moment the vitals are known to belong to this brew.
+        const {fake, records} = build({dial: 47});
+        fake.phase({name: "sending"});
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        fake.phase({name: "done"});
+        expect(records[0].record.dialBefore).toBe(47);
+    });
+
+    it("does not take the dial while the machine is still being woken", () => {
+        // The vitals at `waking` are whatever the machine was left holding
+        // from the last brew, and recording those would answer a question
+        // nobody asked while looking exactly like an answer to this one.
+        const {fake, records} = build();
+        fake.setDial(11);
+        fake.phase({name: "waking"});
+        fake.setDial(47);
+        fake.phase({name: "sending"});
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        fake.phase({name: "done"});
+        expect(records[0].record.dialBefore).toBe(47);
+    });
+
+    it("keeps the first reading when the dial moves during the brew", () => {
+        // Taken once. A later phase must not overwrite it with a reading from
+        // after the dial was turned, because the difference between the two
+        // is the only evidence that it was turned at all.
+        const {fake, records} = build({dial: 47});
+        fake.phase({name: "sending"});
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.setDial(52);
+        fake.phase({name: "bypass"});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        fake.phase({name: "done"});
+        expect(records[0].record.dialBefore).toBe(47);
+    });
+
+    it("leaves the dial off a record from a machine that never said", () => {
+        const {fake, records} = build();
+        fake.phase({name: "sending"});
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.cup(240);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        fake.phase({name: "done"});
+        expect(records[0].record).not.toHaveProperty("dialBefore");
     });
 
     it("ends settling when the cup line has been flat long enough", () => {

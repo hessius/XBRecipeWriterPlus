@@ -8,7 +8,7 @@ import {renderWithProviders} from "@/test-utils/render";
 function summary(overrides: Partial<BrewSummary> = {}): BrewSummary {
     return {
         times: 0, lastAt: 0, avgRating: 0, rated: 0,
-        timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0,
+        timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0, abandoned: 0, lastDial: null,
         ...overrides
     };
 }
@@ -116,5 +116,24 @@ describe("the star on a recipe", () => {
 
         expect(screen.getByTestId("history-rating"))
             .toHaveTextContent("5.0 from 1 rating");
+    });
+});
+
+describe("the grind dial", () => {
+    it("reports where the dial was after the last brew that took a reading", async () => {
+        // The point of the feature: recall at the next brew, not archaeology
+        // in a brew record.
+        await renderWithProviders(
+            <HistorySection summary={summary({times: 3, lastDial: 47})}/>
+        );
+
+        expect(screen.getByTestId("history-dial"))
+            .toHaveTextContent("Machine dial was at 47 after the last brew.");
+    });
+
+    it("says nothing when no brew of this recipe ever read a dial", async () => {
+        await renderWithProviders(<HistorySection summary={summary({times: 3})}/>);
+
+        expect(screen.queryByTestId("history-dial")).toBeNull();
     });
 });

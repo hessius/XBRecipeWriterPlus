@@ -243,6 +243,36 @@ export type BrewRecord = {
     grinderRpm?: number;
     /** `recipe.grinder`. Whether the xBloom ground the coffee itself. */
     grinderUsed?: boolean;
+    // What the machine's own grind dial read, which is a different fact from
+    // the three above and must not share a field with them. Those say what the
+    // recipe asked for and are knowable exactly. These are observations, and
+    // weaker ones: the dial proves where the dial was, not how the coffee was
+    // ground. Every surface that shows them has to say so.
+    /**
+     * The dial as it read when the recipe was sent, or absent.
+     *
+     * Free: `Machine.brew` refreshes the vitals for the tank check before it
+     * sends a byte, so this reading is already in hand. On its own it is not
+     * evidence of anything, because turning the dial mid-brew is an override
+     * and is exactly how a recipe gets nudged to suit a bean. Kept so that a
+     * difference from `dialAfter` is a positive observation that the dial was
+     * moved for this brew.
+     */
+    dialBefore?: number;
+    /**
+     * The dial as it read once the brew had finished, or absent.
+     *
+     * The reading that answers the question, because the dial is an override
+     * the app is never told about: the position before the grind is the
+     * setting that was about to be overridden, not the one used.
+     *
+     * Written **only when the machine answered the request**. A refresh that
+     * goes unanswered leaves `machine.info` holding the pre-brew value, and
+     * storing that as the post-brew reading would be the very number this
+     * exists to avoid recording, indistinguishable from a real one. Absent
+     * therefore means "not confirmed", and no surface may present it as fact.
+     */
+    dialAfter?: number;
     /** The pod's coffee, when the recipe came from an xPod import (spec §2.1.1). */
     coffee?: PodCoffee;
     // What the coffee was, as the user described it.

@@ -61,6 +61,17 @@ export type BrewSummary = {
     meanCupMl: number;
     /** Rows for this recipe that did not count as cups. */
     abandoned: number;
+    /**
+     * The machine's dial at the most recent brew that got a confirmed
+     * reading, or null when no brew of this recipe ever did.
+     *
+     * Here rather than on the brew record because the problem it answers is
+     * recall at the next brew, not archaeology: the setting has to appear
+     * where the user is about to make this recipe again. It is worth most on
+     * a grinder-off recipe, where the app otherwise knows nothing about how
+     * the coffee was ground.
+     */
+    lastDial: number | null;
 };
 
 /** One value the library's brews carry, and how many recipes carry it. */
@@ -111,6 +122,10 @@ type BrewRow = {
     grinderRpm: number;
     /** 0 on rows written before it and when recorded as false; grindSize > 0 marks recordedness. */
     grinderUsed: number;
+    /** The machine's dial when the recipe went out. 0 when it never said. */
+    dialBefore: number;
+    /** The machine's dial after the brew, and 0 when the reading was not confirmed. */
+    dialAfter: number;
     /** JSON, the pod coffee as it stood. `''` on rows written before it. */
     coffee: string;
     /** The user's own description of the coffee. `''` when they have not said. */
@@ -170,6 +185,8 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 grindSize INTEGER NOT NULL DEFAULT 0,
                 grinderRpm INTEGER NOT NULL DEFAULT 0,
                 grinderUsed INTEGER NOT NULL DEFAULT 0,
+                dialBefore INTEGER NOT NULL DEFAULT 0,
+                dialAfter INTEGER NOT NULL DEFAULT 0,
                 coffee TEXT NOT NULL DEFAULT '',
                 origin TEXT NOT NULL DEFAULT '',
                 roast TEXT NOT NULL DEFAULT '',
@@ -209,6 +226,18 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
         db.execSync("ALTER TABLE brews ADD COLUMN drawdownAt INTEGER NOT NULL DEFAULT 0;");
     } catch {
         // Already there.
+    }
+    // Rows written before the dial was read keep the 0 default, which reads
+    // as "nobody asked" -- the same thing an unconfirmed reading records,
+    // because a reading the machine did not confirm is not a reading.
+    for (const column of ["dialBefore", "dialAfter"]) {
+        try {
+            db.execSync(
+                `ALTER TABLE brews ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0;`
+            );
+        } catch {
+            // Already there.
+        }
     }
     // Rows written before `stalls` existed get an empty list, which reads
     // as "nothing recorded" rather than "nothing happened" -- a brew from
@@ -417,10 +446,11 @@ class BrewDatabase {
                                 endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                 heldSeconds, stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched, dose, ratio,
-                                grindSize, grinderRpm, grinderUsed, coffee,
+                                grindSize, grinderRpm, grinderUsed,
+                                dialBefore, dialAfter, coffee,
                                 origin, roast, process, fermentation, sentAt, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0, record.drawdownAt ?? 0,
@@ -442,6 +472,8 @@ class BrewDatabase {
                 record.grindSize ?? 0,
                 record.grinderRpm ?? 0,
                 record.grinderUsed === true ? 1 : 0,
+                record.dialBefore ?? 0,
+                record.dialAfter ?? 0,
                 record.coffee ? JSON.stringify(record.coffee) : "",
                 originForColumn(record.origin),
                 isRoast(record.roast) ? record.roast : "",
@@ -539,7 +571,7 @@ class BrewDatabase {
             return {
                 times: 0, lastAt: 0, avgRating: 0, rated: 0,
                 timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0,
-                abandoned: 0
+                abandoned: 0, lastDial: null
             };
         }
         // SQL means over empty populations are NULL. The app's summary
@@ -554,7 +586,12 @@ class BrewDatabase {
             meanBrewSeconds: row.meanBrewSeconds ?? 0,
             measured: row.measured,
             meanCupMl: row.meanCupMl ?? 0,
-            abandoned: row.abandoned
+            abandoned: row.abandoned,
+            // A second small query rather than a scalar subquery spliced into
+            // the aggregate above: two SQL answers to one question is how the
+            // two existing aggregates came to disagree about what counts as a
+            // brew, and `lastDialFor` is already the place that knows.
+            lastDial: this.lastDialFor(recipeUuid)
         };
     }
 
@@ -823,6 +860,43 @@ class BrewDatabase {
      * installed, understood the envelope, or was cancelled out of. Every piece
      * of copy built on this is phrased as what this app did.
      */
+    /**
+     * Keep the grind dial reading taken after a brew finished.
+     *
+     * An update rather than part of the insert, because the reading is a BLE
+     * round trip and the record is written synchronously on the terminal
+     * phase. Writing the row first means a reading that never arrives leaves
+     * the field absent instead of holding up the end of a brew.
+     *
+     * Only ever called with a reading the machine confirmed; see
+     * `readDialAfterBrew`, which is where that rule is enforced.
+     */
+    public recordDialAfter(id: string, dial: number): void {
+        if (dial <= 0) return;
+        this.db.runSync("UPDATE brews SET dialAfter = ? WHERE id = ?;", [dial, id]);
+    }
+
+    /**
+     * The dial reading from this recipe's most recent brew that took one.
+     *
+     * The answer to the question the feature was asked for: not archaeology in
+     * a brew record, but "what was the grinder set to last time I made this",
+     * available where the user is about to make it again. Null when no brew of
+     * this recipe ever got a confirmed reading.
+     *
+     * Ordered by when the brew ended, so the most recent answer wins even if
+     * an older brew was imported afterwards by a restore.
+     */
+    public lastDialFor(recipeUuid: string): number | null {
+        const row = this.db.getFirstSync<{dialAfter: number}>(
+            `SELECT dialAfter FROM brews
+              WHERE recipeUuid = ? AND dialAfter > 0
+              ORDER BY endedAt DESC LIMIT 1;`,
+            [recipeUuid]
+        );
+        return row === null || row === undefined ? null : row.dialAfter;
+    }
+
     public markSent(id: string, at: number): void {
         this.db.runSync("UPDATE brews SET sentAt = ? WHERE id = ?;", [at, id]);
     }
@@ -1039,6 +1113,10 @@ function hydrate(row: BrewRow): StoredBrew {
         // The boolean's 0 default is indistinguishable from a recorded false.
         // A recorded grind size is the marker that this row knew the column.
         ...(row.grindSize > 0 ? {grinderUsed: row.grinderUsed === 1} : {}),
+        // 0 is "nobody asked" for both, which is also what an unconfirmed
+        // post-brew reading stores, so neither can come back as a claim.
+        ...((row.dialBefore ?? 0) > 0 ? {dialBefore: row.dialBefore} : {}),
+        ...((row.dialAfter ?? 0) > 0 ? {dialAfter: row.dialAfter} : {}),
         ...(coffee !== null ? {coffee} : {}),
         ...(row.origin !== "" ? {origin: row.origin} : {}),
         ...(isRoast(row.roast) ? {roast: row.roast} : {}),

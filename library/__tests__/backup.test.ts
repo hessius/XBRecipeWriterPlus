@@ -940,6 +940,32 @@ describe("brew history through a backup", () => {
         expect(brew?.coffee).toMatchObject({name: "Ethiopia Guji"});
     });
 
+    it("carries both dial readings through a round trip", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1", {
+            dialBefore: 47,
+            dialAfter: 52
+        }))));
+
+        expect(brew?.dialBefore).toBe(47);
+        expect(brew?.dialAfter).toBe(52);
+    });
+
+    it("refuses a dial reading that is not a number", () => {
+        // A restored record's next stop is a surface that reports it as an
+        // observation of the machine, so a string here would be presented as
+        // a reading the machine gave.
+        expect(reviveBrew({
+            ...JSON.parse(JSON.stringify(brewNamed("b1"))), dialAfter: "52"
+        })).toBeNull();
+    });
+
+    it("leaves a brew that took no dial reading silent about it", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1"))));
+
+        expect(brew?.dialBefore).toBeUndefined();
+        expect(brew?.dialAfter).toBeUndefined();
+    });
+
     it("leaves a backup made before the export silent about the snapshot", () => {
         const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1"))));
 

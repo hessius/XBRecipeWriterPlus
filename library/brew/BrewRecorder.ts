@@ -24,6 +24,19 @@ export type RecorderMachine = {
      * at the one moment — the end of a brew — where a crash costs the record.
      */
     frameLogSince?: (from: number) => string;
+    /**
+     * The machine's own grind dial, as its last vitals reported it.
+     *
+     * Read rather than passed, because the reading the recorder wants is the
+     * one taken when the recipe went out -- `Machine.brew` refreshes the
+     * vitals for the tank check immediately before sending -- and the recorder
+     * is constructed long before that, when `info` may still be minutes old.
+     *
+     * Optional so the narrow test literals above stay valid, and so a brew run
+     * against a machine that never said is a brew with no reading rather than
+     * a crash.
+     */
+    readDial?: () => number | null;
 };
 
 export type RecorderOptions = {
@@ -93,6 +106,17 @@ export default class BrewRecorder {
      * bed that has dammed, not a brew that has finished.
      */
     private machineReady = false;
+
+    /**
+     * The dial as it read when this brew was sent, or 0 before it was taken.
+     *
+     * Taken on the first phase past `waking`, which is the first moment the
+     * vitals are known to be this brew's: `Machine.brew` asks how the machine
+     * is doing while the phase is still `waking`, and sends only once it has
+     * an answer. Taken once, so a later phase cannot overwrite it with a
+     * reading from after the dial was moved.
+     */
+    private dialBefore = 0;
 
     constructor(options: RecorderOptions) {
         this.options = options;
@@ -182,6 +206,21 @@ export default class BrewRecorder {
         this.push(parsed.grams);
     }
 
+    /**
+     * Take the dial reading for this brew, once, at the first phase past
+     * `waking`.
+     *
+     * `idle` and `waking` are excluded because the vitals are not yet this
+     * brew's: `idle` is whatever the machine was left in, and `waking` is the
+     * request still in flight.
+     */
+    private noteDial(phase: BrewPhase): void {
+        if (this.dialBefore !== 0) return;
+        if (phase.name === "idle" || phase.name === "waking") return;
+        const dial = this.options.machine.readDial?.() ?? null;
+        if (dial !== null && dial > 0) this.dialBefore = dial;
+    }
+
     /** Append one sample at the current instant, cup and pour carried through. */
     private push(water: number): void {
         this.collected.push({
@@ -206,6 +245,7 @@ export default class BrewRecorder {
     }
 
     private observe(phase: BrewPhase): void {
+        this.noteDial(phase);
         if (phase.name === "pouring") {
             this.pour = phase.pour;
             this.pours = phase.pours;
@@ -405,6 +445,11 @@ export default class BrewRecorder {
             // unless the grind size is in the card's band anyway. Kept aligned
             // with BrewDatabase.test's recorder omission round-trip.
             ...(recipe.grindSize > 0 ? {grinderUsed: recipe.grinder} : {}),
+            // The dial as it read when the recipe went out. Not evidence on
+            // its own -- see the field -- and absent when the machine never
+            // said, which is what a narrow test machine and a machine that
+            // never answered both look like.
+            ...(this.dialBefore > 0 ? {dialBefore: this.dialBefore} : {}),
             ...(recipe.coffee === undefined ? {} : {coffee: {...recipe.coffee}}),
             // Spread rather than assigned, so a recipe with no bypass leaves
             // the key off the row entirely and reads back as an old record.

@@ -1067,6 +1067,19 @@ describe("the drawdown on the record screen", () => {
         expect(screen.getByText("DRAWDOWN 0:18")).toBeTruthy();
     });
 
+    it("reports the machine's dial as an observation of the dial", async () => {
+        await renderRecord({...record, dialBefore: 52, dialAfter: 47});
+        expect(screen.getByTestId("figures-dial"))
+            .toHaveTextContent("MACHINE DIAL 47, MOVED FROM 52");
+    });
+
+    it("says nothing about a dial the machine never confirmed", async () => {
+        // Only the pre-brew reading, which is the setting that was about to
+        // be overridden and proves nothing on its own.
+        await renderRecord({...record, dialBefore: 52});
+        expect(screen.queryByTestId("figures-dial")).toBeNull();
+    });
+
     it("says nothing for a brew that never drew down", async () => {
         // A record from before the boundary was kept, and a brew that was
         // cancelled, both store 0. Neither is a drawdown of no seconds.
@@ -1124,5 +1137,95 @@ describe("a brew the app did not watch", () => {
 
         expect(screen.queryByText("Save as image")).toBeNull();
         expect(screen.queryByText("Export the data")).toBeNull();
+    });
+});
+
+describe("brew record's story card", () => {
+    const lookup: RecipeLookup = {getRecipe: jest.fn(() => twoPours)};
+
+    beforeEach(() => {
+        mockParams = {id: "brew-1"};
+        mockOpened = {
+            record:  makeBrewRecordFixture({
+                rating: 4,
+                origin: "Huila",
+                roast:  "Medium",
+                tags:   ["filter", "washed"]
+            }),
+            samples: [
+                {at: 0,      water: 0,   cup: 0,   pour: 1},
+                {at: 60_000, water: 250, cup: 244, pour: 2}
+            ]
+        };
+    });
+
+    /** Give the sheet a stage to draw in; nothing is drawn until it has one. */
+    async function openCard(): Promise<void> {
+        // Pressed once, not in a retry loop: the sheet hides the screen behind
+        // it from a screen reader, so the button this press found is gone by
+        // the time a second attempt would look for it.
+        fireEvent.press(screen.getByLabelText("Make a story card to share"));
+        await waitFor(() => expect(screen.getByTestId("story-stage")).toBeTruthy());
+        fireEvent(screen.getByTestId("story-stage"), "layout", {
+            nativeEvent: {layout: {width: 360, height: 700, x: 0, y: 0}}
+        });
+        await waitFor(() => expect(screen.getByTestId("brew-story-card")).toBeTruthy());
+    }
+
+    it("offers a story card on a brew that was watched", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        expect(screen.getByLabelText("Make a story card to share")).toBeTruthy();
+    });
+
+    it("offers no story card for a brew nobody watched", async () => {
+        mockOpened = {
+            record:  makeBrewRecordFixture({watched: false, hasStream: false}),
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        expect(screen.queryByLabelText("Make a story card to share")).toBeNull();
+    });
+
+    it("shows the card before it is shared", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+        expect(screen.getByTestId("brew-story-card")).toBeTruthy();
+    });
+
+    it("builds the card from the shared summary rather than a second drawing",
+        async () => {
+            await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+            await openCard();
+            const card = within(screen.getByTestId("brew-story-card"));
+            expect(card.getByTestId("story-capture")).toBeTruthy();
+            expect(card.getByTestId("ladder")).toBeTruthy();
+        });
+
+    it("leaves the in-place capture alone, so the export still photographs the screen",
+        async () => {
+            await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+            await openCard();
+            // Two summaries are mounted, and exactly one of them is the node
+            // the existing export captures. Hidden elements included: the
+            // sheet has taken the screen behind it out of the tree a query
+            // walks by default, and the capture target is down there.
+            expect(screen.getAllByTestId("brew-capture", {includeHiddenElements: true}))
+                .toHaveLength(1);
+        });
+
+    it("carries the coffee, the rating and the tags", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+        const card = within(screen.getByTestId("brew-story-card"));
+        expect(card.getByTestId("story-coffee")).toHaveTextContent(/Huila/);
+        expect(card.getByTestId("story-rating")).toBeTruthy();
+        expect(card.getByTestId("story-tags")).toHaveTextContent(/filter/);
+    });
+
+    it("hides the screen from a screen reader while the card is up", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+        expect(screen.getByTestId("brew-record-content", {includeHiddenElements: true})
+            .props.accessibilityElementsHidden).toBe(true);
     });
 });
