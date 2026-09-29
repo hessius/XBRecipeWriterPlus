@@ -215,7 +215,6 @@ describe("BrewRecorder", () => {
 
         const [{record, samples}] = records;
         const drawdownAt = record.drawdownAt;
-        expect(drawdownAt).toBeDefined();
         if (drawdownAt === undefined) throw new Error("expected a drawdown boundary");
         expect(drawdownAt).toBeGreaterThan(0);
         const atBoundary = samples
@@ -226,7 +225,11 @@ describe("BrewRecorder", () => {
             )
             .pop();
         expect(atBoundary).toBeDefined();
-        expect(record.cupAtDrawdown).toBeCloseTo(atBoundary!.cup, 6);
+        expect(record.cupAtDrawdown).toBe(atBoundary!.cup);
+        // Named as well as derived. The scan above uses drawdownAt as its own
+        // input, so on its own it would pin consistency rather than the answer:
+        // 80 is the cup at the boundary, and 190 is the cup at the end.
+        expect(record.cupAtDrawdown).toBe(80);
     });
 
     it("leaves the drawdown unmeasured on a brew that never poured", () => {
