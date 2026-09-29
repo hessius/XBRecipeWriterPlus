@@ -102,6 +102,48 @@ export function livePoints(samples: BrewSample[], of: "water" | "cup"): Point[] 
 }
 
 /**
+ * The pieces a trace's horizontal axis is built from.
+ *
+ * `BrewTrace` needs the parts as well as the total: the bypass box is drawn
+ * at `bypassFrom` and is `bypassWide` seconds across, and the overrun label
+ * reads off `ranTo`. Returning them from here rather than letting the
+ * component recompute them keeps the box and the axis it is measured against
+ * from drifting apart if either is ever retuned.
+ */
+export type TraceTimeParts = {
+    ranTo: number;
+    bypassMl: number;
+    bypassWide: number;
+    bypassFrom: number;
+    maxT: number;
+};
+
+export function traceTimeParts(
+    plannedSeconds: number,
+    samples: BrewSample[],
+    bypass?: {volume: number; startedAt: number | null}
+): TraceTimeParts {
+    const ranTo = samples.length > 0 ? samples[samples.length - 1].at / 1000 : 0;
+    const bypassMl = bypass === undefined ? 0 : Math.max(bypass.volume, 0);
+    const bypassWide = bypassSeconds(bypassMl);
+    /*
+     * With no real start time the box tracks the later of the plan and now, so
+     * it visibly slides right while the machine waits for the dripper instead
+     * of sitting at a plan time that has already gone past.
+     */
+    const bypassFrom = bypass === undefined ? 0
+        : bypass.startedAt !== null ? bypass.startedAt
+        : Math.max(plannedSeconds, ranTo);
+    return {
+        ranTo,
+        bypassMl,
+        bypassWide,
+        bypassFrom,
+        maxT: Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
+    };
+}
+
+/**
  * The real-seconds extent a trace uses on its horizontal axis.
  *
  * Shared by the volume trace and the finished rate chart. The rate chart sits
@@ -114,13 +156,7 @@ export function traceTimeExtent(
     samples: BrewSample[],
     bypass?: {volume: number; startedAt: number | null}
 ): number {
-    const ranTo = samples.length > 0 ? samples[samples.length - 1].at / 1000 : 0;
-    const bypassMl = bypass === undefined ? 0 : Math.max(bypass.volume, 0);
-    const bypassWide = bypassSeconds(bypassMl);
-    const bypassFrom = bypass === undefined ? 0
-        : bypass.startedAt !== null ? bypass.startedAt
-        : Math.max(plannedSeconds, ranTo);
-    return Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide);
+    return traceTimeParts(plannedSeconds, samples, bypass).maxT;
 }
 
 /**

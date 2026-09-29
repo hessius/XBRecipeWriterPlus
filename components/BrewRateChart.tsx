@@ -23,6 +23,15 @@ const MIN_AXIS = 4;
  * live data uses 100 ms frames. A 150 ms allowance admits normal timer jitter,
  * while a single omitted rate point at the ordinary cadence produces a
  * 200 ms hole and splits the path.
+ *
+ * `BrewSample.at` is a JS-side arrival time rather than a firmware timestamp,
+ * so it measures bridge delivery as much as the scale. A one-off jitter split
+ * is invisible: a 200 ms hole in a 100 s brew is under a pixel. A sustained
+ * sparse stretch, from a poor link, isolates every point, and a run of one
+ * point has no line to draw, so that stretch draws nothing. Drawing nothing is
+ * the honest reading of a stream that arrived too thin to say a rate, but it
+ * is a cliff rather than a fade, and it is worth knowing about before tuning
+ * this number.
  */
 export const RATE_ADJACENT_MS = 150;
 

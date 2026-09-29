@@ -61,6 +61,7 @@ describe("BrewRateChart", () => {
             <BrewRateChart series={series} accent={ACCENT} width={WIDTH} maxT={5} />
         );
 
+        expect(getByTestId("rate-chart")).toBeTruthy();
         expect(getByTestId("rate-chart-cup")).toBeTruthy();
         expect(getByTestId("rate-chart-water")).toBeTruthy();
     });

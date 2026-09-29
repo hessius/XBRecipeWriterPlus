@@ -8,8 +8,8 @@ import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotM
 import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
-        traceTimeExtent,
+import {livePoints, pathLength, planPoints, stageSpans, toPath,
+        traceTimeParts,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
@@ -207,18 +207,11 @@ export default function BrewTrace({
     const water = livePoints(samples, "water");
     const cup = livePoints(samples, "cup");
 
-    const ranTo = water.length > 0 ? water[water.length - 1].t : 0;
+    const times = traceTimeParts(plannedSeconds, samples, bypass);
+    const {ranTo, bypassMl, bypassWide, bypassFrom} = times;
     // The plan's final water level: where the target line ends, and the floor
     // the bypass box is stacked on.
     const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
-    const bypassMl = bypass === undefined ? 0 : Math.max(bypass.volume, 0);
-    const bypassWide = bypassSeconds(bypassMl);
-    // With no real start time the box tracks the later of the plan and now, so
-    // it visibly slides right while the machine waits for the dripper instead
-    // of sitting at a plan time that has already gone past.
-    const bypassFrom = bypass === undefined ? 0
-        : bypass.startedAt !== null ? bypass.startedAt
-        : Math.max(plannedSeconds, ranTo);
     // In compact mode the SVG fills the full height; otherwise the legend row
     // and the overrun row take theirs first.
     const svgHeight = compact
@@ -227,7 +220,7 @@ export default function BrewTrace({
     const box: Box = {
         width,
         height: svgHeight,
-        maxT: axis?.maxT ?? traceTimeExtent(plannedSeconds, samples, bypass),
+        maxT: axis?.maxT ?? times.maxT,
         maxV: axis?.maxV ?? Math.max(
             planTop,
             water.length > 0 ? water[water.length - 1].v : 0,
