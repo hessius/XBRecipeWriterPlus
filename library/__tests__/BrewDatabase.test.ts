@@ -127,6 +127,19 @@ jest.mock("expo-sqlite", () => ({
                     throw new Error(`Unexpected SQL: ${source}`);
                 }
             },
+            getFirstSync: (source: string, params: (string | number)[] = []) => {
+                // The one single-row query this mock is taught. Matched on its
+                // literal shape, like every branch below: a mock that answered
+                // anything would let a wrong query pass for a right one.
+                if (/SELECT dialAfter FROM brews/i.test(source)) {
+                    const mine = brews
+                        .filter((b) => b.recipeUuid === params[0]
+                            && (b.dialAfter as number) > 0)
+                        .sort((a, b) => (b.endedAt as number) - (a.endedAt as number));
+                    return mine[0] ?? null;
+                }
+                throw new Error(`Unexpected SQL: ${source}`);
+            },
             getAllSync: (source: string, params: (string | number)[] = []) => {
                 if (/FROM brew_samples/i.test(source)) {
                     sampleReads += 1;
@@ -325,7 +338,7 @@ describe("BrewDatabase", () => {
             .toEqual({
                 times: 2, lastAt: 9_000, avgRating: 0, rated: 0,
                 timed: 2, meanBrewSeconds: 195, measured: 2, meanCupMl: 244,
-                abandoned: 0
+                abandoned: 0, lastDial: null
             });
     });
 
@@ -339,7 +352,7 @@ describe("BrewDatabase", () => {
             .toEqual({
                 times: 0, lastAt: 0, avgRating: 0, rated: 0,
                 timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0,
-                abandoned: 0
+                abandoned: 0, lastDial: null
             });
     });
 
@@ -372,6 +385,62 @@ describe("BrewDatabase", () => {
         const back = db.get("brew-settled")!;
         expect(back.drawdownAt).toBe(180_000);
         expect(drawdownSeconds(back)).toBe(15);
+    });
+
+    it("keeps both dial readings through the database", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "brew-dial", dialBefore: 47, dialAfter: 52}), []);
+        const back = db.get("brew-dial")!;
+        expect(back.dialBefore).toBe(47);
+        expect(back.dialAfter).toBe(52);
+    });
+
+    it("reads back no dial at all for a brew that took no reading", () => {
+        // 0 means "nobody asked", and an unconfirmed reading stores the same
+        // 0. Neither may come back as a number a surface could present.
+        const db = realBrewDatabase();
+        db.insert(record({id: "brew-unasked"}), []);
+        const back = db.get("brew-unasked")!;
+        expect(back).not.toHaveProperty("dialBefore");
+        expect(back).not.toHaveProperty("dialAfter");
+    });
+
+    it("adds the post-brew reading to a row already written", () => {
+        // The reading is a BLE round trip and arrives after the insert, which
+        // is why it is an update rather than a column on the insert.
+        const db = realBrewDatabase();
+        db.insert(record({id: "brew-late", dialBefore: 47}), []);
+        db.recordDialAfter("brew-late", 52);
+        expect(db.get("brew-late")?.dialAfter).toBe(52);
+    });
+
+    it("refuses to write a dial of zero over a reading", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "brew-keep", dialAfter: 52}), []);
+        db.recordDialAfter("brew-keep", 0);
+        expect(db.get("brew-keep")?.dialAfter).toBe(52);
+    });
+
+    it("answers with the most recent confirmed dial for a recipe", () => {
+        // The recall aid: what was the grinder set to last time I made this.
+        const db = realBrewDatabase();
+        db.insert(record({id: "old", endedAt: 1_000, dialAfter: 40}), []);
+        db.insert(record({id: "new", endedAt: 2_000, dialAfter: 52}), []);
+        expect(db.lastDialFor("uuid-1")).toBe(52);
+    });
+
+    it("skips a brew whose reading was never confirmed", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "old", endedAt: 1_000, dialAfter: 40}), []);
+        db.insert(record({id: "new", endedAt: 2_000}), []);
+        expect(db.lastDialFor("uuid-1")).toBe(40);
+    });
+
+    it("answers with nothing for a recipe no brew ever read a dial for", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "plain"}), []);
+        expect(db.lastDialFor("uuid-1")).toBeNull();
+        expect(db.lastDialFor("nobody")).toBeNull();
     });
 
     it("restores null rather than the string 'null' for a clean brew", () => {
@@ -1199,7 +1268,7 @@ describe("what a recipe's history adds up to", () => {
         expect(db.summaryFor("uuid-1")).toMatchObject({
             times: 2, lastAt: 20_000, avgRating: 4.5, rated: 2,
             timed: 1, meanBrewSeconds: 10, measured: 1, meanCupMl: 200,
-            abandoned: 0
+            abandoned: 0, lastDial: null
         });
     });
 
@@ -1234,7 +1303,7 @@ describe("what a recipe's history adds up to", () => {
         expect(db.summaryFor("uuid-1")).toEqual({
             times: 0, lastAt: 0, avgRating: 0, rated: 0,
             timed: 0, meanBrewSeconds: 0, measured: 0, meanCupMl: 0,
-            abandoned: 0
+            abandoned: 0, lastDial: null
         });
     });
 

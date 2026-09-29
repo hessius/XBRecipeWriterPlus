@@ -29,6 +29,7 @@ import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {brewFigures} from "@/library/brew/brewFigures";
 import {drawdownSeconds, poursFromPlan} from "@/library/brew/BrewRecord";
+import {dialNote} from "@/library/brew/dialAfterBrew";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {plannedSeconds} from "@/library/brew/brewShape";
@@ -334,6 +335,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                             setSelectedIndex((was) => (was === index ? null : index))}
                         bypass={bypass}
                         drawdown={drawdownSeconds(record)}
+                        dial={dialNote(record)}
                         availableHeight={recordHeight}
                     />
                 </ViewShot>

@@ -68,6 +68,12 @@ type Props = {
      */
     drawdown?: number | null;
     /**
+     * What the machine's grind dial read, as a ready line from `dialNote`, or
+     * null when the record may not say. Null on the live screen: the reading
+     * is taken after the brew has ended.
+     */
+    dial?: string | null;
+    /**
      * The height the summary may draw in, from the screen's scroll viewport.
      *
      * Absent — or zero — keeps the frozen bands, which is what a caller that
@@ -91,7 +97,7 @@ export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
-    drawdown = null, availableHeight = 0
+    drawdown = null, dial = null, availableHeight = 0
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
@@ -168,6 +174,7 @@ export default function BrewSummary({
                 accent={accent}
                 bypass={bypass?.delivered}
                 drawdown={drawdown}
+                dial={dial}
             />
             </View>
             {/* Spaced by hand: the capture has no gap, so the trace and the

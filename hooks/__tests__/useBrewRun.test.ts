@@ -14,7 +14,9 @@ jest.mock("@/hooks/useBrew", () => ({
 declare global {
     var __brewer: Omit<ReturnType<typeof import("@/hooks/useBrew").useBrew>, "machine">
         & {machine: import("@/library/brew/BrewRecorder").RecorderMachine
-            & {phase: BrewPhase}};
+            & {phase: BrewPhase}
+            & {info?: {grindSize: number} | null;
+               askHowItIsDoing?: () => Promise<boolean>}};
 }
 
 function recipe(): Recipe {
@@ -30,6 +32,10 @@ function harness() {
     const notifyListeners: ((n: Notification) => void)[] = [];
     const phaseListeners: ((p: BrewPhase) => void)[] = [];
     const written: {record: BrewRecord; samples: BrewSample[]}[] = [];
+    const dials: [string, number][] = [];
+    // The machine answers by default, with a dial that has been turned since
+    // the recipe went out. A test that wants silence sets `answers` to false.
+    const vitals = {answers: true, asked: 0, grindSize: 52};
     global.__brewer = {
         phase: {name: "idle"} as BrewPhase,
         error: null,
@@ -40,6 +46,12 @@ function harness() {
         switchToProAndRetry: jest.fn(async () => {}),
         machine: {
             phase: {name: "idle"} as BrewPhase,
+            info: {get grindSize() { return vitals.grindSize; }},
+            askHowItIsDoing: async () => {
+                vitals.asked++;
+                return vitals.answers;
+            },
+            readDial: () => vitals.grindSize,
             onNotification: (l: (n: Notification) => void) => {
                 notifyListeners.push(l);
                 return () => {
@@ -67,8 +79,13 @@ function harness() {
             global.__brewer.machine.phase = p;
             [...phaseListeners].forEach((l) => l(p));
         }),
-        store: {insert: (record: BrewRecord, samples: BrewSample[]) =>
-            written.push({record, samples})}
+        vitals,
+        dials,
+        store: {
+            insert: (record: BrewRecord, samples: BrewSample[]) =>
+                written.push({record, samples}),
+            recordDialAfter: (id: string, dial: number) => dials.push([id, dial])
+        }
     };
 }
 
@@ -265,6 +282,45 @@ describe("useBrewRun", () => {
         // carry the brew, not just its name.
         expect(h.written[0].samples).toHaveLength(1);
         expect(h.written[0].samples[0].water).toBe(40);
+    });
+
+    it("reads the machine's dial after the brew and keeps it", async () => {
+        // The dial is an override the app is never told about, so the reading
+        // that answers the question is the one taken after the grind. The
+        // record is written first and this lands as an update to that row.
+        const h = harness();
+        await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "sending"});
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(40);
+        await h.setPhase({name: "done"});
+        await act(async () => {});
+        expect(h.dials).toEqual([[h.written[0].record.id, 52]]);
+    });
+
+    it("keeps no reading when the machine did not answer after the brew", async () => {
+        // `info` still holds the pre-brew value, which is the number the whole
+        // path exists to avoid recording.
+        const h = harness();
+        h.vitals.answers = false;
+        await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(40);
+        await h.setPhase({name: "done"});
+        await act(async () => {});
+        expect(h.written).toHaveLength(1);
+        expect(h.dials).toEqual([]);
+    });
+
+    it("does not beep a brew that never got past the grind", async () => {
+        const h = harness();
+        await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "sending"});
+        await h.setPhase({name: "cancelled"});
+        await act(async () => {});
+        expect(h.written).toHaveLength(1);
+        expect(h.vitals.asked).toBe(0);
+        expect(h.dials).toEqual([]);
     });
 
     it("writes nothing for a brew that was refused before it began", async () => {

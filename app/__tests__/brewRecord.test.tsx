@@ -1067,6 +1067,19 @@ describe("the drawdown on the record screen", () => {
         expect(screen.getByText("DRAWDOWN 0:18")).toBeTruthy();
     });
 
+    it("reports the machine's dial as an observation of the dial", async () => {
+        await renderRecord({...record, dialBefore: 52, dialAfter: 47});
+        expect(screen.getByTestId("figures-dial"))
+            .toHaveTextContent("MACHINE DIAL 47, MOVED FROM 52");
+    });
+
+    it("says nothing about a dial the machine never confirmed", async () => {
+        // Only the pre-brew reading, which is the setting that was about to
+        // be overridden and proves nothing on its own.
+        await renderRecord({...record, dialBefore: 52});
+        expect(screen.queryByTestId("figures-dial")).toBeNull();
+    });
+
     it("says nothing for a brew that never drew down", async () => {
         // A record from before the boundary was kept, and a brew that was
         // cancelled, both store 0. Neither is a drawdown of no seconds.

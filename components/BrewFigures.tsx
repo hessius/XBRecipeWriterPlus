@@ -30,6 +30,16 @@ type Props = {
      * which of the two it is.
      */
     drawdown?: number | null;
+    /**
+     * What the machine's grind dial read, as a ready line, or null when there
+     * is nothing the record may say.
+     *
+     * A line rather than a number because the wording is the honesty rule:
+     * `dialNote` owns both, so one screen cannot start claiming the coffee
+     * was ground at a setting while another reports where a dial was. Null on
+     * the live screen, where the reading is taken after the brew has ended.
+     */
+    dial?: string | null;
 };
 
 function Figure({label, value, color, badge}: {
@@ -58,7 +68,7 @@ function Figure({label, value, color, badge}: {
  * a figure this size that changes every 100 ms cannot be read at all.
  */
 export default function BrewFigures(
-    {water, cup, seconds, accent, bypass, drawdown = null}: Props
+    {water, cup, seconds, accent, bypass, drawdown = null, dial = null}: Props
 ) {
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
         <XStack testID="figures-bypass"
@@ -72,7 +82,7 @@ export default function BrewFigures(
     );
 
     return (
-<YStack gap="$1.5">
+        <YStack gap="$1.5">
             <XStack gap="$3">
                 <Figure label="WATER" value={String(Math.round(water))} color={accent}
                         badge={badge} />
@@ -89,5 +99,12 @@ export default function BrewFigures(
                     {`DRAWDOWN ${formatBrewClock(drawdown)}`}
                 </DotMatrixText>
             )}
-        </YStack>    );
+            {dial !== null && (
+                <DotMatrixText testID="figures-dial" fontSize={10} weight="bold"
+                               letterSpacing={1.6} color={palette.dim}>
+                    {dial}
+                </DotMatrixText>
+            )}
+        </YStack>
+    );
 }

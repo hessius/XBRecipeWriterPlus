@@ -448,6 +448,18 @@ export default class Machine {
     }
 
     /**
+     * The grind dial's position as the last vitals reported it, or null.
+     *
+     * A method rather than a field read, so a recorder can hold the machine
+     * and take the reading at the moment it wants one: `info` is replaced
+     * whenever the machine answers, and the whole point of the post-brew
+     * reading is that *when* it was taken is part of what it means.
+     */
+    readDial(): number | null {
+        return this.info?.grindSize ?? null;
+    }
+
+    /**
      * Ask the machine to describe itself until it does, or give up.
      *
      * Does not throw: a machine that never introduces itself is still worth

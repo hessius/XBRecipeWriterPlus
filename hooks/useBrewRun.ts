@@ -6,6 +6,7 @@ import {bypassRungState, type BypassView} from "@/library/brew/bypassState";
 import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import BrewRecorder from "@/library/brew/BrewRecorder";
+import {readDialAfterBrew} from "@/library/brew/dialAfterBrew";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {stageOriginMl, stageWaterFrom, stalledNow, stallsInStage, type Stall}
     from "@/library/brew/stalls";
@@ -15,6 +16,12 @@ import type Recipe from "@/library/Recipe";
 /** The part of `BrewDatabase` a run writes to. Injected, so tests need no SQLite. */
 export type BrewStore = {
     insert: (record: BrewRecord, samples: BrewSample[], frames?: string) => void;
+    /**
+     * Optional so a test store stays a two-line literal. A store without it is
+     * a run whose dial reading has nowhere to go, which is the same outcome as
+     * a machine that never answered.
+     */
+    recordDialAfter?: (id: string, dial: number) => void;
 };
 
 /** Four times a second: smooth for a four-minute line, cheap for layout. */
@@ -115,7 +122,21 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
         const active = new BrewRecorder({
             machine,
             recipe: started,
-            onRecord: (record, taken, frames) => database.current?.insert(record, taken, frames)
+            onRecord: (record, taken, frames) => {
+                database.current?.insert(record, taken, frames);
+                // After the insert, and not awaited. The reading is a BLE
+                // round trip that beeps, and the brew is over: holding the
+                // record back for it would delay the one thing that must not
+                // be lost for the sake of the one thing that may be.
+                const store = database.current;
+                if (store?.recordDialAfter === undefined) return;
+                const save = store.recordDialAfter.bind(store);
+                void readDialAfterBrew(machine, record, save).catch(() => {
+                    // A machine that will not answer is not an error. The
+                    // record simply has no post-brew reading, which is what
+                    // its absence already means.
+                });
+            }
         });
         recorder.current = active;
         active.start();

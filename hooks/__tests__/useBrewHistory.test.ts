@@ -94,7 +94,9 @@ function ratingStore(seed: BrewRecord[] = []) {
                 meanBrewSeconds: 0,
                 measured: 0,
                 meanCupMl: 0,
-                abandoned: mine.filter((r) => !countsAsBrewed(r)).length
+                abandoned: mine.filter((r) => !countsAsBrewed(r)).length,
+                lastDial: mine.map((r) => r.dialAfter ?? 0)
+                    .filter((d) => d > 0).at(-1) ?? null
             };
         },
         brewOn: (uuid: string, at: number) => {
