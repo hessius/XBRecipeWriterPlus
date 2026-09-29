@@ -252,19 +252,21 @@ export type BrewRecord = {
      * The dial as it read when the recipe was sent, or absent.
      *
      * Free: `Machine.brew` refreshes the vitals for the tank check before it
-     * sends a byte, so this reading is already in hand. On its own it is not
-     * evidence of anything, because turning the dial mid-brew is an override
-     * and is exactly how a recipe gets nudged to suit a bean. Kept so that a
-     * difference from `dialAfter` is a positive observation that the dial was
-     * moved for this brew.
+     * sends a byte, so this reading is already in hand. On its own it cannot
+     * be presented as fact: the dial is set by hand in the moments before a
+     * brew, and this reading is taken at the moment the app sends, which can
+     * be before the machine has caught up. Kept so that a difference from
+     * `dialAfter` is a positive observation that the dial was turned for this
+     * brew rather than left where the last one put it.
      */
     dialBefore?: number;
     /**
      * The dial as it read once the brew had finished, or absent.
      *
-     * The reading that answers the question, because the dial is an override
-     * the app is never told about: the position before the grind is the
-     * setting that was about to be overridden, not the one used.
+     * The reading that answers the question. The dial cannot be moved during
+     * a brew, so by the time one has ended the machine has certainly settled
+     * on the position it ground at, where the pre-send reading may have been
+     * taken a moment too early.
      *
      * Written **only when the machine answered the request**. A refresh that
      * goes unanswered leaves `machine.info` holding the pre-brew value, and
