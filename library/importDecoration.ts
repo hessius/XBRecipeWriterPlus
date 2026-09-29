@@ -1,5 +1,5 @@
 import Recipe, {type RecipeSource} from "@/library/Recipe";
-import {isFermentation, isProcess, isRoast} from "@/library/brew/beanTags";
+import {fermentationFrom, processFrom, roastFrom} from "@/library/brew/beanTags";
 import type {PodCoffee} from "@/library/podCoffee";
 
 /**
@@ -19,9 +19,16 @@ export type ImportDecoration = {
 /**
  * Tags worth deriving from a coffee.
  *
- * Only the three closed vocabularies, and only on an exact match. A miss is
- * left unset rather than invented, which is the rule those predicates already
- * enforce everywhere else.
+ * Only the three closed vocabularies, and the tag is always the app's own
+ * spelling of the term rather than the sender's. Case, separators and the
+ * order of a compound level are all folded away first, so a coffee sent as
+ * "dark medium" groups with one sent as `Medium-Dark` instead of quietly
+ * sitting in a shelf of one. What the tag cannot do is guess: a value naming
+ * no member is left untagged, which is the rule `roastFrom` enforces.
+ *
+ * The bean record itself keeps the sender's wording. That copy is on its way
+ * to Beanconqueror and is what the roaster wrote; only the tag, which exists
+ * to group, is normalised.
  *
  * Roaster, origin, farm and the rest are deliberately not tagged, per #159. A
  * tag is for grouping recipes, and a tag list that mirrors the bean record is
@@ -30,15 +37,12 @@ export type ImportDecoration = {
  */
 function tagsFrom(coffee: PodCoffee): string[] {
     const tags: string[] = [];
-    if (coffee.roast !== undefined && isRoast(coffee.roast)) {
-        tags.push(coffee.roast);
-    }
-    if (coffee.processing !== undefined && isProcess(coffee.processing)) {
-        tags.push(coffee.processing);
-    }
-    if (coffee.fermentation !== undefined && isFermentation(coffee.fermentation)) {
-        tags.push(coffee.fermentation);
-    }
+    const roast = roastFrom(coffee.roast);
+    if (roast !== undefined) tags.push(roast);
+    const process = processFrom(coffee.processing);
+    if (process !== undefined) tags.push(process);
+    const fermentation = fermentationFrom(coffee.fermentation);
+    if (fermentation !== undefined) tags.push(fermentation);
     return tags;
 }
 

@@ -1,6 +1,7 @@
 import {
     BEAN_FIELDS, ROASTS, PROCESSES, FERMENTATIONS,
     isRoast, isProcess, isFermentation, processFromPodText,
+    roastFrom, processFrom, fermentationFrom, vocabularyKeyFor,
     normaliseBeanTags, MAX_BEAN_TAGS, MAX_BEAN_TAG_LENGTH, MAX_ORIGIN_LENGTH,
     resolvedOrigin, resolvedProcess
 } from "../beanTags";
@@ -51,9 +52,63 @@ describe("the guards", () => {
     });
 
     it("refuses a near miss rather than repairing it", () => {
+        // The guards are for values that are already stored, and everything
+        // stored has been through a matcher. Folding here as well would put
+        // the repairing rules in two places.
         expect(isProcess("washed")).toBe(false);
+        expect(isRoast("medium-dark")).toBe(false);
         expect(isRoast("Medium Dark")).toBe(false);
-        expect(isRoast("Medium-Light")).toBe(false);
+    });
+});
+
+describe("matching free text to the vocabulary", () => {
+    it("returns the app's spelling, not the sender's", () => {
+        expect(roastFrom("medium-dark")).toBe("Medium-Dark");
+        expect(processFrom("WASHED")).toBe("Washed");
+        expect(fermentationFrom("carbonic Maceration")).toBe("Carbonic maceration");
+    });
+
+    it("reads a compound level written either way round", () => {
+        expect(roastFrom("Dark-Medium")).toBe("Medium-Dark");
+        expect(roastFrom("medium light")).toBe("Light-Medium");
+    });
+
+    it("reads every separator a writer might have used", () => {
+        // The dashes are not interchangeable to a computer and are
+        // indistinguishable to a reader, which is the whole problem.
+        for (const written of [
+            "Medium-Dark",    // hyphen-minus
+            "Medium\u2010Dark", // hyphen
+            "Medium\u2011Dark", // non-breaking hyphen
+            "Medium\u2013Dark", // en dash
+            "Medium\u2014Dark", // em dash
+            "Medium\u2212Dark", // minus sign
+            "Medium Dark",
+            "Medium\u00a0Dark", // non-breaking space
+            "Medium_Dark",
+            "Medium/Dark",
+            "  medium   dark  "
+        ]) {
+            expect(roastFrom(written)).toBe("Medium-Dark");
+        }
+    });
+
+    it("still refuses a value that names no member", () => {
+        expect(roastFrom("Scorched")).toBeUndefined();
+        expect(roastFrom("Extra Light")).toBeUndefined();
+        expect(roastFrom("")).toBeUndefined();
+        expect(roastFrom(undefined)).toBeUndefined();
+        expect(processFrom("wet process")).toBeUndefined();
+    });
+
+    it("keeps the vocabularies free of key collisions", () => {
+        // Folding word order is only safe while no two members of one list
+        // fold together. This is the guard on adding a term that would make
+        // an existing one unreachable.
+        for (const values of [ROASTS, PROCESSES, FERMENTATIONS]) {
+            const keys = values.map(vocabularyKeyFor);
+            expect(new Set(keys).size).toBe(values.length);
+        }
     });
 });
 

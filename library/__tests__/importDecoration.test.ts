@@ -39,13 +39,24 @@ describe("decorateImport", () => {
         expect(decorated.tags).toEqual(["Medium-Dark"]);
     });
 
-    it("leaves a value outside the vocabulary untagged", () => {
-        // A miss is unset rather than invented, which is what those predicates
-        // are for. "Medium-dark" is a near miss for a level this app does
-        // know, and a near miss is still a miss: repairing the casing here
-        // would mean deciding where the repairing stops.
+    it("tags the app's spelling however the sender wrote the term", () => {
+        // The bean record keeps what the roaster wrote. Only the tag, which
+        // exists to group, is normalised -- otherwise this coffee would sit
+        // in a shelf of one beside every properly spelled Medium-Dark.
         const decorated = decorateImport(recipe(), {
-            coffee: {name: "X", roast: "Medium-dark", processing: "Carbonic maceration"}
+            coffee: {name: "X", roast: "dark\u2013medium", processing: "WASHED"}
+        });
+
+        expect(decorated.tags).toEqual(["Medium-Dark", "Washed"]);
+        expect(decorated.coffee?.roast).toBe("dark\u2013medium");
+    });
+
+    it("leaves a value outside the vocabulary untagged", () => {
+        // Folding case and separators is not the same as guessing. A value
+        // that names no member is still left unset, because an invented roast
+        // level is worse than none.
+        const decorated = decorateImport(recipe(), {
+            coffee: {name: "X", roast: "Extra Light", processing: "wet process"}
         });
 
         expect(decorated.tags).toEqual([]);

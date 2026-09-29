@@ -245,13 +245,30 @@ not become a second copy of the bean record.
 refuses because xBloom's value was an unexplained constant; BrewMind states a
 roast level outright, so this is not the app guessing.
 
-`ROASTS` gains `Light-Medium` and `Medium-Dark`, the two hyphenated levels
+`ROASTS` gains `Light-Medium` and `Medium-Dark`, the two compound levels
 BrewMind said it sends, making the list five in scale order. Storing them as
 written while tagging nothing would have left a coffee described that way
 outside #104's roast grouping entirely, which is worse than the coarseness of
-five steps instead of three. Only those two spellings: `Medium-Light` is a near
-miss and refused like any other, because repairing one means deciding where the
-repairing stops.
+five steps instead of three.
+
+Matching is done by `roastFrom` / `processFrom` / `fermentationFrom`, which
+fold case, separator and the word order of a compound term before looking the
+value up, and return the **app's** spelling rather than the sender's. So
+`Dark-Medium`, `medium dark` and `MEDIUM–DARK` all tag as `Medium-Dark` and
+group together. The separator set covers every dash a word processor or a PDF
+might have substituted (en dash, em dash, non-breaking and soft hyphen, minus
+sign) as well as space, underscore and slash; to a reader they are one
+character, so they have to be one character here.
+
+Folding word order is only sound while no two members of a vocabulary fold
+together, so a test asserts that. Adding a colliding term fails CI rather than
+silently making an existing term unreachable.
+
+None of this is guessing. A value naming no member is still left unset, and
+`isRoast` and its siblings stay exact because they guard values that are
+already stored and have already been through a matcher. The bean record keeps
+the sender's wording either way: it is on its way to Beanconqueror and is what
+the roaster wrote. Only the tag, which exists to group, is normalised.
 
 Tags are written through `recipe.setTags`, never by assignment, so they are
 normalised and capped.
