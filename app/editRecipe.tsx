@@ -607,9 +607,10 @@ type ActionBarProps = {
 /**
  * The two actions that earn the bottom of the screen: WRITE and SAVE.
  *
- * Everything else lives behind the caret. Write is disabled while the recipe is
- * one the machine would reject; save is not, because a half-finished recipe is
- * still worth keeping.
+ * Everything else lives behind the caret. Brew is disabled while the recipe is
+ * one the machine would reject; write is disabled while the recipe is one a
+ * card would reject. Save is not, because a half-finished recipe is still worth
+ * keeping.
  *
  * Module scope, so it is a stable component type across the screen's renders.
  */
@@ -824,7 +825,7 @@ export default function EditRecipe(
     const {collapsed, onScroll} = useCollapsibleHeader();
 
     const {
-        recipe, balance, canWrite, canSave, revertSources,
+        recipe, balance, canBrew, canWrite, canSave, revertSources,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, saveMetadata,
         hasPendingEdits, recipeInLibrary, toggleFavourite, editTags,
         editInputComplete, setVolumeError, setInputError, editStage,
@@ -1244,7 +1245,7 @@ export default function EditRecipe(
 
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
                        canBrewAtAll={rememberedMachine !== ""}
-                       canBrew={canWrite}
+                       canBrew={canBrew}
                        onBrew={onBrewPress}
                        onWrite={onWritePress}
                        onSave={async () => {

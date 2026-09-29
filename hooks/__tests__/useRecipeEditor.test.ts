@@ -306,6 +306,29 @@ describe("the write gate", () => {
         expect(result.current.canWrite).toBe(true);
     });
 
+    it("brews a balanced half-ratio recipe that cannot be written to a card", async () => {
+        const recipe = new Recipe();
+        recipe.cupType = CUP_TYPE.XPOD;
+        recipe.dosage = 20;
+        recipe.ratio = 15.5;
+        recipe.grindSize = 60;
+        recipe.grindRPM = 90;
+        recipe.pours = [
+            new Pour(1, 155, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0),
+            new Pour(2, 155, 93, 30, 0, POUR_PATTERN.CIRCULAR, 0)
+        ];
+
+        const {result} = await renderHook(() =>
+            useRecipeEditor({recipeJSON: JSON.stringify(recipe), temperatureUnit: "C", onSaved: () => {}})
+        );
+
+        expect(result.current.writeProblems).toEqual([
+            "The ratio is 1:15.5. It has to be a whole number."
+        ]);
+        expect(result.current.canWrite).toBe(false);
+        expect(result.current.canBrew).toBe(true);
+    });
+
     it("still allows saving a recipe that cannot be written", async () => {
         // Keeping a recipe and writing it are different permissions. A recipe
         // the machine would reject is still worth having in the library.
