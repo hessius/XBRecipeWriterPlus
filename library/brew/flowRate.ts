@@ -15,6 +15,18 @@ import {drawdownSeconds, type BrewRecord, type BrewSample} from "./BrewRecord";
  */
 export const FLOW_WINDOW_MS = 2000;
 
+/**
+ * The smallest live cup-rate span a sparkline is allowed to stretch.
+ *
+ * The fitted rate deliberately suppresses scale noise, but a steady 2 g/s bed
+ * can still wobble by roughly 0.1 to 0.2 g/s between adjacent fitted readings.
+ * Stretching a range that small to the full sparkline would turn the fit's own
+ * residual noise into a stall-shaped zigzag. Half a gram per second keeps that
+ * residual visible as a small tremor while still leaving real flow changes room
+ * to move the line.
+ */
+export const FLOW_SPARKLINE_MIN_SPAN = 0.5;
+
 /** Below this many readings a window cannot be fitted at all. */
 const MIN_WINDOW_SAMPLES = 2;
 
