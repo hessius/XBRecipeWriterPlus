@@ -1308,16 +1308,20 @@ In `app/brew.tsx`, near the existing derivations (`samples`, `elapsed`,
         : flowTail(samples, recipe.pours.length, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
 
     const liveDrawdownFigure = liveDrawdown(
-        samples, recipe.pours.length, elapsed, running
+        samples, recipe.pours.length, elapsed, phase.name, running
     );
 ```
 
 Amendment, 2026-09-30: do not gate this on `activeIndex`. `activeIndex` is
 `null` during bypass, and the verified frame log puts bypass inside the
-drawdown. The live helper gates on a stable final-stage boundary instead:
-planned pauses before the final stage never produce one, final-pour samples do
-not open the clock until the boundary is at least 1000 ms behind the sample
-clock, and a plateau wobbling within `NOISE_FLOOR_ML` cannot retake it.
+drawdown. The live helper takes `phase.name` instead. It keeps the row closed
+while the machine is still in `pouring`, so a two second stall inside the
+final pour cannot masquerade as drawdown, and it remains eligible through
+`bypass` and `settling`. Planned pauses before the final stage never produce a
+boundary, final-pour samples do not open the clock until the boundary is at
+least 1000 ms behind the sample clock, and plateau wobble cannot retake it
+because the retake threshold is measured from the highest final-stage water
+level actually seen rather than the ratcheted boundary level.
 
 Add the imports:
 

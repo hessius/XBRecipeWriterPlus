@@ -779,7 +779,7 @@ describe("live flow and drawdown", () => {
     });
 
     it("runs a drawdown clock on the last stage and converges on the record's", async () => {
-        const poured = sampleStream(6, {water: 10, cup: 3, pour: 1});
+        const poured = sampleStream(6, {water: 3, cup: 3, pour: 1});
         const lastPour = poured[poured.length - 1];
         mockSamples = [
             ...poured,
@@ -792,6 +792,7 @@ describe("live flow and drawdown", () => {
         ];
         mockElapsed = 18;
         mockActiveIndex = 0;
+        mockPhase = {name: "settling"} as BrewPhase;
 
         await renderWithProviders(<Brew />);
 
@@ -805,7 +806,7 @@ describe("live flow and drawdown", () => {
     });
 
     it("does not show drawdown while the final pour is still rising", async () => {
-        mockSamples = sampleStream(6, {water: 10, cup: 3, pour: 1});
+        mockSamples = sampleStream(6, {water: 3, cup: 3, pour: 1});
         mockElapsed = 6;
         mockActiveIndex = 0;
 
@@ -816,7 +817,7 @@ describe("live flow and drawdown", () => {
     });
 
     it("does not reset the live drawdown on a noisy plateau", async () => {
-        const poured = sampleStream(6, {water: 10, cup: 3, pour: 1});
+        const poured = sampleStream(6, {water: 3, cup: 3, pour: 1});
         const lastPour = poured[poured.length - 1];
         const wobble = [0.2, -0.1, 0.4, 0.1, 0.3, -0.2, 0.5, 0];
         const plateau: BrewSample[] = [];
@@ -831,6 +832,7 @@ describe("live flow and drawdown", () => {
         mockSamples = [...poured, ...plateau];
         mockElapsed = 18;
         mockActiveIndex = 0;
+        mockPhase = {name: "settling"} as BrewPhase;
 
         await renderWithProviders(<Brew />);
 
@@ -838,7 +840,7 @@ describe("live flow and drawdown", () => {
     });
 
     it("keeps the drawdown row reserved while bypass is running inside it", async () => {
-        const poured = sampleStream(6, {water: 10, cup: 3, pour: 1});
+        const poured = sampleStream(6, {water: 3, cup: 3, pour: 1});
         const lastPour = poured[poured.length - 1];
         mockSamples = [
             ...poured,

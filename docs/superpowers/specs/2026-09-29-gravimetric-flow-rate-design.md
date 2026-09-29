@@ -144,13 +144,15 @@ export function liveDrawdown(
     samples: BrewSample[],
     stages: number,
     elapsedSeconds: number,
+    phaseName: BrewPhase["name"],
     running: boolean
 ): LiveDrawdown;
 ```
 
 It keeps the same physical boundary as `drawdownFrom`, the point where the last
 stage's brew water stopped rising, but retakes that boundary only after a rise
-greater than the scale noise floor. The record still uses `drawdownFrom`; the
+greater than the scale noise floor and measures that retake from the highest
+final-stage level actually seen. The record still uses `drawdownFrom`; the
 live helper exists because a live stream is not finished yet.
 
 `drawdownRate` is
@@ -197,14 +199,10 @@ DRAWDOWN 0:38
 The live screen gains a **drawdown clock**, counting up, in the same
 `DRAWDOWN` line the record uses. It is a clock only: no rate beside it.
 
-It is the record's own derivation, run on the partial stream:
-
-```
-drawdownFrom(samplesSoFar, stages)
-```
-
-No new function and no second definition of the boundary. Because the live
-clock and the stored figure are the same derivation over the same samples, the
+It is the record's boundary adapted for a partial stream. The live helper keeps
+the final-stage water boundary aligned with `drawdownFrom`, while adding the
+noise and phase gates a finished record does not need. Because the live clock
+and the stored figure use the same physical boundary over the same samples, the
 clock **converges exactly** on `drawdownSeconds(record)`. There is no moment
 where the screen says 0:41 and the record it writes says 0:38.
 
@@ -221,19 +219,22 @@ closed throughout `bypass`, even though the verified frame log puts bypass
 inside the drawdown; and the whole-stream argmax reset the clock on sub-ml
 scale wobble.
 
-The clock is now computed by `liveDrawdown(samples, stages, elapsed, running)`.
-The boundary is final-stage only, so a planned pause between earlier stages
-still cannot open it. The boundary is retaken only by a water rise greater
-than `NOISE_FLOOR_ML`, so plateau wobble does not move it forward. The row is
-visible only once the boundary is at least `DRAWDOWN_OPEN_MARGIN_MS` behind
-the current sample clock.
+The clock is now computed by
+`liveDrawdown(samples, stages, elapsed, phase.name, running)`. The boundary is
+final-stage only, so a planned pause between earlier stages still cannot open
+it. The boundary is retaken only by a water rise greater than `NOISE_FLOOR_ML`,
+and the retake threshold is measured from the highest final-stage water level
+actually seen rather than the ratcheted boundary level, so plateau wobble does
+not spend the floor's headroom. The row is visible only once the boundary is
+at least `DRAWDOWN_OPEN_MARGIN_MS` behind the current sample clock.
 
 `DRAWDOWN_OPEN_MARGIN_MS` is 1000 ms. The machine reports around ten scale
-frames a second, and the water channel's own noise floor is 0.5 ml. One second
-therefore means ten consecutive readings have failed to exceed the boundary by
-more than the noise floor. That hides the first second of a real drawdown, but
-it stops a final pour from announcing a drawdown before water has actually
-stopped.
+frames a second, and the water channel's own noise floor is 0.5 ml. That
+margin is a stability margin, not proof that the pour has ended: a two second
+stall inside the final pour is physically still a pour. The phase gate is
+therefore the proof. The clock is held closed while `phase.name` is `pouring`,
+and it stays eligible through `bypass` and `settling`, the two active phases
+that can happen after the final pour's water has stopped.
 
 Hidden is hidden, not reset: the clock keeps accumulating underneath, so it
 appears already reading the elapsed drawdown rather than starting from zero at
