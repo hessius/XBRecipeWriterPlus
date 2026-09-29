@@ -132,6 +132,9 @@ export default function BrewFigures(
     const flowText = flow === null ? null : formatFlowRate(flow);
     const pourRateText = pourRate === null ? null : formatFlowRate(pourRate);
     const drawdownRateText = drawdownRate === null ? null : formatFlowRate(drawdownRate);
+    // A row exists when the caller had a rate to give. The formatter only
+    // declines a non-finite number, so presence stays one upstream decision
+    // and the row cannot blink as a noisy fit crosses zero.
     const hasFlow = flowText !== null;
     const hasFlowTail = (flowTail?.length ?? 0) >= FLOW_SPARKLINE_MIN_POINTS;
     const flowAccessibilityLabel = flowText === null

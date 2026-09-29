@@ -28,19 +28,24 @@ export const FLOW_WINDOW_MS = 2000;
 export const FLOW_SPARKLINE_MIN_SPAN = 0.5;
 
 /**
- * One decimal place for a displayed rate, or null when the fit has gone
- * negative enough that printing it would claim something physically false.
+ * One decimal place for a displayed rate, or null when there is no number.
  *
- * A tiny negative fit is scale noise around zero, so it rounds to 0.0. Past
- * that, a bed draining into a cup and a pump dispensing water cannot have a
- * negative rate. Treat that as unsayable rather than showing a number that
- * reads as the cup emptying or the pump running backwards.
+ * A negative fit is scale noise around zero: the fit is a least squares slope
+ * over two seconds of a stream whose own noise floor is half a millilitre, so
+ * during a pause it crosses zero in both directions many times a second. It
+ * clamps to 0.0, because a bed draining into a cup cannot run backwards and
+ * the honest reading of a bed giving nothing is nothing.
+ *
+ * It does not decide whether a row exists. Presence is the caller's, from
+ * `flowNow` returning null, and it has to stay there: a formatter that could
+ * delete a row would blink it at the sample rate as the fit crossed a
+ * rounding boundary, which is the reflow `reserveFlow` was added to prevent.
+ * Null here means only that there was no number to format.
  */
 export function formatFlowRate(rate: number): string | null {
     if (!Number.isFinite(rate)) return null;
     const rounded = Number(rate.toFixed(1));
-    if (rounded < 0) return null;
-    return rounded.toFixed(1);
+    return rounded < 0 ? "0.0" : rounded.toFixed(1);
 }
 
 /** Below this many readings a window cannot be fitted at all. */

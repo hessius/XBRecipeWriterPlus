@@ -356,8 +356,17 @@ describe("formatFlowRate", () => {
         expect(formatFlowRate(-0.04)).toBe("0.0");
     });
 
-    it("refuses a negative rate once rounding would print it", () => {
-        expect(formatFlowRate(-0.06)).toBeNull();
+    it("clamps a negative fit to zero rather than deleting the figure", () => {
+        // Presence is flowNow's call, never the formatter's. A formatter that
+        // could return null here would blink the row at the sample rate as a
+        // noisy fit crossed the rounding boundary.
+        expect(formatFlowRate(-0.06)).toBe("0.0");
+        expect(formatFlowRate(-3)).toBe("0.0");
+    });
+
+    it("has no number to print for a non-finite rate", () => {
+        expect(formatFlowRate(Number.NaN)).toBeNull();
+        expect(formatFlowRate(Number.POSITIVE_INFINITY)).toBeNull();
     });
 
     it("prints a positive finite rate to one decimal place", () => {
