@@ -11,6 +11,8 @@
  * second screen genuinely needs the same words.
  */
 
+import {Platform} from "react-native";
+
 /**
  * Shown when an import or a card read turns out to be a recipe already saved.
  *
@@ -39,8 +41,36 @@ export function alreadyInLibraryAsSpoken(name: string): string {
  *
  * Appears on the Android overlay and inside Apple's own NFC sheet, for both
  * reading and writing — four places, one instruction.
+ *
+ * Two instructions, in fact, because the antenna is not in the same place. The
+ * iPhone reads at the very top edge of the front; an Android antenna is
+ * usually in the upper middle of the *back*. On Android this line is the whole
+ * of the guidance, since there is no system sheet saying anything else, and a
+ * card held against the wrong part of the phone fails in exactly the way an
+ * unsupported card does. "near the top" rather than a precise spot: it varies
+ * by model, and the upper middle of the back is the best single answer.
  */
-export const HOLD_CARD = "Hold the card to the top of the phone.";
+export const HOLD_CARD = Platform.select({
+    android: "Hold the card to the back of the phone, near the top.",
+    default: "Hold the card to the top of the phone."
+}) as string;
+
+/**
+ * The two ways a phone can have nothing to read a card with.
+ *
+ * Neither reaches an iPhone. A supported iPhone always has NFC and the user
+ * cannot switch it off, so on iOS there is no state here to report. On Android
+ * plenty of phones have no controller at all, and on those that do it is a
+ * Settings toggle somebody may well have left off.
+ *
+ * The second sentence of the unsupported line is the important one, and it is
+ * true: the library, the editor, import and the hub all work without a radio.
+ * Without it the message reads as "this app does not work on your phone".
+ */
+export const NFC_DISABLED = "NFC is switched off. Turn it on to read or write a card.";
+
+export const NFC_UNSUPPORTED =
+    "This phone has no NFC, so cards cannot be read or written here. Everything else works.";
 
 /**
  * Why a grind is too fine to write, and what to do about it.

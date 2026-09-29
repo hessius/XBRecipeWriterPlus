@@ -5,6 +5,14 @@ import {screen, fireEvent} from "@testing-library/react-native";
 import NfcOverlay from "@/components/NfcOverlay";
 import {renderWithProviders} from "@/test-utils/render";
 
+jest.mock("react-native-nfc-manager", () => ({
+    __esModule: true,
+    default: {goToNfcSetting: jest.fn().mockResolvedValue(undefined)},
+    NfcTech: {Iso15693IOS: "Iso15693IOS", NfcV: "NfcV"}
+}));
+
+const NfcManager = jest.requireMock("react-native-nfc-manager").default;
+
 function props(overrides = {}) {
     return {
         visible:  true,
@@ -121,5 +129,93 @@ describe("the ceremony's hold on the screen", () => {
 
         const overlay = screen.getByTestId("nfc-overlay");
         expect(overlay.props.accessibilityViewIsModal).toBe(true);
+    });
+});
+
+/**
+ * The two Android-only dead ends.
+ *
+ * Neither reaches an iPhone, so both are driven by the prop rather than by
+ * `Platform.OS`: the decision of whether a phone has a usable radio belongs to
+ * the handler that asked, and the overlay's job is only to say what it was
+ * told. A reason means there is no ceremony underneath, so the bloom goes and
+ * an explanation takes its place.
+ */
+describe("NfcOverlay with nothing to scan with", () => {
+    beforeEach(() => {
+        NfcManager.goToNfcSetting.mockClear();
+    });
+
+    // The iOS case below leaves the platform behind it, the same way the
+    // suite above does.
+    afterEach(() => {
+        Platform.OS = "android";
+    });
+
+    it("explains a radio that is switched off", async () => {
+        await renderWithProviders(<NfcOverlay {...props({unavailable: "disabled" as const})}/>);
+
+        expect(screen.getByText(/NFC is switched off/)).toBeTruthy();
+    });
+
+    it("offers the switch, because that one is something the user can fix", async () => {
+        await renderWithProviders(<NfcOverlay {...props({unavailable: "disabled" as const})}/>);
+
+        await fireEvent.press(screen.getByLabelText("Open NFC settings"));
+
+        expect(NfcManager.goToNfcSetting).toHaveBeenCalled();
+    });
+
+    it("explains a phone with no radio at all", async () => {
+        await renderWithProviders(<NfcOverlay {...props({unavailable: "unsupported" as const})}/>);
+
+        expect(screen.getByText(/no NFC/)).toBeTruthy();
+    });
+
+    it("says the rest of the app still works", async () => {
+        // Without this clause the message reads as "this app does not work on
+        // your phone", which is not true: the library, editor, import and hub
+        // all work without a radio.
+        await renderWithProviders(<NfcOverlay {...props({unavailable: "unsupported" as const})}/>);
+
+        expect(screen.getByText(/Everything else works/)).toBeTruthy();
+    });
+
+    it("offers no settings button when there is no setting behind it", async () => {
+        await renderWithProviders(<NfcOverlay {...props({unavailable: "unsupported" as const})}/>);
+
+        expect(screen.queryByLabelText("Open NFC settings")).toBeNull();
+    });
+
+    it("draws no progress, because nothing is happening", async () => {
+        await renderWithProviders(
+            <NfcOverlay {...props({unavailable: "disabled" as const, progress: 50})}/>);
+
+        expect(screen.queryByRole("progressbar")).toBeNull();
+    });
+
+    it("offers a way out even on iOS, where there is no system sheet to carry one", async () => {
+        Platform.OS = "ios";
+
+        await renderWithProviders(<NfcOverlay {...props({unavailable: "unsupported" as const})}/>);
+
+        expect(screen.getByLabelText("Close")).toBeTruthy();
+    });
+
+    it("closes when it is taken", async () => {
+        const onCancel = jest.fn();
+
+        await renderWithProviders(
+            <NfcOverlay {...props({unavailable: "unsupported" as const, onCancel})}/>);
+        await fireEvent.press(screen.getByLabelText("Close"));
+
+        expect(onCancel).toHaveBeenCalled();
+    });
+
+    it("still says Cancel when there is a ceremony to cancel", async () => {
+        await renderWithProviders(<NfcOverlay {...props()}/>);
+
+        expect(screen.getByLabelText("Cancel")).toBeTruthy();
+        expect(screen.queryByLabelText("Close")).toBeNull();
     });
 });

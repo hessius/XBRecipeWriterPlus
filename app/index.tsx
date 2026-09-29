@@ -40,7 +40,7 @@ import {useSetting} from "@/hooks/useSetting";
 import {forgetLastMove, useSteadyRouter} from "@/hooks/steadyRouter";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
-import NFC, {setNfcAlertIOS} from "@/library/NFC";
+import NFC, {checkNfcAvailability, setNfcAlertIOS, type NfcAvailability} from "@/library/NFC";
 import Recipe from "@/library/Recipe";
 import {serialiseCapture} from "@/library/cardDiagnostics";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -335,6 +335,9 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const [editing, setEditing] = useState(false);
     const [scanning, setScanning] = useState(false);
     const [readProgress, setReadProgress] = useState(0);
+    // Why a read has nothing to run, when it has not. Always null on iOS.
+    const [readUnavailable, setReadUnavailable] =
+        useState<Exclude<NfcAvailability, "ready"> | null>(null);
     // Retired the moment the nudge has been given, not merely when the library
     // is touched. "The first row" is whichever recipe the current query puts on
     // top, so every sort, filter and search would otherwise hand the gate a
@@ -366,7 +369,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // NFC path. Its volume-error report has no field to land in on this screen,
     // so it becomes a toast; a library recipe that will not write already shows
     // the card's own "will not write" mark.
-    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} =
+    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress, nfcUnavailable} =
         useCardWriter((message) => {
             if (message !== null) notify({tone: "error", message});
         });
@@ -939,6 +942,17 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     }
 
     async function readCard() {
+        // In the handler rather than an effect: the NFC switch can be flipped
+        // while the app is in the background, so a reading taken at mount is
+        // a reading about a different moment than the one the user is in.
+        const availability = await checkNfcAvailability();
+        if (availability !== "ready") {
+            setReadUnavailable(availability);
+            setScanning(true);
+            return;
+        }
+        setReadUnavailable(null);
+
         setScanning(true);
         setReadProgress(0);
         try {
@@ -991,6 +1005,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     async function cancelScan() {
         await nfc.cancel();
         setScanning(false);
+        setReadUnavailable(null);
     }
 
     /**
@@ -1593,13 +1608,13 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                             onChoose={createRecipe}/>
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
-                        onCancel={cancelScan}/>
+                        unavailable={readUnavailable} onCancel={cancelScan}/>
 
             {/* The write ceremony, hosted the same way the editor hosts it. A
                 second overlay rather than a shared one because reading and
                 writing are separate transports and only ever one is visible. */}
             <NfcOverlay visible={showNfcOverlay} mode="write" progress={writeProgress}
-                        onCancel={onNFCDialogClose}/>
+                        unavailable={nfcUnavailable} onCancel={onNFCDialogClose}/>
         </>
     );
 }

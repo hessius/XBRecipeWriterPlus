@@ -2,7 +2,7 @@ import {useState} from "react";
 import {Platform} from "react-native";
 import {notify} from "@/components/XbrwToast";
 import {CARD_SIZE_UNKNOWN, CARD_WRITE_FAILED, cardTooSmall, HOLD_CARD} from "@/constants/copy";
-import NFC, {setNfcAlertIOS} from "@/library/NFC";
+import NFC, {checkNfcAvailability, setNfcAlertIOS, type NfcAvailability} from "@/library/NFC";
 import {CardCapacityError, CardWriteError} from "@/library/cardWriteErrors";
 import {canWriteToCard} from "@/library/cardLimits";
 import type Recipe from "@/library/Recipe";
@@ -16,6 +16,11 @@ type CardWriter = {
     showNfcOverlay: boolean;
     /** Write progress 0-100. */
     writeProgress: number;
+    /**
+     * Why the overlay is showing an explanation instead of a ceremony, or null
+     * when it is showing a ceremony. Never anything but null on iOS.
+     */
+    nfcUnavailable: Exclude<NfcAvailability, "ready"> | null;
 };
 
 /**
@@ -41,6 +46,8 @@ export function useCardWriter(
 ): CardWriter {
     const [writeProgress, setWriteProgress] = useState(0);
     const [showNfcOverlay, setShowNfcOverlay] = useState(false);
+    const [nfcUnavailable, setNfcUnavailable] =
+        useState<Exclude<NfcAvailability, "ready"> | null>(null);
 
     // A lazy `useState` rather than `useMemo`: React only promises `useMemo` as
     // a hint and may drop the cache, and a dropped cache here would be the very
@@ -50,6 +57,7 @@ export function useCardWriter(
     async function onNFCDialogClose() {
         await nfc.cancel();
         setShowNfcOverlay(false);
+        setNfcUnavailable(null);
     }
 
     async function progressCallback(progress: number, id?: string): Promise<string | undefined> {
@@ -77,6 +85,21 @@ export function useCardWriter(
                 console.log(recipe);
                 if (canWriteToCard(recipe)) {
                     onVolumeError(null);
+
+                    // Asked here rather than at mount: the NFC switch can be
+                    // flipped while the app is in the background, so the only
+                    // reading worth trusting is the one taken when the user
+                    // asked for a card. Showing the overlay with the reason in
+                    // it, rather than a toast, keeps the answer where the user
+                    // is already looking.
+                    const availability = await checkNfcAvailability();
+                    if (availability !== "ready") {
+                        setNfcUnavailable(availability);
+                        setShowNfcOverlay(true);
+                        return;
+                    }
+                    setNfcUnavailable(null);
+
                     setWriteProgress(0);
                     setShowNfcOverlay(true);
                     await recipe.writeCard(nfc, progressCallback);
@@ -110,7 +133,7 @@ export function useCardWriter(
         }
     }
 
-    return {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress};
+    return {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress, nfcUnavailable};
 }
 
 export default useCardWriter;

@@ -192,7 +192,12 @@ jest.mock("@/library/NFC", () => ({
         cancel:       jest.fn(),
         readCard:     jest.fn()
     })),
-    setNfcAlertIOS: jest.fn()
+    setNfcAlertIOS: jest.fn(),
+    // The read path asks the phone whether it has a usable radio before it
+    // opens a ceremony. Without this the probe is undefined and every card
+    // read fails before it starts.
+    checkNfcAvailability: jest.fn().mockResolvedValue("ready"),
+    openNfcSettings: jest.fn()
 }));
 
 function memoryStorage(raw: Record<string, unknown> = {}): SettingsStorage {
