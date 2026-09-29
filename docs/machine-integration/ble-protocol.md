@@ -414,13 +414,17 @@ The machine pushes the following data unprompted on FFE2:
 > screen opens, rather than trusting the reading taken at connect.
 
 > **The grind dial is read again after a brew, and that costs a beep.**
-> The dial is an override: turning it changes how the machine grinds without
-> the app being told, with no event and no characteristic, and doing exactly
-> that is how a recipe gets nudged to suit a bean. So the reading taken before
-> the recipe is sent is the setting that was about to be overridden, not the
-> one used. XBRW++ takes a second reading once a brew has ended and stores it
-> as `dialAfter` on the record, keeping the pre-send one as `dialBefore` so a
-> difference between them is a positive observation that the dial was moved.
+> The dial is an override: where it is set changes how the machine grinds
+> without the app being told, with no event and no characteristic, and setting
+> it is how a recipe gets nudged to suit a bean. It is turned before a brew,
+> not during one: the machine takes its position when it starts grinding and
+> there is no point after that at which moving it does anything. The reading
+> taken before the recipe is sent can therefore still be stale, because the
+> app asks for it at the moment it is about to brew and the hand that moved
+> the dial was there a second earlier. XBRW++ takes a second reading once the
+> brew has ended and stores it as `dialAfter` on the record, keeping the
+> pre-send one as `dialBefore`; the two normally agree, and a difference is a
+> positive observation that the first reading was taken too early.
 >
 > Renewing the session to ask beeps, which is accepted here: the brew is over,
 > nothing is interrupted, and it happens once, only on a brew that got as far
@@ -431,9 +435,10 @@ The machine pushes the following data unprompted on FFE2:
 > blob reports the *physical dial* or the value the app last sent in the recipe
 > blob. If it echoes the app's own value, the reading tells us nothing new for
 > a grinder-on brew, though it would still be the only source of truth for a
-> grinder-off one, which is the case the feature was asked for. The test: send
-> a grinder-on recipe with a known size, turn the dial during the brew, and
-> read the blob afterwards.
+> grinder-off one, which is the case the feature was asked for. The test: set
+> the dial to a known position, send a grinder-on recipe asking for a
+> *different* grind size, and read the blob after the brew. Whichever of the
+> two numbers comes back is the answer.
 
 | Pour events | Event-driven | 40510 per pour | pour_index in payload |
 | Brew lifecycle | Event-driven | 40502, 40507, 40510, 40511, 40512, 40513 | Grinder start, stop, bloom, brewer stop, enjoy |

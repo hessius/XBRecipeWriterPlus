@@ -11,10 +11,16 @@ export type DialMachine = {
 /**
  * Read the machine's grind dial once a brew has finished, and keep it.
  *
- * The dial is an override: turning it changes how the machine grinds without
- * the app being told, and doing exactly that is how a recipe gets nudged to
- * suit a particular bean. So the position *before* the grind is not evidence
- * of anything, and the reading has to be taken afterwards.
+ * The dial is an override: where it is set changes how the machine grinds
+ * without the app being told, and setting it is how a recipe gets nudged to
+ * suit a particular bean. It is turned before a brew and never during one, so
+ * the position that matters is settled by the time the grinder starts.
+ *
+ * The reading taken before the recipe goes out can still be stale, which is
+ * why this one is taken afterwards. The app asks for vitals at the moment it
+ * is about to brew, and the hand that moved the dial was on it a second
+ * earlier; the post-brew reading is the one the machine has certainly caught
+ * up with.
  *
  * That is not free. Machine info only answers inside a live session and the
  * session expires, so renewing it sends a handshake, which beeps. The beep is
@@ -57,10 +63,16 @@ export async function readDialAfterBrew(
 }
 
 /**
- * Whether the dial was moved between the recipe going out and the brew ending.
+ * Whether the two readings disagree.
+ *
+ * They normally agree, because the dial is set before a brew and cannot be
+ * moved during one. A difference means the pre-send reading was taken before
+ * the machine had caught up with the hand that had just moved it, so the
+ * post-brew number is the true one and the earlier one is worth showing
+ * beside it.
  *
  * Both readings have to exist for the question to have an answer: one reading
- * alone is a position, not a movement.
+ * alone is a position, not a difference.
  */
 export function dialWasMoved(record: BrewRecord): boolean {
     const before = record.dialBefore ?? 0;
@@ -81,11 +93,12 @@ export function dialWasMoved(record: BrewRecord): boolean {
  *   using a hand grinder has one sitting wherever it was last left. The same
  *   discipline `endedOnMachine` already follows, which records that a brew
  *   came up short and declines to say why.
- * - **Only the post-brew reading may be reported.** The pre-brew one is the
- *   setting that was about to be overridden, so a record holding only that
- *   says nothing at all.
+ * - **Only the post-brew reading may be reported.** The pre-send one may have
+ *   been taken before the machine caught up with a dial that had just been
+ *   moved, so a record holding only that cannot be presented as fact.
  * - A difference between the two is worth saying, because it is the positive
- *   observation that the dial was turned for this brew.
+ *   observation that the dial was turned for this brew rather than left where
+ *   the last one put it.
  */
 export function dialNote(record: BrewRecord): string | null {
     const after = record.dialAfter ?? 0;
