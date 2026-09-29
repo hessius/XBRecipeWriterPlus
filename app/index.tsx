@@ -78,6 +78,7 @@ import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
 import {type Settings} from "@/library/Settings";
+import {UNCLIPPED_LIST} from "@/constants/lists";
 
 type Props = {
     /** Injected by tests. The route renders against the real database. */
@@ -1349,7 +1350,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                             onClear={libraryQuery.clear}/>
                     )
                 ) : (
-                    <FlatList
+                    <FlatList {...UNCLIPPED_LIST}
                         data={listItems}
                         // Namespaced rather than raw, because the two kinds draw
                         // their keys from different vocabularies that are not
