@@ -234,6 +234,35 @@ describe("flowSeries", () => {
             expect(Math.abs(series.get(at)!.water - point!.water)).toBeLessThan(1e-8);
         }
     });
+
+    it.each([
+        ["NaN", Number.NaN],
+        ["Infinity", Number.POSITIVE_INFINITY]
+    ])("recovers from a non-finite %s reading", (_, poison) => {
+        const samples = ramp(30, 2).map((sample, i) => ({
+            ...sample,
+            cup: i === 50 ? poison : sample.cup,
+            water: i === 50 ? poison : sample.water
+        }));
+
+        const series = flowSeries(samples, 1);
+        const byTime = new Map(series.map((point) => [point.at, point]));
+        const recovered = byTime.get(7_100);
+        const afterPoison = byTime.get(25_000);
+        const direct = flowAt(samples, 1, 25_000);
+
+        expect(byTime.get(5_000)).toBeUndefined();
+        expect(recovered).toBeDefined();
+        expect(recovered!.cup).toBeCloseTo(flowAt(samples, 1, 7_100)!.cup, 8);
+        expect(afterPoison).toBeDefined();
+        expect(direct).not.toBeNull();
+        expect(afterPoison!.cup).toBeCloseTo(2, 6);
+        expect(afterPoison!.water).toBeCloseTo(2, 6);
+        expect(afterPoison!.cup).toBeCloseTo(direct!.cup, 8);
+        expect(afterPoison!.water).toBeCloseTo(direct!.water, 8);
+        expect(series.length).toBeGreaterThan(samples.length - 60);
+        expect(series[series.length - 1].at).toBe(30_000);
+    });
 });
 
 describe("flowTail", () => {

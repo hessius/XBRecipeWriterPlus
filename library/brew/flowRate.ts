@@ -51,7 +51,15 @@ export type FlowPoint = {at: number; cup: number; water: number};
  * stretch before the first drop, which has no rate either.
  */
 function brewOnly(samples: BrewSample[], stages: number): BrewSample[] {
-    return samples.filter((s) => s.pour >= 1 && s.pour <= stages);
+    return samples.filter((s) =>
+        s.pour >= 1 &&
+        s.pour <= stages &&
+        Number.isFinite(s.at)
+    );
+}
+
+function hasFiniteReadings(sample: BrewSample): boolean {
+    return Number.isFinite(sample.cup) && Number.isFinite(sample.water);
 }
 
 type SlopeSums = {
@@ -151,6 +159,11 @@ function slope(window: BrewSample[], of: "cup" | "water"): number | null {
  * a brew that has not poured yet, and a brew whose last two seconds were all
  * bypass, both look like.
  *
+ * A non-finite cup or water reading poisons the window it lands in. The answer
+ * is null until that reading ages out, rather than fitting around it, because
+ * both channels must describe the same physical readings and a bad scale frame
+ * should not silently narrow one side of the comparison.
+ *
  * @param at milliseconds on the sample clock. The window ends here and is
  *   inclusive at both ends.
  */
@@ -160,6 +173,7 @@ export function flowAt(
     const from = at - FLOW_WINDOW_MS;
     const window = brewOnly(samples, stages)
         .filter((s) => s.at >= from && s.at <= at);
+    if (window.some((sample) => !hasFiniteReadings(sample))) return null;
     const cup = slope(window, "cup");
     const water = slope(window, "water");
     if (cup === null || water === null) return null;
@@ -189,22 +203,36 @@ export function flowNow(
  * One point per brew sample, each fitted over the window ending there. Points
  * the window cannot answer are omitted rather than zeroed, which is what puts
  * a gap in the cup channel across the bypass instead of an invented reading.
+ * Non-finite cup or water readings make their whole window unfit, matching
+ * `flowAt`; they are not folded into the running sums, so the series resumes
+ * when the bad frame ages out.
  */
 export function flowSeries(samples: BrewSample[], stages: number): FlowPoint[] {
     const out: FlowPoint[] = [];
     const brew = brewOnly(samples, stages);
     const sums = emptySums();
     let left = 0;
+    let badReadings = 0;
 
     for (const sample of brew) {
-        addSample(sums, sample, 1);
+        if (hasFiniteReadings(sample)) {
+            addSample(sums, sample, 1);
+        } else {
+            badReadings++;
+        }
         const from = sample.at - FLOW_WINDOW_MS;
         while (left < brew.length && brew[left].at < from) {
-            addSample(sums, brew[left], -1);
+            if (hasFiniteReadings(brew[left])) {
+                addSample(sums, brew[left], -1);
+            } else {
+                badReadings--;
+            }
             left++;
         }
 
-        const point = fitFromSums(sums, sample.at - brew[left].at, sample.at);
+        const point = badReadings === 0
+            ? fitFromSums(sums, sample.at - brew[left].at, sample.at)
+            : null;
         if (point !== null) out.push(point);
     }
     return out;

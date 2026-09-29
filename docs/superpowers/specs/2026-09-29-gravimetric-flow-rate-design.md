@@ -50,6 +50,13 @@ So the rate is fitted, not differenced:
   carry about 0.25 g/s of jitter, which at the size this is drawn still
   flickers; the fit is what buys the responsiveness back.
 
+The fit also requires a spanned second of readings,
+`FLOW_MIN_WINDOW_MS = 1000`. The first second of a brew therefore reports
+nothing, and the live figure goes quiet for about a second after a bypass ends.
+That silence is intentional. The alternative was the opening tick of every brew
+reporting 6.25 g/s against a true 2 g/s, then donating that artefact to
+`maxRateOf` and setting the chart axis from it.
+
 Two seconds and not three: the window is also a lag, and the figure trails
 reality by half of it. A second of lag is the most a live readout can carry
 before it stops describing what is in front of you.
