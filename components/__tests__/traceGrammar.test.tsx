@@ -1,8 +1,10 @@
 import React from "react";
 
+import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
 import CompareTrace from "@/components/CompareTrace";
 import FlowSparkline from "@/components/FlowSparkline";
+import type {FlowPoint} from "@/library/brew/flowRate";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
@@ -32,6 +34,11 @@ const POURS = [
     new Pour(2, 130, 92, 40, 0, 0, 0)
 ];
 const PLAN_PATH = "M0 160 L150 40 L300 0";
+const FLOW_SERIES: FlowPoint[] = [
+    {at: 1_000, cup: 1, water: 2},
+    {at: 1_500, cup: 1.2, water: 2.2},
+    {at: 2_000, cup: 1.1, water: 2.1}
+];
 
 /** The attributes that make a channel recognisable. */
 const GRAMMAR = [
@@ -119,5 +126,23 @@ describe("the flow sparkline draws the cup grammar", () => {
             {includeHiddenElements: true}
         )))
             .toEqual(styleOf(trace.getByTestId("trace-cup")));
+    });
+});
+
+describe("the rate chart draws the shared grammar", () => {
+    it.each([
+        ["water", "trace-water", "rate-chart-water"],
+        ["cup", "trace-cup", "rate-chart-cup"]
+    ])("matches the rendered %s channel", async (_channel, traceId, rateId) => {
+        const trace = await renderWithProviders(
+            <BrewTrace pours={POURS} samples={SAMPLES} accent={ACCENT}
+                       width={300} height={160} plannedSeconds={30} compact />
+        );
+        const rate = await renderWithProviders(
+            <BrewRateChart series={FLOW_SERIES} accent={ACCENT} width={300} />
+        );
+
+        expect(styleOf(rate.getByTestId(rateId)))
+            .toEqual(styleOf(trace.getByTestId(traceId)));
     });
 });
