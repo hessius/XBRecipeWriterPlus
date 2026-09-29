@@ -27,6 +27,22 @@ export const FLOW_WINDOW_MS = 2000;
  */
 export const FLOW_SPARKLINE_MIN_SPAN = 0.5;
 
+/**
+ * One decimal place for a displayed rate, or null when the fit has gone
+ * negative enough that printing it would claim something physically false.
+ *
+ * A tiny negative fit is scale noise around zero, so it rounds to 0.0. Past
+ * that, a bed draining into a cup and a pump dispensing water cannot have a
+ * negative rate. Treat that as unsayable rather than showing a number that
+ * reads as the cup emptying or the pump running backwards.
+ */
+export function formatFlowRate(rate: number): string | null {
+    if (!Number.isFinite(rate)) return null;
+    const rounded = Number(rate.toFixed(1));
+    if (rounded < 0) return null;
+    return rounded.toFixed(1);
+}
+
 /** Below this many readings a window cannot be fitted at all. */
 const MIN_WINDOW_SAMPLES = 2;
 

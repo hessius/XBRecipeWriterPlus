@@ -1,9 +1,28 @@
 import React from "react";
 import {screen} from "@testing-library/react-native";
+import {PixelRatio} from "react-native";
 
-import BrewFigures from "@/components/BrewFigures";
+import BrewFigures, {flowRowMinHeight} from "@/components/BrewFigures";
+import {FLOW_SPARKLINE_HEIGHT} from "@/components/FlowSparkline";
 import {accents} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
+
+jest.mock("@/components/FlowSparkline", () => {
+    const React = jest.requireActual<typeof import("react")>("react");
+    const {View} = jest.requireActual<typeof import("react-native")>("react-native");
+    const actual = jest.requireActual("@/components/FlowSparkline");
+    return {
+        __esModule: true,
+        ...actual,
+        default: () => (
+            <View
+                testID="flow-sparkline-path"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+            />
+        )
+    };
+});
 
 const TEST_ACCENT = accents.coffee[1];
 
@@ -98,6 +117,7 @@ describe("BrewFigures", () => {
         expect(screen.getByTestId("figures-flow")).toBeTruthy();
         expect(screen.getByText("FLOW")).toBeTruthy();
         expect(screen.getByText(/2\.4/)).toBeTruthy();
+        expect(screen.getByLabelText("Flow, 2.4 grams per second")).toBeTruthy();
         expect(screen.getByTestId("flow-sparkline-path", {includeHiddenElements: true}))
             .toBeTruthy();
     });
@@ -114,11 +134,12 @@ describe("BrewFigures", () => {
         await renderWithProviders(
             <BrewFigures
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
-                flow={2.4} flowTail={[]}
+                flow={2.4} flowTail={[2.4]}
             />
         );
         expect(screen.getByTestId("figures-flow")).toBeTruthy();
-        expect(screen.queryByTestId("flow-sparkline-path")).toBeNull();
+        expect(screen.queryByTestId("flow-sparkline-path", {includeHiddenElements: true}))
+            .toBeNull();
     });
 
     it("shows the pour rate as the second flow figure", async () => {
@@ -129,8 +150,11 @@ describe("BrewFigures", () => {
             />
         );
         expect(screen.getByText("FLOW")).toBeTruthy();
-        expect(screen.getByText("2.4 g/s")).toBeTruthy();
+        expect(screen.getByText("2.4 G/S")).toBeTruthy();
         expect(screen.getByText("POUR 3.1")).toBeTruthy();
+        expect(screen.getByLabelText(
+            "Flow, 2.4 grams per second, pouring 3.1 millilitres per second"
+        )).toBeTruthy();
     });
 
     it("leaves the pour rate out when only the cup rate is known", async () => {
@@ -141,8 +165,19 @@ describe("BrewFigures", () => {
             />
         );
         expect(screen.getByText("FLOW")).toBeTruthy();
-        expect(screen.getByText("2.4 g/s")).toBeTruthy();
+        expect(screen.getByText("2.4 G/S")).toBeTruthy();
         expect(screen.queryByText(/^POUR /)).toBeNull();
+    });
+
+    it("does not print negative-zero flow rates", async () => {
+        await renderWithProviders(
+            <BrewFigures
+                water={120} cup={90} seconds={60} accent={TEST_ACCENT}
+                flow={-0.04} pourRate={-0.04}
+            />
+        );
+        expect(screen.getByText("0.0 G/S")).toBeTruthy();
+        expect(screen.getByText("POUR 0.0")).toBeTruthy();
     });
 
     it("reserves the flow row height when asked", async () => {
@@ -152,8 +187,26 @@ describe("BrewFigures", () => {
                 reserveFlow
             />
         );
-        expect(screen.getByTestId("figures-flow-slot")).toHaveStyle({minHeight: 24});
+        expect(screen.getByTestId("figures-flow-slot"))
+            .toHaveStyle({minHeight: flowRowMinHeight()});
         expect(screen.queryByTestId("figures-flow")).toBeNull();
+    });
+
+    it("reserves enough height for accessibility-scaled dot-matrix text", async () => {
+        const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1.4);
+
+        await renderWithProviders(
+            <BrewFigures
+                water={120} cup={90} seconds={60} accent={TEST_ACCENT}
+                reserveFlow
+            />
+        );
+
+        const reserved = flowRowMinHeight();
+        expect(screen.getByTestId("figures-flow-slot"))
+            .toHaveStyle({minHeight: reserved});
+        expect(reserved).toBeGreaterThan(FLOW_SPARKLINE_HEIGHT + 4);
+        scaleSpy.mockRestore();
     });
 
     it("does not reserve the flow row height by default", async () => {
@@ -171,7 +224,7 @@ describe("BrewFigures", () => {
             />
         );
         const line = screen.getByTestId("figures-drawdown");
-        expect(line).toHaveTextContent("DRAWDOWN 0:40 · 2.0 g/s");
+        expect(line).toHaveTextContent("DRAWDOWN 0:40 · 2.0 G/S");
     });
 
     it("leaves the drawdown line as it was when there is no rate", async () => {
@@ -182,7 +235,7 @@ describe("BrewFigures", () => {
             />
         );
         const line = screen.getByTestId("figures-drawdown");
-        expect(line).not.toHaveTextContent("g/s");
+        expect(line).not.toHaveTextContent("G/S");
     });
 });
 

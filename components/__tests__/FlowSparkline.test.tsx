@@ -49,7 +49,8 @@ describe("FlowSparkline", () => {
             <FlowSparkline values={[2]} accent={palette.brand} />
         );
 
-        expect(screen.queryByTestId("flow-sparkline-path")).toBeNull();
+        expect(screen.queryByTestId("flow-sparkline-path", {includeHiddenElements: true}))
+            .toBeNull();
     });
 
     it("draws nothing when there is no series", async () => {
@@ -57,6 +58,7 @@ describe("FlowSparkline", () => {
             <FlowSparkline values={[]} accent={palette.brand} />
         );
 
-        expect(screen.queryByTestId("flow-sparkline-path")).toBeNull();
+        expect(screen.queryByTestId("flow-sparkline-path", {includeHiddenElements: true}))
+            .toBeNull();
     });
 });

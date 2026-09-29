@@ -4,13 +4,14 @@ import Svg, {Path} from "react-native-svg";
 import {FLOW_SPARKLINE_MIN_SPAN} from "@/library/brew/flowRate";
 import {channelStyle} from "@/library/brew/traceStyle";
 
-const WIDTH = 96;
-const HEIGHT = 20;
+export const FLOW_SPARKLINE_WIDTH = 96;
+export const FLOW_SPARKLINE_HEIGHT = 20;
+export const FLOW_SPARKLINE_MIN_POINTS = 2;
 
 export default function FlowSparkline({
     values, accent
 }: {values: number[]; accent: string}) {
-    if (values.length < 2) return null;
+    if (values.length < FLOW_SPARKLINE_MIN_POINTS) return null;
 
     const max = Math.max(...values);
     const min = Math.min(...values);
@@ -21,10 +22,10 @@ export default function FlowSparkline({
     const range = half * 2;
     const style = channelStyle("cup", {accent});
     const inset = style.strokeWidth / 2;
-    const drawWidth = WIDTH - inset * 2;
-    const drawHeight = HEIGHT - inset * 2;
+    const drawWidth = FLOW_SPARKLINE_WIDTH - inset * 2;
+    const drawHeight = FLOW_SPARKLINE_HEIGHT - inset * 2;
     const y = (value: number) =>
-        HEIGHT - inset - ((value - lower) / range) * drawHeight;
+        FLOW_SPARKLINE_HEIGHT - inset - ((value - lower) / range) * drawHeight;
     const x = (index: number) => inset + (index / (values.length - 1)) * drawWidth;
 
     const d = values
@@ -38,8 +39,17 @@ export default function FlowSparkline({
             accessibilityElementsHidden
             importantForAccessibility="no-hide-descendants"
             pointerEvents="none"
+            style={{
+                width: FLOW_SPARKLINE_WIDTH,
+                height: FLOW_SPARKLINE_HEIGHT,
+                flexShrink: 1
+            }}
         >
-            <Svg width={WIDTH} height={HEIGHT}>
+            <Svg
+                width="100%"
+                height={FLOW_SPARKLINE_HEIGHT}
+                viewBox={`0 0 ${FLOW_SPARKLINE_WIDTH} ${FLOW_SPARKLINE_HEIGHT}`}
+                preserveAspectRatio="none">
                 <Path
                     testID="flow-sparkline-path"
                     d={d}

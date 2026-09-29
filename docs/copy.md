@@ -623,8 +623,10 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 | `brew.figures.cup` | `components/BrewFigures.tsx:44` | Doto figure label. | `CUP` |
 | `brew.figures.time` | `components/BrewFigures.tsx:45` | Doto figure label. | `TIME` |
 | `brew.figures.flow` | `components/BrewFigures.tsx:149` | Doto flow row label, visible only when a cup rate can be said. | `FLOW` |
+| `brew.figures.flow.rate` | `components/BrewFigures.tsx:160` | Doto primary figure on the flow row. `${...}` is the cup rate in g/s to one decimal place. The design mockup used lowercase `g/s`, but the app renders Doto units uppercase by rule. | `${flow} G/S` |
 | `brew.figures.pour` | `components/BrewFigures.tsx:161` | Smaller second figure on the flow row. `${...}` is ml/s to one decimal place. | `POUR ${pourRate.toFixed(1)}` |
-| `brew.figures.drawdown` | `components/BrewFigures.tsx:128` | Doto drawdown line. The rate term is present only when a finished record can say it. `${...}` are the drawdown clock and g/s to one decimal place. | `DRAWDOWN ${clock(drawdown)} · ${rate} g/s` |
+| `brew.figures.flow.a11y` | `components/BrewFigures.tsx:134` (a11y) | (a11y) The grouped flow row's spoken label. Grouping the row replaces its children's spoken text, so both rates and both units have to be in the label. Not a live region: on the brew screen the figures change continuously, and the user's focus should not be interrupted. | `Flow, 2.4 grams per second, pouring 3.1 millilitres per second` |
+| `brew.figures.drawdown` | `components/BrewFigures.tsx:128` | Doto drawdown line. The rate term is present only when a finished record can say it. `${...}` are the drawdown clock and g/s to one decimal place. | `DRAWDOWN ${clock(drawdown)} · ${rate} G/S` |
 | `brew.trace.a11y` | `components/BrewTrace.tsx:111,152` (a11y) | (a11y) The brew trace graph. | `Brew trace` |
 | `brew.trace.legend.water` | `components/BrewTrace.tsx:218` | Doto legend item. | `WATER` |
 | `brew.trace.legend.cup` | `components/BrewTrace.tsx:219` | Doto legend item. | `CUP` |

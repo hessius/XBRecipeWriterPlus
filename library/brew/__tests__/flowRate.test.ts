@@ -4,6 +4,7 @@ import {
     FLOW_WINDOW_MS,
     cupAtDrawdownFrom,
     drawdownRate,
+    formatFlowRate,
     flowAt,
     flowNow,
     flowSeries,
@@ -347,6 +348,20 @@ describe("maxRateOf", () => {
 
     it("is zero on an empty series", () => {
         expect(maxRateOf([])).toBe(0);
+    });
+});
+
+describe("formatFlowRate", () => {
+    it("keeps a tiny negative fit from printing as negative zero", () => {
+        expect(formatFlowRate(-0.04)).toBe("0.0");
+    });
+
+    it("refuses a negative rate once rounding would print it", () => {
+        expect(formatFlowRate(-0.06)).toBeNull();
+    });
+
+    it("prints a positive finite rate to one decimal place", () => {
+        expect(formatFlowRate(2.44)).toBe("2.4");
     });
 });
 

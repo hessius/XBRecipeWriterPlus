@@ -1,14 +1,22 @@
 import React from "react";
 import {XStack, YStack} from "tamagui";
 
-import DotMatrixText from "@/components/DotMatrixText";
-import FlowSparkline from "@/components/FlowSparkline";
+import DotMatrixText, {drawnFontSize} from "@/components/DotMatrixText";
+import FlowSparkline, {
+    FLOW_SPARKLINE_HEIGHT,
+    FLOW_SPARKLINE_MIN_POINTS
+} from "@/components/FlowSparkline";
 import {palette} from "@/constants/colors";
 import {formatBrewClock} from "@/library/brew/brewFormat";
+import {formatFlowRate} from "@/library/brew/flowRate";
 
-// The row's tallest child is the 20 pt sparkline; the extra 4 pt matches the
-// breathing room the sibling figure rows get from their text line boxes.
-const FLOW_ROW_MIN_HEIGHT = 24;
+const DOTO_LINE_HEIGHT = 1.35;
+const FLOW_ROW_VERTICAL_ROOM = 4;
+
+export function flowRowMinHeight(): number {
+    const cupRateHeight = Math.ceil(drawnFontSize(14) * DOTO_LINE_HEIGHT);
+    return Math.max(FLOW_SPARKLINE_HEIGHT, cupRateHeight) + FLOW_ROW_VERTICAL_ROOM;
+}
 
 type Props = {
     water: number;
@@ -43,8 +51,8 @@ type Props = {
      * a claim that the bed has stopped.
      */
     flow?: number | null;
-    /** The last 30 seconds of cup rate. Empty draws no sparkline. */
-    flowTail?: number[];
+    /** The last 30 seconds of cup rate. Fewer than two readings draw no sparkline. */
+    flowTail?: number[] | null;
     /**
      * The instantaneous pour rate in ml/s, or null when nobody can say.
      *
@@ -121,12 +129,20 @@ export default function BrewFigures(
             </DotMatrixText>
         </XStack>
     );
-    const hasFlow = flow !== null;
-    const hasFlowTail = flowTail !== undefined && flowTail.length >= 2;
+    const flowText = flow === null ? null : formatFlowRate(flow);
+    const pourRateText = pourRate === null ? null : formatFlowRate(pourRate);
+    const drawdownRateText = drawdownRate === null ? null : formatFlowRate(drawdownRate);
+    const hasFlow = flowText !== null;
+    const hasFlowTail = (flowTail?.length ?? 0) >= FLOW_SPARKLINE_MIN_POINTS;
+    const flowAccessibilityLabel = flowText === null
+        ? undefined
+        : `Flow, ${flowText} grams per second${
+            pourRateText === null ? "" : `, pouring ${pourRateText} millilitres per second`
+        }`;
     const drawdownText = drawdown === null
         ? null
         : `DRAWDOWN ${formatBrewClock(drawdown)}${
-            drawdownRate === null ? "" : ` · ${drawdownRate.toFixed(1)} g/s`
+            drawdownRateText === null ? "" : ` · ${drawdownRateText} G/S`
         }`;
 
     return (
@@ -139,26 +155,31 @@ export default function BrewFigures(
             </XStack>
             {(hasFlow || reserveFlow) && (
                 <YStack testID="figures-flow-slot"
-                        minHeight={reserveFlow ? FLOW_ROW_MIN_HEIGHT : undefined}
+                        minHeight={reserveFlow ? flowRowMinHeight() : undefined}
                         justifyContent="center">
                     {hasFlow && (
                         <XStack testID="figures-flow" alignItems="center"
+                                accessible
+                                accessibilityLabel={flowAccessibilityLabel}
                                 justifyContent="space-between" gap="$2">
                             <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
                                            color={palette.dim}>
                                 FLOW
                             </DotMatrixText>
-                            <XStack alignItems="center" gap="$3">
-                                {hasFlowTail && (
+                            <XStack alignItems="center" gap="$3" flex={1} minWidth={0}
+                                    justifyContent="flex-end">
+                                {hasFlowTail && flowTail !== null && flowTail !== undefined && (
                                     <FlowSparkline values={flowTail} accent={accent} />
                                 )}
-                                <DotMatrixText fontSize={14} weight="bold" color={palette.text}>
-                                    {`${flow.toFixed(1)} g/s`}
+                                <DotMatrixText fontSize={14} weight="bold" color={palette.text}
+                                               numberOfLines={1} style={{flexShrink: 0}}>
+                                    {`${flowText} G/S`}
                                 </DotMatrixText>
-                                {pourRate !== null && (
+                                {pourRateText !== null && (
                                     <DotMatrixText fontSize={10} weight="bold"
-                                                   letterSpacing={1.6} color={palette.dim}>
-                                        {`POUR ${pourRate.toFixed(1)}`}
+                                                   letterSpacing={1.6} color={palette.dim}
+                                                   numberOfLines={1} style={{flexShrink: 0}}>
+                                        {`POUR ${pourRateText}`}
                                     </DotMatrixText>
                                 )}
                             </XStack>
