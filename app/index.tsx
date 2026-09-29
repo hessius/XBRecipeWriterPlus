@@ -56,6 +56,10 @@ import ShelfPickerBar, {PICKER_BAR_HEIGHT} from "@/components/ShelfPickerBar";
 import ShelfRoom, {type RoomRecipeActions} from "@/components/ShelfRoom";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
 import {resolveOnOpen} from "@/library/duplicates";
+import {BREWMIND_SOURCE, type BrewMindLink} from "@/library/brewmindLink";
+import {useBrewMindCreate} from "@/hooks/useBrewMindCreate";
+import {useImportLink} from "@/hooks/useImportLink";
+
 import {parseImportInput} from "@/library/importInput";
 import {
     asStockFilters,
@@ -78,6 +82,16 @@ import {canWriteToCard} from "@/library/cardLimits";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
 import {type Settings} from "@/library/Settings";
+
+/**
+ * How long one import link stays claimed after it is acted on.
+ *
+ * Not a motion value, so not in `constants/motion.ts`: nothing is animated by
+ * it. It is the width of the gap between two deliveries of a single redirect,
+ * which is milliseconds, set well clear of that and still far below the
+ * seconds it takes a person to open the same link again on purpose.
+ */
+const IMPORT_LINK_ECHO_MS = 3000;
 
 type Props = {
     /** Injected by tests. The route renders against the real database. */
@@ -776,6 +790,22 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // reads as a fresh delivery.
     const lastSeenShareUrl = useRef<string | null>(null);
 
+    /**
+     * The import link just acted on, and when (issue #159).
+     *
+     * One redirect can be delivered twice. On Android `openAuthSessionAsync`
+     * is built on a `Linking` listener, so returning from BrewMind both
+     * resolves the session *and* fires a URL event: without this the second
+     * delivery aborts the lookup the first one started and runs it again.
+     *
+     * Deliberately a short window rather than a permanent guard. The two
+     * deliveries of one redirect arrive within milliseconds of each other,
+     * while somebody opening the same link again to retry a failed import is
+     * seconds away at best -- and that retry must work, which is exactly what
+     * a permanent guard would prevent.
+     */
+    const lastImportLink = useRef<{url: string; at: number} | null>(null);
+
     // True from the moment a push to the editor is issued until a library screen
     // is focused again. Everything upstream of this guards one particular way a
     // recipe can arrive twice -- a redelivered share intent, a double tap, a
@@ -912,6 +942,48 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [liveShareUrl, resetShareIntent]);
 
+    /**
+     * Act on an import link, wherever it came from.
+     *
+     * The fourth door. A coffee app hands over a recipe and the coffee it was
+     * brewed with in one link, rather than the user pasting a share URL and
+     * retyping the bean by hand.
+     *
+     * A link returned by the BrewMind session and a link the app was woken
+     * with go through here alike, so the two paths cannot drift the first time
+     * one of them changes -- and so one redirect delivered down both can be
+     * recognised in a single place.
+     */
+    function openImportLink(link: BrewMindLink, url: string) {
+        const now = Date.now();
+        const last = lastImportLink.current;
+        if (last !== null && last.url === url && now - last.at < IMPORT_LINK_ECHO_MS) return;
+        lastImportLink.current = {url, at: now};
+
+        const source = parseImportInput(link.share);
+        if (!source) return;
+
+        // "shared", not a new intent. The value came from outside the field,
+        // so the field is hidden while the lookup runs, and a failure restores
+        // it without raising the keyboard on somebody whose attention is still
+        // in the app they came from. That is the same situation, so it gets
+        // the same answer.
+        setImportOpen(true);
+        importer.resolveNow(source, "shared", {
+            coffee: link.coffee,
+            recipeUrl: link.recipeUrl,
+            // Only a stated `brewmind` source earns the provenance. Anything
+            // else still imports and reads as an ordinary import, because the
+            // link is useful to anyone who can mint one.
+            source: link.source === BREWMIND_SOURCE ? "brewmind" : "import"
+        });
+    }
+
+    // Every link the system delivers, launch URL and later events alike.
+    useImportLink(openImportLink);
+
+    const brewMind = useBrewMindCreate(openImportLink);
+
     useEffect(() => {
         // A shared link that failed (network down, not found) leaves its guard
         // set while its intent is already consumed, so re-sharing the same link
@@ -922,6 +994,9 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         // its own.
         if (importStatus === "error") {
             handledShareUrl.current = null;
+            // An import link needs nothing here: each delivery is an event, so
+            // opening the same link again after a failure is heard again on
+            // its own. See `useImportLink`.
         }
     }, [importStatus]);
 
@@ -1581,6 +1656,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
             <ImportSheet
                 open={importOpen}
                 importer={importer}
+                onCreate={brewMind.open}
+                creating={brewMind.busy}
                 onOpenChange={(open) => {
                     setImportOpen(open);
                     if (!open) {

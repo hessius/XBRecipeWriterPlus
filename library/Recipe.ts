@@ -1,7 +1,7 @@
 import NFC from "./NFC";
 import {CardWriteError} from "./cardWriteErrors";
 import type {CardCapture} from "./cardDiagnostics";
-import {podCoffeeFromStored, podImageUrl, type PodCoffee} from "./podCoffee";
+import {httpsUrl, podCoffeeFromStored, podImageUrl, type PodCoffee} from "./podCoffee";
 import Pour, {AGITATION, POUR_PATTERN} from "./Pour";
 import {BYPASS_DEFAULT_TEMPERATURE, isUsableBypassTemp} from "./bypassLimits";
 import {tagKey} from "./tagKey";
@@ -125,8 +125,14 @@ const POLY_TABLE = [
 ];
 
 
-/** Where a recipe came from. Drives the placeholder name. */
-export type RecipeSource = "read" | "import" | "duplicate" | "manual";
+/**
+ * Where a recipe came from. Drives the placeholder name.
+ *
+ * A closed union on purpose. The verb table in `placeholderName` is typed
+ * against it, so a new source cannot be added without deciding what a nameless
+ * recipe from that source should be called.
+ */
+export type RecipeSource = "read" | "import" | "duplicate" | "manual" | "brewmind";
 
 class Recipe {
     public uuid: string = "";
@@ -147,6 +153,16 @@ class Recipe {
      * (spec §2.1.1).
      */
     public coffee?: PodCoffee;
+    /**
+     * The producer's own page for this recipe, when an import link named one
+     * (`recipe.url`, issue #159).
+     *
+     * Not the share link and not `coffee.url`. A share link resolves to
+     * xBloom's copy of the numbers; this is the page that explains why they
+     * are what they are, which is the part a recipe loses coming through
+     * xBloom. https only, checked where it arrives.
+     */
+    public recipeUrl?: string;
     public pours: Pour[] = [];
     public checksum: number = -1;
     public cupType: number = CUP_TYPE.XPOD;
@@ -379,6 +395,11 @@ class Recipe {
             }
             const coffee = podCoffeeFromStored(jsonRecipe.coffee);
             if (coffee !== null) this.coffee = coffee;
+            // Re-checked on the way out of storage rather than trusted,
+            // for the reason the coffee block is: a backup file is untrusted
+            // input and this value becomes a tappable link.
+            const recipeUrl = httpsUrl(jsonRecipe.recipeUrl);
+            if (recipeUrl !== undefined) this.recipeUrl = recipeUrl;
             this.shareUrl = jsonRecipe.shareUrl;
             this.shareSnapshot = jsonRecipe.shareSnapshot;
             // Records saved before bypass was introduced have no bypass keys;
@@ -579,7 +600,12 @@ class Recipe {
             read:      "Read",
             import:    "Imported Recipe",
             duplicate: "Copy",
-            manual:    "Untitled Brew"
+            manual:    "Untitled Brew",
+            // Named for where it came from rather than for how it arrived. A
+            // BrewMind link is an import, but it is the only import that also
+            // carries a coffee, and a card reading "Imported Recipe" would
+            // lose the one thing that made this one different.
+            brewmind:  "BrewMind Recipe"
         };
 
         if (this.source === "manual" || this.source === "duplicate" || this.createdAt === 0) {

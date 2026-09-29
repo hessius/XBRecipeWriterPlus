@@ -83,6 +83,22 @@ function footer(record: BrewRecord): string {
     return parts.filter((part): part is string => part !== undefined).join(" · ");
 }
 
+/**
+ * The producer's page for the recipe, on a line of its own (#159).
+ *
+ * Its own line rather than a part of the dot-separated footer, because a URL
+ * is the one thing in this note long enough to wrap, and Beanconqueror once
+ * rendered notes in a narrow no-wrap block. On its own line it is also
+ * selectable as a unit, which is the only thing anyone wants to do with it.
+ *
+ * Below the figures, because the figures are what the brew was and this is
+ * where to go and read about it.
+ */
+function recipePageLine(record: BrewRecord): string | undefined {
+    const url = (record.recipeUrl ?? "").trim();
+    return url === "" ? undefined : `Recipe: ${url}`;
+}
+
 function list(items: string[]): string {
     if (items.length <= 1) return items[0] ?? "";
     if (items.length === 2) return `${items[0]} and ${items[1]}`;
@@ -165,7 +181,10 @@ function recipeHeading(record: BrewRecord): string | undefined {
 export function brewNote(record: BrewRecord, backfilled: BackfilledField[] = []): string {
     const foot = footer(record);
     const source = backfillLine(backfilled);
-    const footerWithSource = source === undefined ? foot : `${foot}\n${source}`;
+    const page = recipePageLine(record);
+    const footerWithSource = [foot, source, page]
+        .filter((part) => part !== undefined)
+        .join("\n");
     const heading = recipeHeading(record);
     const stages = !Array.isArray(record.plan) || record.plan.length === 0
         ? undefined

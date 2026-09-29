@@ -386,7 +386,7 @@ describe("compareBrews", () => {
                     coffee: {
                         name: "House pod",
                         origin: "Huila",
-                        process: "Washed"
+                        processing: "Washed"
                     }
                 }),
                 samples: []
@@ -397,7 +397,7 @@ describe("compareBrews", () => {
                     coffee: {
                         name: "House pod",
                         origin: "Huila",
-                        process: "Washed"
+                        processing: "Washed"
                     }
                 }),
                 samples: []

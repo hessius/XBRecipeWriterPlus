@@ -69,7 +69,7 @@ describe("Recipe.coffee", () => {
         const coffee = {
             name: "Kenya Sakami",
             origin: "Nabiswa, Kenya",
-            process: "Natural",
+            processing: "Natural",
             variety: "Batian",
             aromatics: "Cherry・strawberry・blueberry",
             note: "A producer narrative.",

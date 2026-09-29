@@ -54,6 +54,25 @@ jest.mock("expo-share-intent", () => ({
 jest.mock("@/hooks/useSetting", () =>
     require("@/test-utils/settingsMock").settingsMock());
 
+// An import link is delivered as an event, not read as a value (issue #159):
+// the launch URL, then each one that arrives while the app runs. Both are
+// driven here -- `mockImportUrl` is what the app was launched with, and
+// `mockDeliverUrl` fires a later delivery.
+let mockImportUrl: string | null = null;
+let mockUrlListener: ((event: {url: string}) => void) | undefined;
+
+const mockDeliverUrl = (url: string) => mockUrlListener?.({url});
+
+jest.mock("expo-linking", () => ({
+    getInitialURL:    () => Promise.resolve(mockImportUrl),
+    addEventListener: (_type: string, listener: (event: {url: string}) => void) => {
+        mockUrlListener = listener;
+        return {remove: () => {
+            mockUrlListener = undefined;
+        }};
+    }
+}));
+
 jest.mock("@/library/RecipeDatabase");
 
 // Configurable so a test can leave a lookup in flight (a never-resolving
@@ -326,6 +345,8 @@ beforeEach(() => {
         shareIntent:      {},
         resetShareIntent: jest.fn()
     };
+    mockImportUrl = null;
+    mockUrlListener = undefined;
 });
 
 afterEach(() => {
@@ -2870,5 +2891,188 @@ describe("the low-tank warning on the dot", () => {
         expect(
             screen.queryByTestId("machine-dot-alarm", {includeHiddenElements: true})
         ).toBeNull();
+    });
+});
+
+describe("the import deep link", () => {
+    const SHARE = "https://share-h5.xbloom.com/r?id=abc123";
+
+    const link = (params: Record<string, string> = {}) => {
+        const url = new URL("xbrw://import");
+        url.searchParams.set("v", "1");
+        url.searchParams.set("source", "brewmind");
+        url.searchParams.set("share", SHARE);
+        for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+        return url.toString();
+    };
+
+    it("imports the recipe the link points at", async () => {
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        mockImportUrl = link();
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+        expect(XBloomRecipe).toHaveBeenCalledWith(
+            expect.objectContaining({id: "abc123"}), expect.anything()
+        );
+    });
+
+    it("puts the link's coffee on the recipe it opens", async () => {
+        const fetched = new Recipe();
+        fetched.xid = "abc123";
+        mockGetRecipe = () => fetched;
+        mockImportUrl = link({
+            "bean.name":       "Finca La Esperanza",
+            "bean.roaster":    "Some Roastery",
+            "bean.processing": "Washed",
+            "recipe.url":      "https://brewmind.coffee/recipe/esperanza"
+        });
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await waitFor(() => expect(mockPush).toHaveBeenCalled());
+        expect(fetched.coffee).toEqual(expect.objectContaining({
+            name:    "Finca La Esperanza",
+            roaster: "Some Roastery",
+            processing: "Washed"
+        }));
+        // From the closed vocabulary only: the roaster is not a tag.
+        expect(fetched.tags).toEqual(["Washed"]);
+        expect(fetched.source).toBe("brewmind");
+        // The producer's own page, which the editor offers a way back to.
+        expect(fetched.recipeUrl).toBe("https://brewmind.coffee/recipe/esperanza");
+    });
+
+    it("imports once, however many times the screen renders", async () => {
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        mockImportUrl = link();
+        const db = store([]);
+        const settings = new Settings(memoryStorage());
+
+        const {rerender} = await renderWithProviders(
+            <HomeScreen db={db} settings={settings}/>
+        );
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+
+        await act(async () => {
+            rerender(<HomeScreen db={db} settings={settings}/>);
+        });
+
+        expect(XBloomRecipe).toHaveBeenCalledTimes(1);
+    });
+
+    it("imports a link that arrives while the app is running", async () => {
+        // The warm case. Nothing was delivered at launch, so an import that
+        // only read the launch URL would never hear this at all.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        await act(async () => {});
+        expect(XBloomRecipe).not.toHaveBeenCalled();
+
+        await act(async () => {
+            mockDeliverUrl(link());
+        });
+
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+    });
+
+    it("imports once when one redirect is delivered twice", async () => {
+        // On Android `openAuthSessionAsync` is built on a Linking listener, so
+        // returning from BrewMind resolves the session *and* fires a URL
+        // event. The second delivery would abort the first lookup and run it
+        // again.
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        const url = link();
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        await act(async () => {
+            mockDeliverUrl(url);
+        });
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+
+        await act(async () => {
+            mockDeliverUrl(url);
+        });
+
+        expect(XBloomRecipe).toHaveBeenCalledTimes(1);
+    });
+
+    it("imports the same link again when it is opened again later", async () => {
+        // The retry. A failed import is exactly when somebody opens the link a
+        // second time, so a permanent guard on the URL would refuse the one
+        // attempt that matters.
+        jest.useFakeTimers();
+        mockFetchRecipeDetail = () => new Promise<void>(() => {});
+        const url = link();
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+        await act(async () => {
+            mockDeliverUrl(url);
+        });
+        await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(1));
+
+        await act(async () => {
+            jest.advanceTimersByTime(10_000);
+            mockDeliverUrl(url);
+        });
+
+        expect(XBloomRecipe).toHaveBeenCalledTimes(2);
+        jest.useRealTimers();
+    });
+
+    it("ignores a link it was not built to read", async () => {
+        // A later grammar may mean something different by the same parameter
+        // name, so it is refused rather than half-read.
+        mockImportUrl = link({v: "2"});
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        // Flush the effects a real link would have fired in, so this asserts
+        // that nothing happened rather than that nothing had happened yet.
+        await act(async () => {});
+        expect(XBloomRecipe).not.toHaveBeenCalled();
+    });
+
+    it("ignores an ordinary launch URL", async () => {
+        mockImportUrl = "xbrw://";
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        // Flush the effects a real link would have fired in, so this asserts
+        // that nothing happened rather than that nothing had happened yet.
+        await act(async () => {});
+        expect(XBloomRecipe).not.toHaveBeenCalled();
+    });
+
+    it("records an unknown producer as an ordinary import", async () => {
+        // The link is useful to anyone who can mint one, so an unknown source
+        // still imports; it simply does not earn the BrewMind provenance.
+        const fetched = new Recipe();
+        fetched.xid = "abc123";
+        mockGetRecipe = () => fetched;
+        mockImportUrl = link({source: "someoneelse"});
+
+        await renderWithProviders(
+            <HomeScreen db={store([])} settings={new Settings(memoryStorage())}/>
+        );
+
+        await waitFor(() => expect(mockPush).toHaveBeenCalled());
+        expect(fetched.source).toBe("import");
     });
 });

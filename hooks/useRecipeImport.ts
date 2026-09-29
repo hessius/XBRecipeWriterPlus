@@ -3,6 +3,7 @@ import {useEffect, useRef, useState} from "react";
 import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
 import {sharedSettings} from "@/hooks/useSetting";
 import {resolveOnOpen} from "@/library/duplicates";
+import {decorateImport, type ImportDecoration} from "@/library/importDecoration";
 import {parseImportInput, type ImportSource} from "@/library/importInput";
 import {asMachineModel} from "@/library/machine/machineModel";
 import type Recipe from "@/library/Recipe";
@@ -150,8 +151,18 @@ export type RecipeImport = {
      * pasted over a selected one nets zero and must still count as a paste.
      */
     onSelectionChange: (event: SelectionChangeEvent) => void;
-    /** From a paste affordance, a share intent, or the tile shortcut. */
-    resolveNow: (source: ImportSource, intent: ImportIntent) => void;
+    /**
+     * From a paste affordance, a share intent, the tile shortcut, or an
+     * import deep link.
+     *
+     * The optional decoration is what an import link carries besides the
+     * recipe (issue #159): a coffee, and the provenance to record it under.
+     */
+    resolveNow: (
+        source: ImportSource,
+        intent: ImportIntent,
+        decoration?: ImportDecoration
+    ) => void;
     /** Text from a paste affordance, which may or may not parse. */
     onPastedText: (text: string) => void;
     /** Open the recipe the panel is showing. */
@@ -251,7 +262,11 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         hintTimer.current = null;
     }
 
-    async function resolve(source: ImportSource, intent: ImportIntent) {
+    async function resolve(
+        source: ImportSource,
+        intent: ImportIntent,
+        decoration?: ImportDecoration
+    ) {
         clearTimers();
         setHint(false);
         // A share intent and the tile shortcut carry a whole value that came
@@ -324,6 +339,12 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
             return;
         }
 
+        // Before de-duplication, and on the candidate rather than the result.
+        // If this recipe is already held, the stored one wins below and keeps
+        // its own coffee: a link must not rewrite the coffee on a recipe the
+        // user has already edited.
+        if (decoration !== undefined) decorateImport(candidate, decoration);
+
         // "brew", not the card-bytes default: an imported recipe carries its
         // bypass, and a card cannot. Matching on the card alone here hands the
         // user the stored twin without the dilution and calls it the same
@@ -367,8 +388,12 @@ export function useRecipeImport({stored, onOpenRecipe}: Options): RecipeImport {
         });
     }
 
-    function resolveNow(source: ImportSource, intent: ImportIntent) {
-        void resolve(source, intent);
+    function resolveNow(
+        source: ImportSource,
+        intent: ImportIntent,
+        decoration?: ImportDecoration
+    ) {
+        void resolve(source, intent, decoration);
     }
 
     function onSelectionChange(event: SelectionChangeEvent) {

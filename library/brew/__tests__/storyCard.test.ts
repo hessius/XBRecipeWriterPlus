@@ -73,7 +73,7 @@ describe("the coffee line", () => {
 
     it("reads a process out of the pod's free text when it plainly says one", () => {
         expect(storyCoffeeLine(brew({
-            coffee: {name: "A pod", process: "fully washed"}
+            coffee: {name: "A pod", processing: "fully washed"}
         } as Partial<BrewRecord>))).toBe("Washed");
     });
 

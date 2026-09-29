@@ -61,7 +61,7 @@ export function brew(overrides: Partial<StoredBrew> = {}): StoredBrew {
         coffee: {
             name: "Kenya Sakami Gloria Natural Batian",
             origin: "Nabiswa, Kenya",
-            process: "Natural",
+            processing: "Natural",
             variety: "Batian",
             aromatics: "Cherry・strawberry・blueberry",
             beanMix: "Single Origin",

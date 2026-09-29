@@ -128,6 +128,8 @@ type BrewRow = {
     dialAfter: number;
     /** JSON, the pod coffee as it stood. `''` on rows written before it. */
     coffee: string;
+    /** The producer's page for the recipe. `''` when there was not one. */
+    recipeUrl: string;
     /** The user's own description of the coffee. `''` when they have not said. */
     origin: string;
     roast: string;
@@ -188,6 +190,7 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 dialBefore INTEGER NOT NULL DEFAULT 0,
                 dialAfter INTEGER NOT NULL DEFAULT 0,
                 coffee TEXT NOT NULL DEFAULT '',
+                recipeUrl TEXT NOT NULL DEFAULT '',
                 origin TEXT NOT NULL DEFAULT '',
                 roast TEXT NOT NULL DEFAULT '',
                 process TEXT NOT NULL DEFAULT '',
@@ -319,6 +322,13 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // The producer's page for the recipe (#159). `''` is "there was not one",
+    // the same sentinel `coffee` already uses on this table.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN recipeUrl TEXT NOT NULL DEFAULT '';");
+    } catch {
+        // Already there.
+    }
     // The coffee the user said this was. `''` is "nobody has said", the same
     // sentinel `coffee` already uses on this table.
     try {
@@ -447,10 +457,10 @@ class BrewDatabase {
                                 heldSeconds, stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched, dose, ratio,
                                 grindSize, grinderRpm, grinderUsed,
-                                dialBefore, dialAfter, coffee,
+                                dialBefore, dialAfter, coffee, recipeUrl,
                                 origin, roast, process, fermentation, sentAt, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0, record.drawdownAt ?? 0,
@@ -475,6 +485,7 @@ class BrewDatabase {
                 record.dialBefore ?? 0,
                 record.dialAfter ?? 0,
                 record.coffee ? JSON.stringify(record.coffee) : "",
+                record.recipeUrl ?? "",
                 originForColumn(record.origin),
                 isRoast(record.roast) ? record.roast : "",
                 isProcess(record.process) ? record.process : "",
@@ -1118,6 +1129,10 @@ function hydrate(row: BrewRow): StoredBrew {
         ...((row.dialBefore ?? 0) > 0 ? {dialBefore: row.dialBefore} : {}),
         ...((row.dialAfter ?? 0) > 0 ? {dialAfter: row.dialAfter} : {}),
         ...(coffee !== null ? {coffee} : {}),
+        // Emitted only when set, matching the optional-column convention: a
+        // brew of a recipe with no producer page serialises exactly as it did
+        // before this column existed.
+        ...(row.recipeUrl ? {recipeUrl: row.recipeUrl} : {}),
         ...(row.origin !== "" ? {origin: row.origin} : {}),
         ...(isRoast(row.roast) ? {roast: row.roast} : {}),
         ...(isProcess(row.process) ? {process: row.process} : {}),

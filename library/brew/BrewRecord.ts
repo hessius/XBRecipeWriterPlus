@@ -277,6 +277,14 @@ export type BrewRecord = {
     dialAfter?: number;
     /** The pod's coffee, when the recipe came from an xPod import (spec §2.1.1). */
     coffee?: PodCoffee;
+    /**
+     * `recipe.recipeUrl`: the producer's page for the recipe that was brewed.
+     *
+     * Copied for the same reason `recipeName` and `accent` are. It also goes
+     * into the Beanconqueror export note, and an export must still say where
+     * the recipe came from after the recipe itself has been deleted.
+     */
+    recipeUrl?: string;
     // What the coffee was, as the user described it.
     //
     // All optional, and absent means nobody has said. Not the same as a

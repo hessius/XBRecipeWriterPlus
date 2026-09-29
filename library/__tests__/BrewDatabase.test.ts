@@ -717,7 +717,7 @@ describe("the recipe snapshot for export", () => {
         const coffee = {
             name: "Kenya Sakami Gloria Natural Batian",
             origin: "Nabiswa, Kenya",
-            process: "Natural",
+            processing: "Natural",
             variety: "Batian",
             aromatics: "Cherry · strawberry · blueberry",
             note: "Producer notes",
@@ -745,12 +745,25 @@ describe("the recipe snapshot for export", () => {
         });
     });
 
+    it("round-trips the producer's recipe page", () => {
+        // Copied rather than joined, like the name and the accent: an export
+        // must still say where the recipe came from once the recipe itself
+        // has been deleted.
+        const db = new BrewDatabase();
+
+        db.insert(record({recipeUrl: "https://brewmind.coffee/recipe/esperanza"}), []);
+
+        expect(db.get("brew-1")?.recipeUrl)
+            .toBe("https://brewmind.coffee/recipe/esperanza");
+    });
+
     it("leaves the recipe snapshot absent when it was not recorded", () => {
         const db = new BrewDatabase();
 
         db.insert(record(), []);
 
         const back = db.get("brew-1");
+        expect(back?.recipeUrl).toBeUndefined();
         expect(back?.dose).toBeUndefined();
         expect(back?.ratio).toBeUndefined();
         expect(back?.grindSize).toBeUndefined();
@@ -909,7 +922,7 @@ describe("what the coffee was", () => {
         db.insert(record({
             id: "a",
             recipeUuid: "uuid-1",
-            coffee: {name: "Pod", origin: "Huila", process: "washed"}
+            coffee: {name: "Pod", origin: "Huila", processing: "washed"}
         }), []);
 
         // The pod's values resolve at read time. Writing them here would turn

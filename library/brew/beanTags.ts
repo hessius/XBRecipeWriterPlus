@@ -14,7 +14,21 @@ import type {BrewRecord} from "./BrewRecord";
 export const BEAN_FIELDS = ["origin", "roast", "process", "fermentation"] as const;
 export type BeanField = typeof BEAN_FIELDS[number];
 
-export const ROASTS = ["Light", "Medium", "Dark"] as const;
+/**
+ * Roast level, in scale order rather than alphabetical.
+ *
+ * The two compound steps are here because roasters use them and BrewMind
+ * sends them. Without them a coffee described as Light-Medium tagged as
+ * nothing at all, so it sat outside #104's roast grouping entirely -- worse
+ * than the coarseness of rounding it to Light, and invisible to the user.
+ *
+ * These are the spellings the app *stores*. What arrives is matched through
+ * `roastFrom`, so "dark medium" and "MEDIUM–DARK" both land on `Medium-Dark`
+ * and group with it.
+ */
+export const ROASTS = [
+    "Light", "Light-Medium", "Medium", "Medium-Dark", "Dark"
+] as const;
 export type Roast = typeof ROASTS[number];
 
 /**
@@ -40,9 +54,12 @@ export const MAX_BEAN_TAGS = 20;
 
 function member<T extends string>(values: readonly T[]) {
     const set = new Set<string>(values);
-    // Exact match only. A near miss is refused rather than repaired: repairing
-    // one would mean deciding that "washed" is Washed, and then deciding what
-    // "wet process" is, and the vocabulary stops being a fixed list.
+    // Exact match only, on purpose. These guard what is already *stored*: a
+    // brew row, a restored backup, a filter id. Everything in those places has
+    // been through `roastFrom` and friends already, so a value that is not
+    // letter-for-letter a member is a value that came from somewhere it should
+    // not have, and the right answer is to refuse it rather than to repair it
+    // here, out of sight of the matching rules.
     return (value: unknown): value is T =>
         typeof value === "string" && set.has(value);
 }
@@ -50,6 +67,61 @@ function member<T extends string>(values: readonly T[]) {
 export const isRoast = member(ROASTS);
 export const isProcess = member(PROCESSES);
 export const isFermentation = member(FERMENTATIONS);
+
+/**
+ * Every character a writer might put between two words of one term.
+ *
+ * The dashes are the trap. A recipe page written in a word processor carries
+ * an en dash, a copy-paste out of a PDF can carry a non-breaking hyphen or a
+ * soft hyphen, and none of them are the ASCII hyphen anybody typed. They all
+ * mean the same thing to a reader, so they have to mean the same thing here.
+ *
+ * `\s` covers the non-breaking space too, which is the other invisible one.
+ */
+const SEPARATORS = /[\s\u002d\u005f\u002f\u00ad\u2010-\u2015\u2212]+/u;
+
+/**
+ * The form of a vocabulary term that two spellings of it have in common.
+ *
+ * Case, separator and word order all folded away: "Dark-Medium", "medium
+ * dark" and "MEDIUM–DARK" are one key. Sorting the words is what buys the
+ * last of those, and it is safe only because these are closed lists of two
+ * words at most -- a test asserts no two members of a vocabulary share a key,
+ * so adding a term that collides with another fails CI rather than silently
+ * making one of them unreachable.
+ *
+ * Separate from `tagKey`, which folds case alone. That one decides whether two
+ * *user* tags are the same tag, and a user who typed both "Slow Brew" and
+ * "brew slow" meant two things. This one reads somebody else's description of
+ * a coffee against a list we control.
+ */
+function vocabularyKey(value: string): string {
+    return value.trim().toLowerCase().split(SEPARATORS)
+        .filter((word) => word !== "").sort().join(" ");
+}
+
+/** Exposed for the collision test, which is the reason sorting is allowed. */
+export const vocabularyKeyFor = vocabularyKey;
+
+/**
+ * The member of a vocabulary a free-text value names, canonically spelled.
+ *
+ * Returns the app's spelling, never the caller's, so what gets tagged and
+ * grouped is one string however it arrived. Still a match and never a guess:
+ * a value naming no member returns undefined, and an unset field is better
+ * than an invented one.
+ */
+function matcher<T extends string>(values: readonly T[]) {
+    const byKey = new Map<string, T>(
+        values.map((value) => [vocabularyKey(value), value])
+    );
+    return (value: unknown): T | undefined =>
+        typeof value === "string" ? byKey.get(vocabularyKey(value)) : undefined;
+}
+
+export const roastFrom = matcher(ROASTS);
+export const processFrom = matcher(PROCESSES);
+export const fermentationFrom = matcher(FERMENTATIONS);
 
 /**
  * The process a pod's free text describes, when it plainly describes one.
@@ -131,5 +203,5 @@ export function resolvedOrigin(record: BrewRecord): string | undefined {
  */
 export function resolvedProcess(record: BrewRecord): Process | undefined {
     if (isProcess(record.process)) return record.process;
-    return processFromPodText(record.coffee?.process);
+    return processFromPodText(record.coffee?.processing);
 }

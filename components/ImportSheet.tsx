@@ -50,6 +50,15 @@ type Props = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     importer: RecipeImport;
+    /**
+     * Build a recipe around a coffee instead of pasting one (issue #159).
+     *
+     * Optional because it is a way in rather than part of importing: a sheet
+     * without it is still the whole import sheet.
+     */
+    onCreate?: () => void;
+    /** Whether that trip is already under way. */
+    creating?: boolean;
 };
 
 /**
@@ -59,7 +68,7 @@ type Props = {
  * whether the field is drawn and what is said when it fails belongs to
  * `useRecipeImport`.
  */
-export default function ImportSheet({open, onOpenChange, importer}: Props) {
+export default function ImportSheet({open, onOpenChange, importer, onCreate, creating = false}: Props) {
     // `showField` and `focusField` are the hook's, not props: whether the field
     // is drawn and whether it grabs focus both follow from the import intent,
     // which only the hook knows, so they live in exactly one place. `showField`
@@ -379,6 +388,32 @@ export default function ImportSheet({open, onOpenChange, importer}: Props) {
 
                 {state.status === "found" && (
                     <ImportResult preview={state.preview} onOpen={openFound}/>
+                )}
+
+                {/* Last, and only while the sheet is idle. Pasting a link is
+                    what this sheet is for and what most people came to do;
+                    this is the other way in, for somebody who has a bag of
+                    coffee and no recipe yet. Showing it beside a running
+                    lookup or a result would offer a second journey to
+                    somebody already on one. */}
+                {onCreate !== undefined && state.status === "idle" && (
+                    <Pressable
+                        onPress={creating ? undefined : onCreate}
+                        disabled={creating}
+                        accessibilityRole="button"
+                        accessibilityState={{disabled: creating}}
+                        accessibilityLabel="Build a recipe with BrewMind"
+                        accessibilityHint="Opens BrewMind to pick a coffee, then brings the recipe back">
+                        <XStack alignItems="center" justifyContent="center" gap="$2" paddingVertical="$2">
+                            {creating
+                                ? <Spinner size="small" color={palette.dim}/>
+                                : <DotIcon name="plus" size={14} color={palette.dim}/>}
+                            <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.5}
+                                           color={palette.dim}>
+                                BUILD ONE WITH BREWMIND
+                            </DotMatrixText>
+                        </XStack>
+                    </Pressable>
                 )}
             </YStack>
         </XbrwSheet>

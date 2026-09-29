@@ -1,13 +1,29 @@
 import React, {useState} from "react";
-import {Image} from "react-native";
+import {Image, Pressable} from "react-native";
 import {Text, View, XStack} from "tamagui";
 
 import DeckSection from "@/components/DeckSection";
+import DotIcon from "@/components/DotIcon";
+import {openLink} from "@/components/openLink";
 import {palette} from "@/constants/colors";
 import Recipe from "@/library/Recipe";
 
 /** The mark's diameter, from the design: a small promise, not a hero image. */
 const MARK_SIZE = 40;
+
+/**
+ * What the button back to the producer's page says.
+ *
+ * Named where the producer is known, because "View on BrewMind" tells someone
+ * where the tap goes and a generic label does not. An import link from anyone
+ * else still gets the button, since the page is just as much the reasoning
+ * behind the recipe; it simply cannot be named.
+ */
+function pageLabel(recipe: Recipe): string {
+    return recipe.source === "brewmind"
+        ? "View on BrewMind"
+        : "View the recipe page";
+}
 
 /**
  * Where a recipe arrived from, when it arrived from somewhere.
@@ -40,8 +56,9 @@ export default function FromSection({recipe, accent, showAvatar}: {
     const fromXbloom = recipe.xid.trim().length > 0;
     const avatar = recipe.sharedByAvatar ?? "";
     const drawAvatar = showAvatar && avatar.length > 0 && !failed;
+    const recipeUrl = recipe.recipeUrl ?? "";
 
-    if (sharedBy.length === 0 && !fromXbloom) return null;
+    if (sharedBy.length === 0 && !fromXbloom && recipeUrl.length === 0) return null;
 
     return (
         <DeckSection title="FROM" testID="about-from">
@@ -68,6 +85,32 @@ export default function FromSection({recipe, accent, showAvatar}: {
                         : "An xBloom recipe. Nobody is named as the sharer."}
                 </Text>
             </XStack>
+
+            {recipeUrl.length > 0 ? (
+                <Pressable accessibilityRole="link"
+                           testID="from-recipe-page"
+                           accessibilityLabel={`${pageLabel(recipe)}. Opens in your browser.`}
+                           onPress={() => openLink(recipeUrl)}
+                           style={({pressed}) => ({
+                               opacity:   pressed ? 0.7 : 1,
+                               transform: [{scale: pressed ? 0.98 : 1}]
+                           })}>
+                    <XStack alignItems="center" justifyContent="space-between"
+                            gap="$3" minHeight={44} marginTop="$3"
+                            paddingVertical="$2" paddingHorizontal="$3"
+                            borderWidth={1} borderColor={accent}
+                            borderRadius="$5">
+                        <Text flex={1} fontSize={14} fontWeight="600"
+                              color={palette.text}>
+                            {pageLabel(recipe)}
+                        </Text>
+                        {/* Decorative: the row is already one labelled link. */}
+                        <XStack style={{transform: [{rotate: "180deg"}]}}>
+                            <DotIcon name="back" size={12} color={accent}/>
+                        </XStack>
+                    </XStack>
+                </Pressable>
+            ) : null}
         </DeckSection>
     );
 }
