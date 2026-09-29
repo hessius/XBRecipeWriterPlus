@@ -87,6 +87,59 @@ describe("BrewFigures", () => {
         );
         expect(screen.queryByTestId("figures-bypass")).toBeNull();
     });
+
+    it("shows the live rate with its sparkline", async () => {
+        await renderWithProviders(
+            <BrewFigures
+                water={120} cup={90} seconds={60} accent={TEST_ACCENT}
+                flow={2.4} flowTail={[1, 2, 2.4, 2.2]}
+            />
+        );
+        expect(screen.getByTestId("figures-flow")).toBeTruthy();
+        expect(screen.getByText(/2\.4/)).toBeTruthy();
+        expect(screen.getByTestId("flow-sparkline-path", {includeHiddenElements: true}))
+            .toBeTruthy();
+    });
+
+    it("draws no flow row at all when there is no rate to report", async () => {
+        await renderWithProviders(
+            <BrewFigures water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
+        );
+        expect(screen.queryByTestId("figures-flow")).toBeNull();
+    });
+
+    it("draws the row without a sparkline when the tail is too short", async () => {
+        await renderWithProviders(
+            <BrewFigures
+                water={120} cup={90} seconds={60} accent={TEST_ACCENT}
+                flow={2.4} flowTail={[]}
+            />
+        );
+        expect(screen.getByTestId("figures-flow")).toBeTruthy();
+        expect(screen.queryByTestId("flow-sparkline-path")).toBeNull();
+    });
+
+    it("puts the average rate on the drawdown line", async () => {
+        await renderWithProviders(
+            <BrewFigures
+                water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                drawdown={40} drawdownRate={2}
+            />
+        );
+        const line = screen.getByTestId("figures-drawdown");
+        expect(line).toHaveTextContent(/2\.0\s*g\/s/);
+    });
+
+    it("leaves the drawdown line as it was when there is no rate", async () => {
+        await renderWithProviders(
+            <BrewFigures
+                water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                drawdown={40}
+            />
+        );
+        const line = screen.getByTestId("figures-drawdown");
+        expect(line).not.toHaveTextContent("g/s");
+    });
 });
 
 describe("the grind dial", () => {

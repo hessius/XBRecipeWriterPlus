@@ -2,6 +2,7 @@ import React from "react";
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText from "@/components/DotMatrixText";
+import FlowSparkline from "@/components/FlowSparkline";
 import {palette} from "@/constants/colors";
 import {formatBrewClock} from "@/library/brew/brewFormat";
 
@@ -30,6 +31,23 @@ type Props = {
      * which of the two it is.
      */
     drawdown?: number | null;
+    /**
+     * The instantaneous cup rate in g/s, or null when nobody can say.
+     *
+     * Null and not 0. The row is absent before a brew has poured and while
+     * the bypass is the only thing on the scale, because a rate of 0 would be
+     * a claim that the bed has stopped.
+     */
+    flow?: number | null;
+    /** The last 30 seconds of cup rate. Empty draws no sparkline. */
+    flowTail?: number[];
+    /**
+     * The average rate across the drawdown, in g/s.
+     *
+     * It sits on the drawdown line because it is a property of that same
+     * interval, not a fourth total beside water, cup and time.
+     */
+    drawdownRate?: number | null;
     /**
      * What the machine's grind dial read, as a ready line, or null when there
      * is nothing the record may say.
@@ -68,7 +86,10 @@ function Figure({label, value, color, badge}: {
  * a figure this size that changes every 100 ms cannot be read at all.
  */
 export default function BrewFigures(
-    {water, cup, seconds, accent, bypass, drawdown = null, dial = null}: Props
+    {
+        water, cup, seconds, accent, bypass, drawdown = null, flow = null,
+        flowTail, drawdownRate = null, dial = null
+    }: Props
 ) {
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
         <XStack testID="figures-bypass"
@@ -80,6 +101,13 @@ export default function BrewFigures(
             </DotMatrixText>
         </XStack>
     );
+    const hasFlow = flow !== null;
+    const hasFlowTail = flowTail !== undefined && flowTail.length >= 2;
+    const drawdownText = drawdown === null
+        ? null
+        : `DRAWDOWN ${formatBrewClock(drawdown)}${
+            drawdownRate === null ? "" : `, ${drawdownRate.toFixed(1)} g/s`
+        }`;
 
     return (
         <YStack gap="$1.5">
@@ -89,14 +117,33 @@ export default function BrewFigures(
                 <Figure label="CUP" value={String(Math.round(cup))} color={palette.text} />
                 <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text} />
             </XStack>
+            <YStack minHeight={24} justifyContent="center">
+                {hasFlow && (
+                    <XStack testID="figures-flow" alignItems="center"
+                            justifyContent="space-between" gap="$2">
+                        <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
+                                       color={palette.dim}>
+                            FLOW
+                        </DotMatrixText>
+                        <XStack alignItems="center" gap="$3">
+                            {hasFlowTail && (
+                                <FlowSparkline values={flowTail} accent={accent} />
+                            )}
+                            <DotMatrixText fontSize={14} weight="bold" color={palette.text}>
+                                {`${flow.toFixed(1)} g/s`}
+                            </DotMatrixText>
+                        </XStack>
+                    </XStack>
+                )}
+            </YStack>
             {/* Absent, not zero, when it was not measured. A brew that was
                 interrupted never drew down and a record written before the
                 boundary was kept cannot say, and printing 0:00 for either
                 would invent a figure somebody might dial a grind against. */}
-            {drawdown !== null && (
+            {drawdownText !== null && (
                 <DotMatrixText testID="figures-drawdown" fontSize={10} weight="bold"
                                letterSpacing={1.6} color={palette.dim}>
-                    {`DRAWDOWN ${formatBrewClock(drawdown)}`}
+                    {drawdownText}
                 </DotMatrixText>
             )}
             {dial !== null && (
