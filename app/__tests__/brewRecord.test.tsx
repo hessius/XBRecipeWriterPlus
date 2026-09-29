@@ -137,6 +137,22 @@ const twoPours = {
     ]
 } as unknown as Recipe;
 
+function samplesForRate() {
+    return Array.from({length: 31}, (_, i) => {
+        const at = i * 100;
+        return {at, water: (at / 1000) * 3, cup: (at / 1000) * 2, pour: 1};
+    });
+}
+
+function recordWithDrawdownRate(over: Partial<StoredBrew> = {}) {
+    return {
+        ...record,
+        drawdownAt: 210_000,
+        cupAtDrawdown: 200,
+        ...over
+    };
+}
+
 async function pressOnSheet(
     target: () => Parameters<typeof fireEvent.press>[0],
     landed?: () => boolean
@@ -1085,6 +1101,33 @@ describe("the drawdown on the record screen", () => {
         // cancelled, both store 0. Neither is a drawdown of no seconds.
         await renderRecord({...record, drawdownAt: 0});
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
+    });
+
+    it("charts the rate and names it on the drawdown line", async () => {
+        mockOpened = {record: recordWithDrawdownRate(), samples: samplesForRate()};
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(await screen.findByTestId("rate-chart")).toBeTruthy();
+        expect(screen.getByTestId("figures-drawdown")).toHaveTextContent(/G\/S/);
+    });
+
+    it("still names the rate when the stream has been swept", async () => {
+        mockOpened = {
+            record: recordWithDrawdownRate({hasStream: false}),
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
+        expect(screen.getByTestId("figures-drawdown")).toHaveTextContent(/G\/S/);
+    });
+
+    it("keeps the rate chart inside the shared capture", async () => {
+        mockOpened = {record: recordWithDrawdownRate(), samples: samplesForRate()};
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        const capture = screen.getByTestId("brew-capture");
+        expect(within(capture).getByTestId("rate-chart")).toBeTruthy();
     });
 });
 

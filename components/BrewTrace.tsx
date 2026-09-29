@@ -10,7 +10,7 @@ import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {livePoints, pathLength, planPoints, stageSpans, toPath,
         traceTimeParts,
-        type Box} from "@/library/brew/brewShape";
+        type Box, type TraceTimeParts} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
 import {bandY, BAND_FLOOR, hasSetTemperature, temperatureBand,
@@ -78,6 +78,8 @@ type Props = {
      * two screens do not disagree about what a bypass is.
      */
     bypass?: BypassView;
+    /** Precomputed by a parent that needs another chart on this same time axis. */
+    timeParts?: TraceTimeParts;
 };
 /** Point size of the overrun label. */
 const OVERRUN_SIZE = 12;
@@ -200,14 +202,14 @@ export default function BrewTrace({
     axis,
     holding = false, role = "subject", planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
-    compact = false, stages, selectedIndex = null, onSelectStage, bypass
+    compact = false, stages, selectedIndex = null, onSelectStage, bypass, timeParts
 }: Props) {
     const id = useId().replace(/[^a-zA-Z0-9]/g, "");
     const plan = planPoints(pours);
     const water = livePoints(samples, "water");
     const cup = livePoints(samples, "cup");
 
-    const times = traceTimeParts(plannedSeconds, samples, bypass);
+    const times = timeParts ?? traceTimeParts(plannedSeconds, samples, bypass);
     const {ranTo, bypassMl, bypassWide, bypassFrom} = times;
     // The plan's final water level: where the target line ends, and the floor
     // the bypass box is stacked on.

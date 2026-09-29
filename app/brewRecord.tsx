@@ -32,6 +32,7 @@ import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {brewFigures} from "@/library/brew/brewFigures";
 import {drawdownSeconds, poursFromPlan} from "@/library/brew/BrewRecord";
 import {dialNote} from "@/library/brew/dialAfterBrew";
+import {drawdownRate, flowSeries} from "@/library/brew/flowRate";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {storyCoffeeLine} from "@/library/brew/storyCard";
@@ -246,6 +247,7 @@ export default function BrewRecord({recipeLookup}: Props) {
         (brew) => brew.recipeUuid === record.recipeUuid && brew.id !== record.id
     );
     const figures = brewFigures(record);
+    const rate = drawdownRate(record);
 
     function openComparisonPicker(): void {
         const candidates = sharedBrewDatabase()
@@ -298,6 +300,10 @@ export default function BrewRecord({recipeLookup}: Props) {
         stagesUnavailable: snapshot.length === 0 && recipe === null,
         bypass,
         drawdown:          drawdownSeconds(record),
+        drawdownRate:      rate,
+        rateSeries:        record.hasStream && samples.length > 0
+            ? flowSeries(samples, record.pours)
+            : [],
         dial:              dialNote(record)
     };
 

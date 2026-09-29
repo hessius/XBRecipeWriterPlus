@@ -3,6 +3,7 @@ import {StyleSheet, View} from "react-native";
 import {Text, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
+import BrewRateChart from "@/components/BrewRateChart";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
 import MarqueeText from "@/components/MarqueeText";
@@ -10,8 +11,10 @@ import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
 import {summaryBands} from "@/library/brew/bands";
+import {traceTimeParts} from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {BypassView} from "@/library/brew/bypassState";
+import type {FlowPoint} from "@/library/brew/flowRate";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -68,6 +71,14 @@ type Props = {
      */
     drawdown?: number | null;
     /**
+     * The retained stream's fitted flow rates.
+     *
+     * Undefined or empty draws no chart, which is what a swept record wants.
+     */
+    rateSeries?: FlowPoint[];
+    /** Average drawdown flow rate, or null when the record cannot say. */
+    drawdownRate?: number | null;
+    /**
      * What the machine's grind dial read, as a ready line from `dialNote`, or
      * null when the record may not say. Null on the live screen: the reading
      * is taken after the brew has ended.
@@ -106,11 +117,12 @@ export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
-    drawdown = null, dial = null, availableHeight = 0,
+    drawdown = null, rateSeries, drawdownRate = null, dial = null, availableHeight = 0,
     testID = "brew-capture"
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
+    const traceTimes = traceTimeParts(plannedSeconds, samples, bypass);
 
     // Measured from an onLayout event, never an effect. Everything above the
     // ladder is one subtree, so its height is one reading; the ladder's own
@@ -154,6 +166,7 @@ export default function BrewSummary({
                     selectedIndex={selectedIndex}
                     onSelectStage={onSelectStage}
                     bypass={bypass}
+                    timeParts={traceTimes}
                 />
             ) : (
                 <YStack height={TRACE_HEIGHT} alignItems="center"
@@ -167,6 +180,15 @@ export default function BrewSummary({
                         No trace was kept for this brew.
                     </Text>
                 </YStack>
+            )}
+
+            {hasStream && rateSeries !== undefined && rateSeries.length >= 2 && (
+                <BrewRateChart
+                    series={rateSeries}
+                    accent={accent}
+                    width={traceWidth}
+                    maxT={traceTimes.maxT}
+                />
             )}
 
             {note !== undefined && (
@@ -184,6 +206,7 @@ export default function BrewSummary({
                 accent={accent}
                 bypass={bypass?.delivered}
                 drawdown={drawdown}
+                drawdownRate={drawdownRate}
                 dial={dial}
             />
             </View>
