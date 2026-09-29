@@ -755,8 +755,8 @@ describe("asLibraryFilters and unresolvable bean ids", () => {
         // buildLibraryQuery throws on an id it cannot resolve, and that throw
         // is reserved for the vocabulary and the resolver disagreeing. A gate
         // testing shape alone would let this one through to it.
-        expect(resolveLibraryFilter("bean:roast:Medium-Dark")).toBeNull();
-        expect(asLibraryFilters(["bean:roast:Medium-Dark", "tea"])).toEqual(["tea"]);
+        expect(resolveLibraryFilter("bean:roast:Scorched")).toBeNull();
+        expect(asLibraryFilters(["bean:roast:Scorched", "tea"])).toEqual(["tea"]);
     });
 
     it("drops a custom bean id whose value folds away to nothing", () => {

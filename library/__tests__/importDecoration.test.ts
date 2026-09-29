@@ -31,9 +31,19 @@ describe("decorateImport", () => {
         expect(decorated.tags).toEqual(["Medium", "Washed", "Anaerobic"]);
     });
 
+    it("tags the hyphenated roast levels BrewMind sends", () => {
+        const decorated = decorateImport(recipe(), {
+            coffee: {name: "X", roast: "Medium-Dark"}
+        });
+
+        expect(decorated.tags).toEqual(["Medium-Dark"]);
+    });
+
     it("leaves a value outside the vocabulary untagged", () => {
         // A miss is unset rather than invented, which is what those predicates
-        // are for. "Medium-dark" is not a roast this app knows.
+        // are for. "Medium-dark" is a near miss for a level this app does
+        // know, and a near miss is still a miss: repairing the casing here
+        // would mean deciding where the repairing stops.
         const decorated = decorateImport(recipe(), {
             coffee: {name: "X", roast: "Medium-dark", processing: "Carbonic maceration"}
         });

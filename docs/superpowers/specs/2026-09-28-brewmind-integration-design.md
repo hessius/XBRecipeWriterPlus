@@ -245,6 +245,14 @@ not become a second copy of the bean record.
 refuses because xBloom's value was an unexplained constant; BrewMind states a
 roast level outright, so this is not the app guessing.
 
+`ROASTS` gains `Light-Medium` and `Medium-Dark`, the two hyphenated levels
+BrewMind said it sends, making the list five in scale order. Storing them as
+written while tagging nothing would have left a coffee described that way
+outside #104's roast grouping entirely, which is worse than the coarseness of
+five steps instead of three. Only those two spellings: `Medium-Light` is a near
+miss and refused like any other, because repairing one means deciding where the
+repairing stops.
+
 Tags are written through `recipe.setTags`, never by assignment, so they are
 normalised and capped.
 

@@ -14,7 +14,21 @@ import type {BrewRecord} from "./BrewRecord";
 export const BEAN_FIELDS = ["origin", "roast", "process", "fermentation"] as const;
 export type BeanField = typeof BEAN_FIELDS[number];
 
-export const ROASTS = ["Light", "Medium", "Dark"] as const;
+/**
+ * Roast level, in scale order rather than alphabetical.
+ *
+ * The two hyphenated steps are here because roasters use them and BrewMind
+ * sends them. Without them a coffee described as Light-Medium tagged as
+ * nothing at all, so it sat outside #104's roast grouping entirely -- worse
+ * than the coarseness of rounding it to Light, and invisible to the user.
+ *
+ * Exactly these two spellings, matching what `bean.roast` carries. "Medium
+ * Light" and "Medium-Light" are not members, for the reason `member` gives
+ * below: repairing one near miss means deciding where the repairing stops.
+ */
+export const ROASTS = [
+    "Light", "Light-Medium", "Medium", "Medium-Dark", "Dark"
+] as const;
 export type Roast = typeof ROASTS[number];
 
 /**

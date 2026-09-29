@@ -14,8 +14,15 @@ describe("the vocabulary", () => {
         expect(BEAN_FIELDS).toEqual(["origin", "roast", "process", "fermentation"]);
     });
 
-    it("offers the roast levels the design settled on", () => {
-        expect(ROASTS).toEqual(["Light", "Medium", "Dark"]);
+    it("offers the roast levels the design settled on, in scale order", () => {
+        expect(ROASTS).toEqual([
+            "Light", "Light-Medium", "Medium", "Medium-Dark", "Dark"
+        ]);
+    });
+
+    it("accepts the two hyphenated levels BrewMind sends", () => {
+        expect(isRoast("Light-Medium")).toBe(true);
+        expect(isRoast("Medium-Dark")).toBe(true);
     });
 
     it("keeps fruit removal and fermentation as separate vocabularies", () => {
@@ -46,6 +53,7 @@ describe("the guards", () => {
     it("refuses a near miss rather than repairing it", () => {
         expect(isProcess("washed")).toBe(false);
         expect(isRoast("Medium Dark")).toBe(false);
+        expect(isRoast("Medium-Light")).toBe(false);
     });
 });
 
