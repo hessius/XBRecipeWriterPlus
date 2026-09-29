@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import {appDatabase} from "@/library/appDatabase";
 
 import {
     COUNTED_SQL,
@@ -417,7 +418,7 @@ class BrewDatabase {
     private db: SQLite.SQLiteDatabase;
 
     constructor() {
-        this.db = SQLite.openDatabaseSync("xbrecipewriter.db");
+        this.db = appDatabase();
         ensureBrewTables(this.db);
     }
 
