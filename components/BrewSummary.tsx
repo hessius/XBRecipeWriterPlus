@@ -74,6 +74,15 @@ type Props = {
      */
     dial?: string | null;
     /**
+     * The capture target's id.
+     *
+     * Defaults to the one the in-place export photographs. The story card
+     * renders a second summary while the record screen's own is still
+     * mounted, and two nodes answering to `brew-capture` is how a capture
+     * ends up photographing whichever the renderer found first.
+     */
+    testID?: string;
+    /**
      * The height the summary may draw in, from the screen's scroll viewport.
      *
      * Absent — or zero — keeps the frozen bands, which is what a caller that
@@ -97,7 +106,8 @@ export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
-    drawdown = null, dial = null, availableHeight = 0
+    drawdown = null, dial = null, availableHeight = 0,
+    testID = "brew-capture"
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
@@ -112,7 +122,7 @@ export default function BrewSummary({
     const bands = summaryBands(ladderHeight, stages.length);
 
     return (
-        <View testID="brew-capture" style={styles.capture}>
+        <View testID={testID} style={styles.capture}>
             <View
                 testID="summary-chrome"
                 onLayout={(e) => setChromeHeight(e.nativeEvent.layout.height)}
