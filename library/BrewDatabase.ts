@@ -91,6 +91,8 @@ type BrewRow = {
     /** 0 on a brew that never poured, and on rows written before the column. */
     pouringAt: number | null;
     drawdownAt: number | null;
+    /** 0 on rows written before it, which reads as "not recorded". */
+    cupAtDrawdown: number;
     endedAt: number;
     outcome: string;
     failure: string | null;
@@ -167,6 +169,7 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 startedAt INTEGER NOT NULL,
                 pouringAt INTEGER NOT NULL DEFAULT 0,
                 drawdownAt INTEGER NOT NULL DEFAULT 0,
+                cupAtDrawdown REAL NOT NULL DEFAULT 0,
                 endedAt INTEGER NOT NULL,
                 outcome TEXT NOT NULL,
                 failure TEXT,
@@ -227,6 +230,13 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     // `drawdownSeconds` reads as "not measured" rather than "no drawdown".
     try {
         db.execSync("ALTER TABLE brews ADD COLUMN drawdownAt INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    try {
+        db.execSync(
+            "ALTER TABLE brews ADD COLUMN cupAtDrawdown REAL NOT NULL DEFAULT 0;"
+        );
     } catch {
         // Already there.
     }
@@ -452,7 +462,7 @@ class BrewDatabase {
     private writeBrewRow(record: BrewRecord, hasStream: boolean): void {
         this.db.runSync(
             `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
-                                drawdownAt,
+                                drawdownAt, cupAtDrawdown,
                                 endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                 heldSeconds, stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched, dose, ratio,
@@ -460,10 +470,11 @@ class BrewDatabase {
                                 dialBefore, dialAfter, coffee, recipeUrl,
                                 origin, roast, process, fermentation, sentAt, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0, record.drawdownAt ?? 0,
+                record.cupAtDrawdown ?? 0,
                 record.endedAt, record.outcome, record.failure,
                 record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
                 JSON.stringify(record.stalls ?? []),
@@ -1093,6 +1104,7 @@ function hydrate(row: BrewRow): StoredBrew {
         startedAt: row.startedAt,
         pouringAt: row.pouringAt ?? 0,
         drawdownAt: row.drawdownAt ?? 0,
+        ...(row.cupAtDrawdown > 0 ? {cupAtDrawdown: row.cupAtDrawdown} : {}),
         endedAt: row.endedAt,
         outcome: row.outcome as BrewOutcome,
         // SQLite has no undefined and no boolean; a missing reason must come

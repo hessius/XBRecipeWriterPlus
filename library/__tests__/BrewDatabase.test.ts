@@ -387,6 +387,54 @@ describe("BrewDatabase", () => {
         expect(drawdownSeconds(back)).toBe(15);
     });
 
+    it("round trips the cup reading at the drawdown boundary", () => {
+        const db = realBrewDatabase();
+
+        db.insert(record({id: "brew-drawdown-cup", drawdownAt: 90_000, cupAtDrawdown: 118.5}), []);
+
+        expect(db.get("brew-drawdown-cup")?.cupAtDrawdown).toBeCloseTo(118.5, 6);
+    });
+
+    it("leaves the drawdown cup key off a record that never had one", () => {
+        const db = realBrewDatabase();
+
+        db.insert(record({id: "brew-no-drawdown-cup", drawdownAt: 0}), []);
+
+        expect(db.get("brew-no-drawdown-cup")).not.toHaveProperty("cupAtDrawdown");
+    });
+
+    it("reads a row with the drawdown cup default as a record without the key", () => {
+        const db = realBrewDatabase();
+        const raw = (db as unknown as {db: FakeSQLiteDatabase}).db;
+
+        raw.runSync(
+            `INSERT INTO brews (
+                id, recipeUuid, recipeName, accent, startedAt, drawdownAt,
+                endedAt, outcome, pours, waterTotal, cupTotal, heldSeconds, hasStream
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+            [
+                "brew-default-drawdown-cup", "uuid-1", "Ethiopia Guji", "#C86A3B",
+                1_000_000, 90_000, 1_240_000, "done", 2, 250, 244, 14, 0
+            ]
+        );
+        expect(raw.getFirstSync(
+            "SELECT cupAtDrawdown FROM brews WHERE id = ?;",
+            ["brew-default-drawdown-cup"]
+        )).toEqual({cupAtDrawdown: 0});
+
+        expect(db.get("brew-default-drawdown-cup")).not.toHaveProperty("cupAtDrawdown");
+    });
+
+    it("restores the cup reading at the drawdown boundary", () => {
+        const db = realBrewDatabase();
+
+        expect(db.restore([
+            record({id: "brew-restored-drawdown-cup", drawdownAt: 90_000, cupAtDrawdown: 118.5})
+        ])).toBe(1);
+
+        expect(db.get("brew-restored-drawdown-cup")?.cupAtDrawdown).toBeCloseTo(118.5, 6);
+    });
+
     it("keeps both dial readings through the database", () => {
         const db = realBrewDatabase();
         db.insert(record({id: "brew-dial", dialBefore: 47, dialAfter: 52}), []);
