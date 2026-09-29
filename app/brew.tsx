@@ -164,7 +164,15 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const flowTailValues = flow === null
         ? []
         : flowTail(samples, stages, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
-    const liveDrawdownFigure = liveDrawdown(samples, stages, elapsed, phase.name, running);
+    const finalStageTargetMl = Math.max(recipe.pours[stages - 1]?.volume ?? 0, 0);
+    const liveDrawdownFigure = liveDrawdown({
+        samples,
+        stages,
+        elapsedSeconds: elapsed,
+        phaseName: phase.name,
+        running,
+        finalStageTargetMl,
+    });
 
     // Only a refusal for water gets the water copy. `block` names which of the
     // pre-flight checks said no, so a busy machine is no longer told to go and

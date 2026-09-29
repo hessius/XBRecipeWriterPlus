@@ -1302,26 +1302,43 @@ In `app/brew.tsx`, near the existing derivations (`samples`, `elapsed`,
     // can say: before the first pour, and while the window holds nothing but
     // bypass water, which flowRate answers for us rather than being re-derived
     // from bypass.startedAt here.
-    const flow = flowNow(samples, recipe.pours.length);
+    const stages = recipe.pours.length;
+    const flow = flowNow(samples, stages);
     const flowTailValues = flow === null
         ? []
-        : flowTail(samples, recipe.pours.length, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
+        : flowTail(samples, stages, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
 
-    const liveDrawdownFigure = liveDrawdown(
-        samples, recipe.pours.length, elapsed, phase.name, running
-    );
+    const finalStageTargetMl = Math.max(recipe.pours[stages - 1]?.volume ?? 0, 0);
+    const liveDrawdownFigure = liveDrawdown({
+        samples,
+        stages,
+        elapsedSeconds: elapsed,
+        phaseName: phase.name,
+        running,
+        finalStageTargetMl,
+    });
 ```
 
 Amendment, 2026-09-30: do not gate this on `activeIndex`. `activeIndex` is
 `null` during bypass, and the verified frame log puts bypass inside the
-drawdown. The live helper takes `phase.name` instead. It keeps the row closed
-while the machine is still in `pouring`, so a two second stall inside the
-final pour cannot masquerade as drawdown, and it remains eligible through
-`bypass` and `settling`. Planned pauses before the final stage never produce a
-boundary, final-pour samples do not open the clock until the boundary is at
-least 1000 ms behind the sample clock, and plateau wobble cannot retake it
-because the retake threshold is measured from the highest final-stage water
-level actually seen rather than the ratcheted boundary level.
+drawdown. The live helper now takes an options object, as shown above.
+
+The gate combines water and phase evidence. When the final stage has delivered
+its planned volume, the clock opens immediately, including while
+`phase.name === "pouring"`, because the machine emits no event when the water
+actually stops. `bypass` and `settling` are a backstop for a final stage that
+stopped short of plan. That backstop waits for `DRAWDOWN_OPEN_MARGIN_MS`, now
+2100 ms, which is `MIN_STALL_SECONDS` plus one nominal scale frame. That
+margin is deliberately not used to open during `pouring`: `MIN_STALL_SECONDS`
+is the minimum duration for a real stall to count, not a maximum duration a
+stall can last, so a below-target quiet channel during `pouring` is still a
+possible in-pour stall.
+
+Planned pauses before the final stage never produce a boundary, and plateau
+wobble cannot retake it because the retake threshold is measured from the
+highest final-stage water level actually seen rather than the ratcheted
+boundary level. The phase table in `liveDrawdown.ts` is exhaustive over
+`BrewPhase["name"]`; adding a phase now fails typecheck until it is classified.
 
 Add the imports:
 

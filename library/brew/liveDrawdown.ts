@@ -1,16 +1,36 @@
 import type {BrewSample} from "./BrewRecord";
-import {NOISE_FLOOR_ML} from "./stalls";
+import {MIN_STALL_SECONDS, NOISE_FLOOR_ML, stageWaterFrom} from "./stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 
 /**
- * How long brew water must stay below a new high before the live clock opens.
+ * How long brew water must be quiet before a post-pour phase can open the
+ * live clock for a stage that ended short of its target.
  *
- * The machine reports around ten scale frames a second. One second leaves
- * enough room for the final water boundary to settle before the clock is
- * revealed, while adding only that first second of drawdown latency to a clock
- * that otherwise cannot be stable.
+ * `MIN_STALL_SECONDS` is the floor for recognising a real in-pour stall, not a
+ * ceiling on how long one can last. This margin is therefore not allowed to
+ * open the clock while the machine is still in `pouring`; it only keeps a
+ * post-pour backstop from reacting to one quiet frame.
  */
-export const DRAWDOWN_OPEN_MARGIN_MS = 1000;
+export const DRAWDOWN_OPEN_MARGIN_MS = (MIN_STALL_SECONDS * 1000) + 100;
+
+type DrawdownPhaseGate = "veto" | "water" | "backstop";
+
+const DRAWDOWN_PHASES = {
+    idle: "veto",
+    waking: "veto",
+    sending: "veto",
+    readyToStart: "veto",
+    armed: "veto",
+    pressPlay: "veto",
+    grinding: "veto",
+    pouring: "water",
+    bypass: "backstop",
+    settling: "backstop",
+    done: "veto",
+    cancelled: "veto",
+    lostContact: "veto",
+    failed: "veto",
+} satisfies Record<BrewPhase["name"], DrawdownPhaseGate>;
 
 export type LiveDrawdown = {
     /** Boundary in milliseconds on the sample clock, or 0 before it exists. */
@@ -19,6 +39,16 @@ export type LiveDrawdown = {
     drawdown: number | null;
     /** Whether the live figures should hold the drawdown row's height. */
     reserveDrawdown: boolean;
+};
+
+export type LiveDrawdownOptions = {
+    samples: BrewSample[];
+    stages: number;
+    elapsedSeconds: number;
+    phaseName: BrewPhase["name"];
+    running: boolean;
+    /** Planned millilitres for the final brew stage, if the caller has them. */
+    finalStageTargetMl?: number;
 };
 
 /**
@@ -70,25 +100,35 @@ export function liveDrawdownFrom(samples: BrewSample[], stages: number): number 
  * The live drawdown row state for the brew screen.
  *
  * The boundary is final-stage only, so planned pauses between earlier stages
- * cannot open the row. The row opens only after the machine leaves `pouring`,
- * because a flat second inside the final pour is a stall, not drawdown. Bypass
- * and settling both keep it open, because the hardware fires bypass inside the
- * drawdown and the bed keeps draining in both phases.
+ * cannot open the row. Hitting the final stage's planned volume opens the
+ * clock even while the machine still calls the phase `pouring`, which is where
+ * the verified drawdown occurs. Bypass and settling are only a backstop for a
+ * final stage that stopped short, because quiet water below the target is
+ * indistinguishable from a real in-pour stall while `pouring` is still active.
  */
-export function liveDrawdown(
-    samples: BrewSample[],
-    stages: number,
-    elapsedSeconds: number,
-    phaseName: BrewPhase["name"],
-    running: boolean
-): LiveDrawdown {
+export function liveDrawdown({
+    samples,
+    stages,
+    elapsedSeconds,
+    phaseName,
+    running,
+    finalStageTargetMl,
+}: LiveDrawdownOptions): LiveDrawdown {
     const drawdownAt = liveDrawdownFrom(samples, stages);
     const reserveDrawdown = running && drawdownAt > 0;
     const elapsedMs = elapsedSeconds * 1000;
-    const finalPourEnded = phaseName === "bypass" || phaseName === "settling";
+    const phaseGate = DRAWDOWN_PHASES[phaseName];
+    const finalStageTarget = finalStageTargetMl === undefined
+        ? null
+        : Math.max(finalStageTargetMl, 0);
+    const plannedVolumeDelivered = finalStageTarget !== null
+        && finalStageTarget > 0
+        && stageWaterFrom(samples, stages) >= finalStageTarget;
+    const quietLongEnough = elapsedMs - drawdownAt >= DRAWDOWN_OPEN_MARGIN_MS;
+    const phaseBackstop = phaseGate === "backstop" && quietLongEnough;
     const open = reserveDrawdown
-        && finalPourEnded
-        && elapsedMs - drawdownAt >= DRAWDOWN_OPEN_MARGIN_MS;
+        && phaseGate !== "veto"
+        && (plannedVolumeDelivered || phaseBackstop);
     return {
         drawdownAt,
         drawdown: open ? Math.max(0, elapsedSeconds - drawdownAt / 1000) : null,

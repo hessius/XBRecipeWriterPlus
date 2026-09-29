@@ -82,9 +82,17 @@ function drawdown(
     samples: BrewSample[],
     elapsedSeconds: number,
     phaseName: BrewPhase["name"],
-    stages = 1
+    stages = 1,
+    finalStageTargetMl = 18
 ) {
-    return liveDrawdown(samples, stages, elapsedSeconds, phaseName, true);
+    return liveDrawdown({
+        samples,
+        stages,
+        elapsedSeconds,
+        phaseName,
+        running: true,
+        finalStageTargetMl,
+    });
 }
 
 describe("liveDrawdownFrom", () => {
@@ -119,7 +127,7 @@ describe("liveDrawdown", () => {
     it("does not open the clock while the final pour is still rising", () => {
         const stream = finalPour();
 
-        expect(drawdown(stream, 6, "pouring")).toEqual({
+        expect(drawdown(stream, 6, "pouring", 1, 20)).toEqual({
             drawdownAt: 6000,
             drawdown: null,
             reserveDrawdown: true,
@@ -147,7 +155,7 @@ describe("liveDrawdown", () => {
         expect(drawdown(stream, 8, "pouring").drawdownAt).toBe(8000);
     });
 
-    it("opens once the final pour has ended", () => {
+    it("opens by phase backstop once a short final pour has ended", () => {
         const poured = finalPour();
         const lastPour = poured[poured.length - 1];
         const almostOpen = [
@@ -159,8 +167,8 @@ describe("liveDrawdown", () => {
             sample(lastPour.at + DRAWDOWN_OPEN_MARGIN_MS, 18, 25, 1),
         ];
 
-        expect(drawdown(almostOpen, 6.9, "settling").drawdown).toBeNull();
-        expect(drawdown(open, 7, "settling").drawdown).toBeGreaterThanOrEqual(1);
+        expect(drawdown(almostOpen, 8, "settling", 1, 20).drawdown).toBeNull();
+        expect(drawdown(open, 8.1, "settling", 1, 20).drawdown).toBeGreaterThanOrEqual(2);
     });
 
     it("keeps counting through a bypass sample", () => {
@@ -176,6 +184,66 @@ describe("liveDrawdown", () => {
             drawdownAt: lastPour.at,
             drawdown: 3,
             reserveDrawdown: true,
+        });
+    });
+
+    it("opens during pouring when the verified final stage has delivered its plan", () => {
+        const stageOne = pourFor(10, {water: 3, cup: 2, pour: 1});
+        const stageTwo = pourFor(10, {water: 3, cup: 2, pour: 2}, {
+            at: stageOne[stageOne.length - 1].at,
+            water: stageOne[stageOne.length - 1].water,
+            cup: stageOne[stageOne.length - 1].cup
+        });
+        const stageThree = pourFor(10, {water: 3, cup: 2, pour: 3}, {
+            at: stageTwo[stageTwo.length - 1].at,
+            water: stageTwo[stageTwo.length - 1].water,
+            cup: stageTwo[stageTwo.length - 1].cup
+        });
+        const lastPour = stageThree[stageThree.length - 1];
+        const stream = [...stageOne, ...stageTwo, ...stageThree, ...flatWater(lastPour, 40)];
+
+        expect(drawdown(stream, 70, "pouring", 3, 30)).toEqual({
+            drawdownAt: 29900,
+            drawdown: 40.1,
+            reserveDrawdown: true,
+        });
+    });
+
+    it("keeps the verified clock open when bypass fires 61 seconds after water", () => {
+        const poured = finalPour();
+        const lastPour = poured[poured.length - 1];
+        const stream = [
+            ...poured,
+            ...flatWater(lastPour, 61),
+            sample(lastPour.at + 61_100, 23, 42.2, 2),
+        ];
+
+        const result = drawdown(stream, 67.1, "bypass");
+        expect(result.drawdownAt).toBe(lastPour.at);
+        expect(result.drawdown).toBeCloseTo(61.1, 6);
+        expect(result.reserveDrawdown).toBe(true);
+    });
+
+    it("shows the bypass-less drawdown before done takes the run down", () => {
+        const poured = finalPour();
+        const stream = [...poured, ...flatWater(poured[poured.length - 1], 13)];
+
+        expect(drawdown(stream, 19, "settling")).toEqual({
+            drawdownAt: 6000,
+            drawdown: 13,
+            reserveDrawdown: true,
+        });
+        expect(liveDrawdown({
+            samples: stream,
+            stages: 1,
+            elapsedSeconds: 21,
+            phaseName: "done",
+            running: false,
+            finalStageTargetMl: 18,
+        })).toEqual({
+            drawdownAt: 6000,
+            drawdown: null,
+            reserveDrawdown: false,
         });
     });
 
@@ -197,7 +265,14 @@ describe("liveDrawdown", () => {
             sample(3000, 40.2, 20, 1),
         ];
 
-        expect(liveDrawdown(stream, 2, 3, "pouring", true)).toEqual({
+        expect(liveDrawdown({
+            samples: stream,
+            stages: 2,
+            elapsedSeconds: 3,
+            phaseName: "pouring",
+            running: true,
+            finalStageTargetMl: 18,
+        })).toEqual({
             drawdownAt: 0,
             drawdown: null,
             reserveDrawdown: false,

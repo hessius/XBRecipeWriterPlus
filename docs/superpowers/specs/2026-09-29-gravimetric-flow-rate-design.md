@@ -133,19 +133,23 @@ when it runs every render on a growing, noisy stream. The live screen now uses
 `library/brew/liveDrawdown.ts`:
 
 ```ts
-export const DRAWDOWN_OPEN_MARGIN_MS = 1000;
+export const DRAWDOWN_OPEN_MARGIN_MS = 2100;
 export type LiveDrawdown = {
     drawdownAt: number;
     drawdown: number | null;
     reserveDrawdown: boolean;
 };
+export type LiveDrawdownOptions = {
+    samples: BrewSample[];
+    stages: number;
+    elapsedSeconds: number;
+    phaseName: BrewPhase["name"];
+    running: boolean;
+    finalStageTargetMl?: number;
+};
 export function liveDrawdownFrom(samples: BrewSample[], stages: number): number;
 export function liveDrawdown(
-    samples: BrewSample[],
-    stages: number,
-    elapsedSeconds: number,
-    phaseName: BrewPhase["name"],
-    running: boolean
+    options: LiveDrawdownOptions
 ): LiveDrawdown;
 ```
 
@@ -219,31 +223,37 @@ closed throughout `bypass`, even though the verified frame log puts bypass
 inside the drawdown; and the whole-stream argmax reset the clock on sub-ml
 scale wobble.
 
-The clock is now computed by
-`liveDrawdown(samples, stages, elapsed, phase.name, running)`. The boundary is
-final-stage only, so a planned pause between earlier stages still cannot open
-it. The boundary is retaken only by a water rise greater than `NOISE_FLOOR_ML`,
-and the retake threshold is measured from the highest final-stage water level
-actually seen rather than the ratcheted boundary level, so plateau wobble does
-not spend the floor's headroom. The row is visible only once the boundary is
-at least `DRAWDOWN_OPEN_MARGIN_MS` behind the current sample clock.
+The clock is now computed by `liveDrawdown({samples, stages, elapsedSeconds,
+phaseName, running, finalStageTargetMl})`. The boundary is final-stage only, so
+a planned pause between earlier stages still cannot open it. The boundary is
+retaken only by a water rise greater than `NOISE_FLOOR_ML`, and the retake
+threshold is measured from the highest final-stage water level actually seen
+rather than the ratcheted boundary level, so plateau wobble does not spend the
+floor's headroom.
 
-`DRAWDOWN_OPEN_MARGIN_MS` is 1000 ms. The machine reports around ten scale
-frames a second, and the water channel's own noise floor is 0.5 ml. That
-margin is a stability margin, not proof that the pour has ended: a two second
-stall inside the final pour is physically still a pour. The phase gate is
-therefore the proof. The clock is held closed while `phase.name` is `pouring`,
-and it stays eligible through `bypass` and `settling`, the two active phases
-that can happen after the final pour's water has stopped.
+The open gate has two paths. First, the final stage's planned volume opens the
+clock immediately, even while the machine still reports `pouring`. This is the
+normal hardware path: there is no event for "water stopped", and the verified
+frame log shows most of the drawdown happens before `bypass` or `settling`.
+Second, `bypass` and `settling` act as a backstop for a final stage that ended
+short of plan. That backstop waits until the boundary is at least
+`DRAWDOWN_OPEN_MARGIN_MS` behind the sample clock.
+
+`DRAWDOWN_OPEN_MARGIN_MS` is 2100 ms: `MIN_STALL_SECONDS` plus one nominal
+scale frame. `MIN_STALL_SECONDS` is the minimum duration that makes a real
+in-pour stall worth naming, not a maximum duration a stall can last. A quiet
+water channel below the target therefore cannot prove the pour has ended while
+the machine is still in `pouring`; it would also match a genuine long stall.
+For that reason the quiet margin never opens the clock during `pouring`. It
+only debounces the post-pour phase backstop.
 
 Hidden is hidden, not reset: the clock keeps accumulating underneath, so it
 appears already reading the elapsed drawdown rather than starting from zero at
 the moment the gate opens.
 
-**Rejected: gating on the last stage reaching its planned volume.** It invents
-a second boundary definition alongside `drawdownFrom`, and it goes silent
-precisely on a stage that stops short, which is the brew somebody most wants
-to watch.
+The phase classification is exhaustive over `BrewPhase["name"]`, so a new
+machine phase cannot compile until it is classified as `veto`, `water`, or
+`backstop`.
 
 The clock is absent before the gate opens and absent on a brew that failed or
 was cancelled before pouring, on the same rule as the FLOW row.
