@@ -34,7 +34,7 @@ export const MIN_STALL_SECONDS = 2;
  * Whether 1 ml is the right number is a hardware question, not an arithmetic
  * one. It wants checking against a real brew.
  */
-const TARGET_TOLERANCE_ML = 1;
+export const TARGET_TOLERANCE_ML = 1;
 
 /**
  * The brew total as it stood before `stage` began.

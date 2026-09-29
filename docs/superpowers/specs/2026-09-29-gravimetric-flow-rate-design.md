@@ -235,9 +235,14 @@ The open gate has two paths. First, the final stage's planned volume opens the
 clock immediately, even while the machine still reports `pouring`. This is the
 normal hardware path: there is no event for "water stopped", and the verified
 frame log shows most of the drawdown happens before `bypass` or `settling`.
-Second, `bypass` and `settling` act as a backstop for a final stage that ended
-short of plan. That backstop waits until the boundary is at least
-`DRAWDOWN_OPEN_MARGIN_MS` behind the sample clock.
+"Delivered" is `stalls.ts`'s `TARGET_TOLERANCE_ML` predicate, the same one
+`stalledNow` uses, so a stage that lands a millilitre under plan has met it.
+The two must agree: a zero tolerance here would let the screen show no HOLDING
+warning and no drawdown clock at once, one saying the stage finished and the
+other saying it had not, and routine shortfall would push every such brew onto
+the backstop. Second, `bypass` and `settling` act as a backstop for a final
+stage that ended short of plan. That backstop waits until the boundary is at
+least `DRAWDOWN_OPEN_MARGIN_MS` behind the sample clock.
 
 `DRAWDOWN_OPEN_MARGIN_MS` is 2100 ms: `MIN_STALL_SECONDS` plus one nominal
 scale frame. `MIN_STALL_SECONDS` is the minimum duration that makes a real

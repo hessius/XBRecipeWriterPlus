@@ -1326,7 +1326,10 @@ drawdown. The live helper now takes an options object, as shown above.
 The gate combines water and phase evidence. When the final stage has delivered
 its planned volume, the clock opens immediately, including while
 `phase.name === "pouring"`, because the machine emits no event when the water
-actually stops. `bypass` and `settling` are a backstop for a final stage that
+actually stops. "Delivered" uses `stalls.ts`'s exported `TARGET_TOLERANCE_ML`,
+the same predicate `stalledNow` uses, so a stage landing a millilitre under
+plan counts as having met it and the two live indicators cannot contradict
+each other. `bypass` and `settling` are a backstop for a final stage that
 stopped short of plan. That backstop waits for `DRAWDOWN_OPEN_MARGIN_MS`, now
 2100 ms, which is `MIN_STALL_SECONDS` plus one nominal scale frame. That
 margin is deliberately not used to open during `pouring`: `MIN_STALL_SECONDS`

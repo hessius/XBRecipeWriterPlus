@@ -1,5 +1,5 @@
 import type {BrewSample} from "./BrewRecord";
-import {MIN_STALL_SECONDS, NOISE_FLOOR_ML, stageWaterFrom} from "./stalls";
+import {MIN_STALL_SECONDS, NOISE_FLOOR_ML, TARGET_TOLERANCE_ML, stageWaterFrom} from "./stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 
 /**
@@ -121,9 +121,15 @@ export function liveDrawdown({
     const finalStageTarget = finalStageTargetMl === undefined
         ? null
         : Math.max(finalStageTargetMl, 0);
+    /*
+     * The same predicate `stalledNow` uses, deliberately. A stage that lands
+     * within a millilitre of target has met it, and if the two disagreed the
+     * screen could show no HOLDING warning and no drawdown clock at once,
+     * one saying the stage finished and the other saying it had not.
+     */
     const plannedVolumeDelivered = finalStageTarget !== null
         && finalStageTarget > 0
-        && stageWaterFrom(samples, stages) >= finalStageTarget;
+        && stageWaterFrom(samples, stages) + TARGET_TOLERANCE_ML >= finalStageTarget;
     const quietLongEnough = elapsedMs - drawdownAt >= DRAWDOWN_OPEN_MARGIN_MS;
     const phaseBackstop = phaseGate === "backstop" && quietLongEnough;
     const open = reserveDrawdown

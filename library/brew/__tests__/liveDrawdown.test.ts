@@ -258,6 +258,27 @@ describe("liveDrawdown", () => {
         });
     });
 
+    it("opens during pouring for a stage that lands a shade under target", () => {
+        const poured = pourFor(6, {water: 2.95, cup: 2, pour: 1});
+        const stream = [...poured, ...flatWater(poured[poured.length - 1], 40)];
+
+        expect(stream[poured.length - 1].water).toBeCloseTo(17.7, 5);
+        expect(drawdown(stream, 46, "pouring")).toEqual({
+            drawdownAt: 6000,
+            drawdown: 40,
+            reserveDrawdown: true,
+        });
+    });
+
+    it("waits for the backstop when a stage ends well short of target", () => {
+        const poured = pourFor(6, {water: 2, cup: 2, pour: 1});
+        const stream = [...poured, ...flatWater(poured[poured.length - 1], 40)];
+
+        expect(stream[poured.length - 1].water).toBeCloseTo(12, 5);
+        expect(drawdown(stream, 46, "pouring").drawdown).toBeNull();
+        expect(drawdown(stream, 46, "settling").drawdown).toBe(40);
+    });
+
     it("reserves no row before the final stage has produced a boundary", () => {
         const stream = [
             sample(1000, 20, 8, 1),
