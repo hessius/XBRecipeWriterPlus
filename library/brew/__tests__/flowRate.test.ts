@@ -87,7 +87,7 @@ function record(over: Partial<BrewRecord> = {}): BrewRecord {
         heldSeconds: 0,
         cupAtDrawdown: 120,
         ...over
-    } as BrewRecord;
+    };
 }
 
 describe("flowAt", () => {
@@ -366,9 +366,9 @@ describe("cupAtDrawdownFrom", () => {
         expect(cupAtDrawdownFrom(samples, 1, 10_000)).toBeCloseTo(20, 6);
     });
 
-    it("is 0 when the brew never drew down", () => {
-        expect(cupAtDrawdownFrom(ramp(20, 2), 1, 0)).toBe(0);
-        expect(cupAtDrawdownFrom([], 1, 10_000)).toBe(0);
+    it("is null when nobody can say what the boundary cup reading was", () => {
+        expect(cupAtDrawdownFrom(ramp(20, 2), 1, 0)).toBeNull();
+        expect(cupAtDrawdownFrom([], 1, 10_000)).toBeNull();
     });
 });
 
@@ -390,6 +390,7 @@ describe("drawdownRate", () => {
     it("is null, never 0, whenever a term is missing", () => {
         expect(drawdownRate(record({cupAtDrawdown: undefined}))).toBeNull();
         expect(drawdownRate(record({drawdownAt: 0}))).toBeNull();
+        expect(drawdownRate(record({cupAtDrawdown: 0}))).toBeNull();
         // A cup that did not rise across the drawdown is not a rate of nothing.
         expect(drawdownRate(record({cupAtDrawdown: 200}))).toBeNull();
         // And neither is a boundary at the very last millisecond.

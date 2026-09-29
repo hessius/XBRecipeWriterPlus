@@ -296,20 +296,21 @@ export function maxRateOf(series: FlowPoint[]): number {
 /**
  * The cup reading at the drawdown boundary, for the recorder to store.
  *
- * The last brew reading at or before the boundary. Brew readings only, for the
- * same reason everything else here excludes the bypass -- although on a
- * well-formed brew the bypass fires after this point, a firmware that fired it
- * earlier would otherwise put its water into the figure the whole drawdown
- * rate is measured from.
+ * The last brew reading at or before the boundary. Brew readings only: this
+ * stops a bypass-labelled reading from being chosen as the boundary. Because
+ * `BrewSample.cup` is a running total, it cannot unwind bypass grams already
+ * folded into a later brew-labelled reading. If a firmware ever fires bypass
+ * before drawdown, `drawdownRate` will also subtract the bypass from the final
+ * cup total and understate the rate; no observed firmware does that.
  *
- * 0 when the brew never drew down, which is the same sentinel `drawdownAt`
- * uses and what `drawdownRate` refuses on.
+ * Null when the brew never drew down or no brew-lane reading exists at the
+ * boundary. Zero would be an invented cup reading.
  */
 export function cupAtDrawdownFrom(
     samples: BrewSample[], stages: number, drawdownAt: number
-): number {
-    if (drawdownAt <= 0) return 0;
-    let cup = 0;
+): number | null {
+    if (drawdownAt <= 0) return null;
+    let cup: number | null = null;
     for (const sample of samples) {
         if (sample.at > drawdownAt) break;
         if (sample.pour >= 1 && sample.pour <= stages) cup = sample.cup;
@@ -320,9 +321,11 @@ export function cupAtDrawdownFrom(
 /**
  * How fast the bed drew down, averaged over the drawdown, in g/s.
  *
- * Null whenever any term is missing, and never 0. Null means nobody can say;
- * a drawdown rate of nothing is a claim this app is not in a position to make,
- * which is the same rule `drawdownSeconds` follows and for the same reason.
+ * Null whenever any term is missing, and never 0. Null means nobody can say.
+ * A bed that drew down nothing, a cup reading that fell, and arithmetic that
+ * went negative are all refused rather than distinguished, which is the same
+ * rule `drawdownSeconds` follows: a drawdown rate of nothing is a claim this
+ * app is not in a position to make.
  *
  * `cupTotal` is a raw scale reading, so the bypass comes out of it first --
  * the idiom `app/brew.tsx` already uses when it names the brew water.
@@ -332,7 +335,7 @@ export function cupAtDrawdownFrom(
  */
 export function drawdownRate(record: BrewRecord): number | null {
     const opened = record.cupAtDrawdown;
-    if (opened === undefined) return null;
+    if (opened === undefined || opened <= 0) return null;
     const seconds = drawdownSeconds(record);
     if (seconds === null || seconds <= 0) return null;
     const delivered = record.cupTotal - (record.bypass?.delivered ?? 0) - opened;

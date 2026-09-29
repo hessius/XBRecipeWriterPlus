@@ -477,7 +477,7 @@ function record(over: Partial<BrewRecord> = {}): BrewRecord {
         heldSeconds: 0,
         cupAtDrawdown: 120,
         ...over
-    } as BrewRecord;
+    };
 }
 
 describe("cupAtDrawdownFrom", () => {
@@ -486,9 +486,9 @@ describe("cupAtDrawdownFrom", () => {
         expect(cupAtDrawdownFrom(samples, 1, 10_000)).toBeCloseTo(20, 6);
     });
 
-    it("is 0 when the brew never drew down", () => {
-        expect(cupAtDrawdownFrom(ramp(20, 2), 1, 0)).toBe(0);
-        expect(cupAtDrawdownFrom([], 1, 10_000)).toBe(0);
+    it("is null when nobody can say what the boundary cup reading was", () => {
+        expect(cupAtDrawdownFrom(ramp(20, 2), 1, 0)).toBeNull();
+        expect(cupAtDrawdownFrom([], 1, 10_000)).toBeNull();
     });
 });
 
@@ -510,6 +510,7 @@ describe("drawdownRate", () => {
     it("is null, never 0, whenever a term is missing", () => {
         expect(drawdownRate(record({cupAtDrawdown: undefined}))).toBeNull();
         expect(drawdownRate(record({drawdownAt: 0}))).toBeNull();
+        expect(drawdownRate(record({cupAtDrawdown: 0}))).toBeNull();
         // A cup that did not rise across the drawdown is not a rate of nothing.
         expect(drawdownRate(record({cupAtDrawdown: 200}))).toBeNull();
         // And neither is a boundary at the very last millisecond.
@@ -557,20 +558,21 @@ in place of the existing type-only import.
 /**
  * The cup reading at the drawdown boundary, for the recorder to store.
  *
- * The last brew reading at or before the boundary. Brew readings only, for the
- * same reason everything else here excludes the bypass -- although on a
- * well-formed brew the bypass fires after this point, a firmware that fired it
- * earlier would otherwise put its water into the figure the whole drawdown
- * rate is measured from.
+ * The last brew reading at or before the boundary. Brew readings only: this
+ * stops a bypass-labelled reading from being chosen as the boundary. Because
+ * `BrewSample.cup` is a running total, it cannot unwind bypass grams already
+ * folded into a later brew-labelled reading. If a firmware ever fires bypass
+ * before drawdown, `drawdownRate` will also subtract the bypass from the final
+ * cup total and understate the rate; no observed firmware does that.
  *
- * 0 when the brew never drew down, which is the same sentinel `drawdownAt`
- * uses and what `drawdownRate` refuses on.
+ * Null when the brew never drew down or no brew-lane reading exists at the
+ * boundary. Zero would be an invented cup reading.
  */
 export function cupAtDrawdownFrom(
     samples: BrewSample[], stages: number, drawdownAt: number
-): number {
-    if (drawdownAt <= 0) return 0;
-    let cup = 0;
+): number | null {
+    if (drawdownAt <= 0) return null;
+    let cup: number | null = null;
     for (const sample of samples) {
         if (sample.at > drawdownAt) break;
         if (sample.pour >= 1 && sample.pour <= stages) cup = sample.cup;
@@ -581,9 +583,11 @@ export function cupAtDrawdownFrom(
 /**
  * How fast the bed drew down, averaged over the drawdown, in g/s.
  *
- * Null whenever any term is missing, and never 0. Null means nobody can say;
- * a drawdown rate of nothing is a claim this app is not in a position to make,
- * which is the same rule `drawdownSeconds` follows and for the same reason.
+ * Null whenever any term is missing, and never 0. Null means nobody can say.
+ * A bed that drew down nothing, a cup reading that fell, and arithmetic that
+ * went negative are all refused rather than distinguished, which is the same
+ * rule `drawdownSeconds` follows: a drawdown rate of nothing is a claim this
+ * app is not in a position to make.
  *
  * `cupTotal` is a raw scale reading, so the bypass comes out of it first --
  * the idiom `app/brew.tsx` already uses when it names the brew water.
@@ -593,7 +597,7 @@ export function cupAtDrawdownFrom(
  */
 export function drawdownRate(record: BrewRecord): number | null {
     const opened = record.cupAtDrawdown;
-    if (opened === undefined) return null;
+    if (opened === undefined || opened <= 0) return null;
     const seconds = drawdownSeconds(record);
     if (seconds === null || seconds <= 0) return null;
     const delivered = record.cupTotal - (record.bypass?.delivered ?? 0) - opened;
@@ -692,6 +696,7 @@ before `const record: BrewRecord = {`, insert:
                            || outcome === "failed"
             ? 0
             : drawdownFrom(this.collected, stages);
+        const cupAtDrawdown = cupAtDrawdownFrom(this.collected, stages, drawdownAt);
 ```
 
 and change the field to `drawdownAt,`. Then, beside the other conditional
@@ -701,9 +706,9 @@ spreads and next to `...(bypass === undefined ? {} : {bypass}),`, add:
             // Spread rather than assigned, so a brew that never drew down
             // leaves the key off the row entirely and reads back exactly like
             // a record written before this field existed.
-            ...(drawdownAt > 0
-                ? {cupAtDrawdown: cupAtDrawdownFrom(this.collected, stages, drawdownAt)}
-                : {}),
+            ...(cupAtDrawdown === null
+                ? {}
+                : {cupAtDrawdown}),
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
