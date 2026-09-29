@@ -8,6 +8,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "test": "jest",
+    "test:ios": "jest --selectProjects ios",
+    "test:android": "jest --selectProjects android",
     "test:watch": "jest --watchAll",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
