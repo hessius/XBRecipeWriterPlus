@@ -622,6 +622,9 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 | `brew.figures.water` | `components/BrewFigures.tsx:43` | Doto figure label. | `WATER` |
 | `brew.figures.cup` | `components/BrewFigures.tsx:44` | Doto figure label. | `CUP` |
 | `brew.figures.time` | `components/BrewFigures.tsx:45` | Doto figure label. | `TIME` |
+| `brew.figures.flow` | `components/BrewFigures.tsx:149` | Doto flow row label, visible only when a cup rate can be said. | `FLOW` |
+| `brew.figures.pour` | `components/BrewFigures.tsx:161` | Smaller second figure on the flow row. `${...}` is ml/s to one decimal place. | `POUR ${pourRate.toFixed(1)}` |
+| `brew.figures.drawdown` | `components/BrewFigures.tsx:128` | Doto drawdown line. The rate term is present only when a finished record can say it. `${...}` are the drawdown clock and g/s to one decimal place. | `DRAWDOWN ${clock(drawdown)} · ${rate} g/s` |
 | `brew.trace.a11y` | `components/BrewTrace.tsx:111,152` (a11y) | (a11y) The brew trace graph. | `Brew trace` |
 | `brew.trace.legend.water` | `components/BrewTrace.tsx:218` | Doto legend item. | `WATER` |
 | `brew.trace.legend.cup` | `components/BrewTrace.tsx:219` | Doto legend item. | `CUP` |

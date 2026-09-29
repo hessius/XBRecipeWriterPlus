@@ -6,6 +6,10 @@ import FlowSparkline from "@/components/FlowSparkline";
 import {palette} from "@/constants/colors";
 import {formatBrewClock} from "@/library/brew/brewFormat";
 
+// The row's tallest child is the 20 pt sparkline; the extra 4 pt matches the
+// breathing room the sibling figure rows get from their text line boxes.
+const FLOW_ROW_MIN_HEIGHT = 24;
+
 type Props = {
     water: number;
     cup: number;
@@ -41,6 +45,21 @@ type Props = {
     flow?: number | null;
     /** The last 30 seconds of cup rate. Empty draws no sparkline. */
     flowTail?: number[];
+    /**
+     * The instantaneous pour rate in ml/s, or null when nobody can say.
+     *
+     * Same absence rule as `flow`, and it rides along rather than leading:
+     * the cup rate is the subject, the pour rate is what the machine is doing
+     * about it.
+     */
+    pourRate?: number | null;
+    /**
+     * Reserve the flow row's height even when there is nothing to draw.
+     *
+     * Live only. A finished record and the shared image cannot gain a rate
+     * later, so reserving there is dead space in a still picture.
+     */
+    reserveFlow?: boolean;
     /**
      * The average rate across the drawdown, in g/s.
      *
@@ -88,7 +107,8 @@ function Figure({label, value, color, badge}: {
 export default function BrewFigures(
     {
         water, cup, seconds, accent, bypass, drawdown = null, flow = null,
-        flowTail, drawdownRate = null, dial = null
+        flowTail, pourRate = null, reserveFlow = false, drawdownRate = null,
+        dial = null
     }: Props
 ) {
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
@@ -106,7 +126,7 @@ export default function BrewFigures(
     const drawdownText = drawdown === null
         ? null
         : `DRAWDOWN ${formatBrewClock(drawdown)}${
-            drawdownRate === null ? "" : `, ${drawdownRate.toFixed(1)} g/s`
+            drawdownRate === null ? "" : ` · ${drawdownRate.toFixed(1)} g/s`
         }`;
 
     return (
@@ -117,25 +137,35 @@ export default function BrewFigures(
                 <Figure label="CUP" value={String(Math.round(cup))} color={palette.text} />
                 <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text} />
             </XStack>
-            <YStack minHeight={24} justifyContent="center">
-                {hasFlow && (
-                    <XStack testID="figures-flow" alignItems="center"
-                            justifyContent="space-between" gap="$2">
-                        <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
-                                       color={palette.dim}>
-                            FLOW
-                        </DotMatrixText>
-                        <XStack alignItems="center" gap="$3">
-                            {hasFlowTail && (
-                                <FlowSparkline values={flowTail} accent={accent} />
-                            )}
-                            <DotMatrixText fontSize={14} weight="bold" color={palette.text}>
-                                {`${flow.toFixed(1)} g/s`}
+            {(hasFlow || reserveFlow) && (
+                <YStack testID="figures-flow-slot"
+                        minHeight={reserveFlow ? FLOW_ROW_MIN_HEIGHT : undefined}
+                        justifyContent="center">
+                    {hasFlow && (
+                        <XStack testID="figures-flow" alignItems="center"
+                                justifyContent="space-between" gap="$2">
+                            <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
+                                           color={palette.dim}>
+                                FLOW
                             </DotMatrixText>
+                            <XStack alignItems="center" gap="$3">
+                                {hasFlowTail && (
+                                    <FlowSparkline values={flowTail} accent={accent} />
+                                )}
+                                <DotMatrixText fontSize={14} weight="bold" color={palette.text}>
+                                    {`${flow.toFixed(1)} g/s`}
+                                </DotMatrixText>
+                                {pourRate !== null && (
+                                    <DotMatrixText fontSize={10} weight="bold"
+                                                   letterSpacing={1.6} color={palette.dim}>
+                                        {`POUR ${pourRate.toFixed(1)}`}
+                                    </DotMatrixText>
+                                )}
+                            </XStack>
                         </XStack>
-                    </XStack>
-                )}
-            </YStack>
+                    )}
+                </YStack>
+            )}
             {/* Absent, not zero, when it was not measured. A brew that was
                 interrupted never drew down and a record written before the
                 boundary was kept cannot say, and printing 0:00 for either
