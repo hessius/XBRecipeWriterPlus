@@ -9,6 +9,7 @@ import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendI
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
+        traceTimeExtent,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
@@ -226,7 +227,7 @@ export default function BrewTrace({
     const box: Box = {
         width,
         height: svgHeight,
-        maxT: axis?.maxT ?? Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
+        maxT: axis?.maxT ?? traceTimeExtent(plannedSeconds, samples, bypass),
         maxV: axis?.maxV ?? Math.max(
             planTop,
             water.length > 0 ? water[water.length - 1].v : 0,

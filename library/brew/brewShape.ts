@@ -102,6 +102,28 @@ export function livePoints(samples: BrewSample[], of: "water" | "cup"): Point[] 
 }
 
 /**
+ * The real-seconds extent a trace uses on its horizontal axis.
+ *
+ * Shared by the volume trace and the finished rate chart. The rate chart sits
+ * directly under the trace, so the same second must map to the same x even
+ * when the visible rate series ends before the plan, a run overran its plan,
+ * or a bypass box extends the trace tail.
+ */
+export function traceTimeExtent(
+    plannedSeconds: number,
+    samples: BrewSample[],
+    bypass?: {volume: number; startedAt: number | null}
+): number {
+    const ranTo = samples.length > 0 ? samples[samples.length - 1].at / 1000 : 0;
+    const bypassMl = bypass === undefined ? 0 : Math.max(bypass.volume, 0);
+    const bypassWide = bypassSeconds(bypassMl);
+    const bypassFrom = bypass === undefined ? 0
+        : bypass.startedAt !== null ? bypass.startedAt
+        : Math.max(plannedSeconds, ranTo);
+    return Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide);
+}
+
+/**
  * The rectangle a set of points is drawn into, and the range it spans.
  *
  * `toPath` does not clamp: a point beyond `maxT` or `maxV` maps outside the

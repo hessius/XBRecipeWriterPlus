@@ -1400,6 +1400,32 @@ A second chart under the volume trace on the record. Same grammar as
 `traceStyle`. Read `components/BrewTrace.tsx` and `library/brew/brewShape.ts`
 in full before writing this and follow them.
 
+**Review amendment, 2026-09-30:** `BrewRateChart` takes `maxT` as a required
+prop. Callers must pass the same time extent `BrewTrace` uses, computed by
+`traceTimeExtent(plannedSeconds, samples, bypass)`: the maximum of planned
+time, last raw sample time, and bypass extent. The component must not silently
+fall back to the last rate point, because that puts the same second at a
+different x whenever the plan, run, or bypass extends further than the fitted
+rate series.
+
+The rate chart's x axis spans the full `width`, with no horizontal inset. It
+may inset vertically by half the widest rate stroke and may allow visible
+overflow, but it must not move x coordinates inward unless `BrewTrace` does the
+same. Horizontal alignment is more important than hiding a stroke cap.
+
+Path continuity is based on sample adjacency, not on `FLOW_MIN_WINDOW_MS`.
+`flowSeries` emits at the sample cadence when it can fit a window and emits
+nothing when it cannot; consecutive array entries are therefore connected only
+when their timestamps are adjacent at the recorder's real cadence. The measured
+cadence is about 10 Hz, with 100 ms frames in the live-stream fixtures, so the
+implemented allowance is 150 ms: jitter stays connected, one omitted ordinary
+frame at 200 ms splits the path.
+
+The 4 g/s y-axis floor remains unlabelled. It is only a guard against stretching
+quiet brews into a mountain range, while the visible readouts carry the actual
+numbers. A label would make that protective floor look like a calibrated target
+or threshold.
+
 **Files:**
 - Create: `components/BrewRateChart.tsx`
 - Test: `components/__tests__/BrewRateChart.test.tsx`

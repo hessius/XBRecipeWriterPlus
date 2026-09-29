@@ -279,6 +279,30 @@ card to uphold and the chart can simply be part of it.
   the section entirely. It does not draw an empty box, and there is no control
   to disable.
 
+Amendment, 2026-09-30: the rate chart's horizontal axis is not sized from its
+own last point. It is handed the same time extent the volume trace uses, the
+maximum of planned time, last raw sample time, and bypass extent. That keeps the
+same second at the same x in both stacked charts even when a plan tail, overrun
+or bypass box reaches past the last fitted rate point.
+
+The rate chart does not inset horizontally. Its plot is the full `width`, just
+like `BrewTrace`, and only the vertical dimension is inset by half the widest
+rate stroke so high and low rates do not clip. Horizontal stroke caps are
+allowed to draw with visible overflow rather than moving the time axis.
+
+Every missing rate point breaks the line. `flowSeries` emits at the sample
+cadence when it can fit a window and emits no point when it cannot, so adjacent
+array entries are connected only if their timestamps are adjacent at the live
+scale cadence. The recorder samples about 10 Hz and the fixtures that model the
+live stream use 100 ms frames; the chart allows 150 ms for timer jitter. A
+single omitted frame at normal cadence is therefore a 200 ms gap and starts a
+new subpath.
+
+The y axis keeps the 4 g/s floor and does not label it. The chart is a compact
+shape companion to the trace, not a calibrated readout; labelling that floor
+would invite reading quiet brews against an axis chosen only to stop a nearly
+flat stream being stretched into a mountain.
+
 Rejected: a toggle swapping the trace for the rate chart. The trace lives
 inside the `ViewShot`, so the toggle would change what gets shared rather than
 only what is seen; it would need a rule about whether the mode persists between

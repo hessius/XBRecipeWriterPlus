@@ -36,8 +36,8 @@ const POURS = [
 const PLAN_PATH = "M0 160 L150 40 L300 0";
 const FLOW_SERIES: FlowPoint[] = [
     {at: 1_000, cup: 1, water: 2},
-    {at: 1_500, cup: 1.2, water: 2.2},
-    {at: 2_000, cup: 1.1, water: 2.1}
+    {at: 1_100, cup: 1.2, water: 2.2},
+    {at: 1_200, cup: 1.1, water: 2.1}
 ];
 
 /** The attributes that make a channel recognisable. */
@@ -139,7 +139,7 @@ describe("the rate chart draws the shared grammar", () => {
                        width={300} height={160} plannedSeconds={30} compact />
         );
         const rate = await renderWithProviders(
-            <BrewRateChart series={FLOW_SERIES} accent={ACCENT} width={300} />
+            <BrewRateChart series={FLOW_SERIES} accent={ACCENT} width={300} maxT={3} />
         );
 
         expect(styleOf(rate.getByTestId(rateId)))

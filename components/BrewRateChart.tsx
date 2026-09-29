@@ -3,7 +3,7 @@ import {View} from "react-native";
 import Svg, {G, Path} from "react-native-svg";
 
 import {type Box, type Point, toPath} from "@/library/brew/brewShape";
-import {FLOW_MIN_WINDOW_MS, maxRateOf, type FlowPoint} from "@/library/brew/flowRate";
+import {maxRateOf, type FlowPoint} from "@/library/brew/flowRate";
 import {channelStyle} from "@/library/brew/traceStyle";
 
 /**
@@ -18,13 +18,20 @@ export const RATE_HEIGHT = 84;
 /** Never scale a nearly flat brew up into a mountain range. */
 const MIN_AXIS = 4;
 
-/** A missing fit for at least this long is a real gap, not a sparse line. */
-const GAP_MS = FLOW_MIN_WINDOW_MS;
+/**
+ * The recorder samples at about 10 Hz, and every stream fixture that models
+ * live data uses 100 ms frames. A 150 ms allowance admits normal timer jitter,
+ * while a single omitted rate point at the ordinary cadence produces a
+ * 200 ms hole and splits the path.
+ */
+export const RATE_ADJACENT_MS = 150;
 
 type Props = {
     series: FlowPoint[];
     accent: string;
     width: number;
+    /** The same real-seconds horizontal extent used by the BrewTrace above it. */
+    maxT: number;
     maxRate?: number;
 };
 
@@ -34,7 +41,7 @@ function contiguousRuns(series: FlowPoint[]): FlowPoint[][] {
 
     for (const point of series) {
         const previous = current[current.length - 1];
-        if (previous !== undefined && point.at - previous.at > GAP_MS) {
+        if (previous !== undefined && point.at - previous.at > RATE_ADJACENT_MS) {
             runs.push(current);
             current = [];
         }
@@ -65,19 +72,19 @@ function channelPath(runs: FlowPoint[][], of: "cup" | "water", box: Box): string
  * point cannot draw a line, and a frame with no line would look like a brew
  * where the bed never flowed rather than a chart the stream cannot support.
  */
-export default function BrewRateChart({series, accent, width, maxRate}: Props) {
+export default function BrewRateChart({series, accent, width, maxT, maxRate}: Props) {
     if (series.length < 2) return null;
 
     const waterStyle = channelStyle("water", {accent});
     const cupStyle = channelStyle("cup", {accent});
-    const inset = Math.max(waterStyle.strokeWidth, cupStyle.strokeWidth) / 2;
+    const verticalInset = Math.max(waterStyle.strokeWidth, cupStyle.strokeWidth) / 2;
     const box: Box = {
-        width: Math.max(width - inset * 2, 0),
-        height: Math.max(RATE_HEIGHT - inset * 2, 0),
-        maxT: series[series.length - 1].at / 1000,
+        width,
+        height: Math.max(RATE_HEIGHT - verticalInset * 2, 0),
+        maxT,
         maxV: Math.max(MIN_AXIS, maxRate ?? maxRateOf(series))
     };
-    if (box.width <= 0 || box.height <= 0) return null;
+    if (box.width <= 0 || box.height <= 0 || box.maxT <= 0) return null;
 
     const runs = contiguousRuns(series);
     const waterPath = channelPath(runs, "water", box);
@@ -89,10 +96,11 @@ export default function BrewRateChart({series, accent, width, maxRate}: Props) {
             <Svg
                 width={width}
                 height={RATE_HEIGHT}
+                style={{overflow: "visible"}}
                 accessibilityRole="image"
                 accessibilityLabel="Brew rate chart"
             >
-                <G x={inset} y={inset}>
+                <G y={verticalInset}>
                     {waterPath !== "" && (
                         <Path
                             testID="rate-chart-water"
