@@ -233,6 +233,11 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     } catch {
         // Already there.
     }
+    // 0 means the boundary cup reading was not recorded. Unlike the clocks
+    // above, 0 is a syntactically plausible reading here, because this is
+    // grams on a scale. That costs nothing: `drawdownRate` refuses anything
+    // at or below 0 anyway, since a bed that gave up nothing across its whole
+    // drawdown is not a rate this app is in a position to report.
     try {
         db.execSync(
             "ALTER TABLE brews ADD COLUMN cupAtDrawdown REAL NOT NULL DEFAULT 0;"
@@ -474,6 +479,10 @@ class BrewDatabase {
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0, record.drawdownAt ?? 0,
+                // The one place in this feature a missing number becomes 0.
+                // It is a storage sentinel, not a reading: `hydrate` turns it
+                // back into an absent key, so nothing downstream ever sees a
+                // boundary cup reading this app did not actually take.
                 record.cupAtDrawdown ?? 0,
                 record.endedAt, record.outcome, record.failure,
                 record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
