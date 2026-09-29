@@ -230,29 +230,49 @@ class NFC {
                 console.log("BlockNumber:" + blockNumber);
                 console.log("BlockCount:" + blockCount);
 
-                const resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x23, ...uid, blockNumber, blockCount - 1]);
-
-                if (resp && resp.length && resp.length > 0 && resp[0] === 0) {
-                    resp.splice(0, 1);
-                    console.log(Recipe.convertNumberArrayToHex(resp));
-                    return resp;
-                } else {
-                    console.log("Fallback: card doesn't support 0x23 (READ MULTIPLE BLOCKS), using 0x20 (READ SINGLE BLOCK) in a loop...");
-                    // ---------- fallback: READ SINGLE BLOCK (0x20) in a loop ----------
-                    const data: number[] = [];
-                    for (let i = 0; i < blockCount; i++) {
-                        const bn = blockNumber + i;
-                        const singleCmd = [flags, 0x20, ...uid, bn];   // 0x20 = Read Single Block
-                        const resp: number[] = await NfcManager.nfcVHandler.transceive(singleCmd);
-
-                        if (!resp?.length || resp[0] !== 0x00) {
-                            throw new Error(`Read failed at block ${bn} (status 0x${resp?.[0]?.toString(16) ?? '??'})`);
+                const readMultiple = async (): Promise<number[] | null> => {
+                    try {
+                        const resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x23, ...uid, blockNumber, blockCount - 1]);
+                        if (resp && resp.length && resp.length > 0 && resp[0] === 0) {
+                            resp.splice(0, 1);
+                            console.log(Recipe.convertNumberArrayToHex(resp));
+                            return resp;
                         }
-                        data.push(...resp.slice(1));  // append block payload
+                        // The tag answered and said no.
+                        return null;
+                    } catch (e) {
+                        // And this is the tag never getting to answer. Android
+                        // hands a raw frame to the controller, and a controller
+                        // whose buffer is smaller than the reply rejects rather
+                        // than returning a status byte -- `getMaxTransceiveLength`
+                        // is as low as 253 on some, and a 40-block card asks for
+                        // 161. Both are the same thing from here: this card will
+                        // not be read in one go, so read it a block at a time.
+                        console.log("0x23 (READ MULTIPLE BLOCKS) was refused outright: " + e);
+                        return null;
                     }
-                    console.log(Recipe.convertNumberArrayToHex(data));
-                    return data;
+                };
+
+                const all = await readMultiple();
+                if (all) {
+                    return all;
                 }
+
+                console.log("Fallback: card doesn't support 0x23 (READ MULTIPLE BLOCKS), using 0x20 (READ SINGLE BLOCK) in a loop...");
+                // ---------- fallback: READ SINGLE BLOCK (0x20) in a loop ----------
+                const data: number[] = [];
+                for (let i = 0; i < blockCount; i++) {
+                    const bn = blockNumber + i;
+                    const singleCmd = [flags, 0x20, ...uid, bn];   // 0x20 = Read Single Block
+                    const resp: number[] = await NfcManager.nfcVHandler.transceive(singleCmd);
+
+                    if (!resp?.length || resp[0] !== 0x00) {
+                        throw new Error(`Read failed at block ${bn} (status 0x${resp?.[0]?.toString(16) ?? '??'})`);
+                    }
+                    data.push(...resp.slice(1));  // append block payload
+                }
+                console.log(Recipe.convertNumberArrayToHex(data));
+                return data;
             }
         }
         return null;

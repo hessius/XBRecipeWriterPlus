@@ -5,45 +5,40 @@
  * `readCard` fetches the system info once, while the tag is open; it remembers
  * it so the capture can read it afterwards, and clears it at the start of every
  * read so a failed read cannot leave the previous card's numbers behind.
+ *
+ * Run on both transports. Mocking `iso15693HandlerIOS` alone made this suite
+ * pass on Android for the wrong reason: the Android branch found no handler,
+ * the read returned null, and "remembers the system info" was never tested.
  */
-import NFC from "@/library/NFC";
+import {Platform} from "react-native";
 
-jest.mock("react-native-nfc-manager", () => ({
-    __esModule: true,
-    default: {
-        start: jest.fn(),
-        requestTechnology: jest.fn(),
-        cancelTechnologyRequest: jest.fn(),
-        getTag: jest.fn(),
-        iso15693HandlerIOS: {
-            getSystemInfo: jest.fn(),
-            readMultipleBlocks: jest.fn()
-        }
-    },
-    NfcTech: {Iso15693IOS: "Iso15693IOS", NfcV: "NfcV"}
-}));
+import NFC from "@/library/NFC";
+import {installCard, makeCard} from "@/test-utils/nfcV";
+
+jest.mock("react-native-nfc-manager", () =>
+    jest.requireActual("@/test-utils/nfcV").nfcManagerMock());
 
 const NfcManager = jest.requireMock("react-native-nfc-manager").default;
-const iso = NfcManager.iso15693HandlerIOS;
 const noProgress = async () => undefined;
 const sysInfoA = {afi: 0, dsfid: 0, blockCount: 60, blockSize: 4};
 
-beforeEach(() => {
-    NfcManager.getTag.mockReset();
-    iso.getSystemInfo.mockReset();
-    iso.readMultipleBlocks.mockReset();
+const original = Platform.OS;
+afterEach(() => {
+    Platform.OS = original;
 });
 
-describe("NFC.getLastSystemInfo", () => {
+describe.each(["ios", "android"] as const)("NFC.getLastSystemInfo on %s", os => {
+    beforeEach(() => {
+        Platform.OS = os;
+        installCard(NfcManager, makeCard({blockCount: 60}));
+    });
+
     it("is null before any read", () => {
         expect(new NFC().getLastSystemInfo()).toBeNull();
     });
 
     it("remembers the system info from a successful read", async () => {
         const nfc = new NFC();
-        iso.getSystemInfo.mockResolvedValue(sysInfoA);
-        NfcManager.getTag.mockResolvedValue({id: "04a1"});
-        iso.readMultipleBlocks.mockResolvedValue([[0, 1, 2, 3]]);
 
         await nfc.readCard(noProgress);
 
@@ -52,15 +47,11 @@ describe("NFC.getLastSystemInfo", () => {
 
     it("does not leave a previous card's system info behind after a failed read", async () => {
         const nfc = new NFC();
-        // A good read first.
-        iso.getSystemInfo.mockResolvedValueOnce(sysInfoA);
-        NfcManager.getTag.mockResolvedValueOnce({id: "04a1"});
-        iso.readMultipleBlocks.mockResolvedValueOnce([[0, 1, 2, 3]]);
         await nfc.readCard(noProgress);
         expect(nfc.getLastSystemInfo()).toEqual(sysInfoA);
 
         // The next read fails before it can learn anything about the new card.
-        iso.getSystemInfo.mockRejectedValueOnce(new Error("tag gone"));
+        installCard(NfcManager, makeCard({blockCount: 60, systemInfoFails: true}));
         await nfc.readCard(noProgress);
 
         // Cleared at the start of the read, so the stale numbers cannot be
