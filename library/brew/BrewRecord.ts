@@ -143,6 +143,22 @@ export type BrewRecord = {
      * null for both.
      */
     drawdownAt?: number;
+    /**
+     * Grams in the cup when the drawdown began, on the same clock as
+     * `drawdownAt`. Absent on every row written before it existed, and on any
+     * brew that never drew down.
+     *
+     * A raw observation and deliberately not a computed statistic. A stored
+     * `peakCupRate` was rejected for exactly this: a peak is only defined
+     * relative to a smoothing window, so the window would be frozen into the
+     * data and the day `FLOW_WINDOW_MS` is retuned every old row would
+     * silently stop being comparable with every new one. `stalls` are stored
+     * for the opposite reason, and the distinction is worth keeping straight:
+     * a stall is an observation whose definition the record is deliberately
+     * pinning, because that definition is a judgement about hardware. A rate
+     * is arithmetic.
+     */
+    cupAtDrawdown?: number;
     endedAt: number;
     outcome: BrewOutcome;
     failure: BrewFailure | null;

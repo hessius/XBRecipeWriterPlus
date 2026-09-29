@@ -1,4 +1,4 @@
-import type {BrewSample} from "./BrewRecord";
+import {drawdownSeconds, type BrewRecord, type BrewSample} from "./BrewRecord";
 
 /**
  * How much of the stream one reading of the rate is fitted over.
@@ -291,4 +291,52 @@ export function maxRateOf(series: FlowPoint[]): number {
         max = Math.max(max, point.cup, point.water);
     }
     return max;
+}
+
+/**
+ * The cup reading at the drawdown boundary, for the recorder to store.
+ *
+ * The last brew reading at or before the boundary. Brew readings only, for the
+ * same reason everything else here excludes the bypass -- although on a
+ * well-formed brew the bypass fires after this point, a firmware that fired it
+ * earlier would otherwise put its water into the figure the whole drawdown
+ * rate is measured from.
+ *
+ * 0 when the brew never drew down, which is the same sentinel `drawdownAt`
+ * uses and what `drawdownRate` refuses on.
+ */
+export function cupAtDrawdownFrom(
+    samples: BrewSample[], drawdownAt: number
+): number {
+    if (drawdownAt <= 0) return 0;
+    let cup = 0;
+    for (const sample of samples) {
+        if (sample.pour < 1) continue;
+        if (sample.at > drawdownAt) break;
+        cup = sample.cup;
+    }
+    return cup;
+}
+
+/**
+ * How fast the bed drew down, averaged over the drawdown, in g/s.
+ *
+ * Null whenever any term is missing, and never 0. Null means nobody can say;
+ * a drawdown rate of nothing is a claim this app is not in a position to make,
+ * which is the same rule `drawdownSeconds` follows and for the same reason.
+ *
+ * `cupTotal` is a raw scale reading, so the bypass comes out of it first --
+ * the idiom `app/brew.tsx` already uses when it names the brew water.
+ *
+ * Distinct from the live figure, and the two must not be conflated: this is an
+ * average across a finished drawdown, and `flowNow` is an instant.
+ */
+export function drawdownRate(record: BrewRecord): number | null {
+    const opened = record.cupAtDrawdown;
+    if (opened === undefined) return null;
+    const seconds = drawdownSeconds(record);
+    if (seconds === null || seconds <= 0) return null;
+    const delivered = record.cupTotal - (record.bypass?.delivered ?? 0) - opened;
+    const rate = delivered / seconds;
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
 }

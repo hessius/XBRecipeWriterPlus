@@ -1,7 +1,9 @@
-import type {BrewSample} from "@/library/brew/BrewRecord";
+import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import {
     FLOW_MIN_WINDOW_MS,
     FLOW_WINDOW_MS,
+    cupAtDrawdownFrom,
+    drawdownRate,
     flowAt,
     flowNow,
     flowSeries,
@@ -64,6 +66,28 @@ function directFlowAt(samples: BrewSample[], stages: number, at: number) {
     const cup = directSlope(window, "cup");
     const water = directSlope(window, "water");
     return cup === null || water === null ? null : {at, cup, water};
+}
+
+/** A finished record with only the fields the rate arithmetic reads. */
+function record(over: Partial<BrewRecord> = {}): BrewRecord {
+    return {
+        id: "b1",
+        recipeUuid: "r1",
+        recipeName: "Test",
+        accent: "#FF007F",
+        startedAt: 1_000_000,
+        pouringAt: 1_000_000,
+        drawdownAt: 100_000,
+        endedAt: 1_140_000,
+        outcome: "done",
+        failure: null,
+        pours: 2,
+        waterTotal: 240,
+        cupTotal: 200,
+        heldSeconds: 0,
+        cupAtDrawdown: 120,
+        ...over
+    } as BrewRecord;
 }
 
 describe("flowAt", () => {
@@ -323,6 +347,43 @@ describe("maxRateOf", () => {
 
     it("is zero on an empty series", () => {
         expect(maxRateOf([])).toBe(0);
+    });
+});
+
+describe("cupAtDrawdownFrom", () => {
+    it("reads the cup at the boundary, not at the end", () => {
+        const samples = ramp(20, 2);
+        expect(cupAtDrawdownFrom(samples, 10_000)).toBeCloseTo(20, 6);
+    });
+
+    it("is 0 when the brew never drew down", () => {
+        expect(cupAtDrawdownFrom(ramp(20, 2), 0)).toBe(0);
+        expect(cupAtDrawdownFrom([], 10_000)).toBe(0);
+    });
+});
+
+describe("drawdownRate", () => {
+    it("averages the cup over the drawdown", () => {
+        // 200 in the cup at the end, 120 at the boundary, 40 seconds between.
+        expect(drawdownRate(record())).toBeCloseTo(2, 6);
+    });
+
+    it("takes the bypass out of the total first", () => {
+        // The same brew with 40 ml of bypass on the same scale.
+        const withBypass = record({
+            cupTotal: 240,
+            bypass: {volume: 40, temperature: 90, delivered: 40, startedAt: 110_000}
+        });
+        expect(drawdownRate(withBypass)).toBeCloseTo(2, 6);
+    });
+
+    it("is null, never 0, whenever a term is missing", () => {
+        expect(drawdownRate(record({cupAtDrawdown: undefined}))).toBeNull();
+        expect(drawdownRate(record({drawdownAt: 0}))).toBeNull();
+        // A cup that did not rise across the drawdown is not a rate of nothing.
+        expect(drawdownRate(record({cupAtDrawdown: 200}))).toBeNull();
+        // And neither is a boundary at the very last millisecond.
+        expect(drawdownRate(record({drawdownAt: 140_000}))).toBeNull();
     });
 });
 
