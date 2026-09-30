@@ -1787,9 +1787,8 @@ two charts drawn to their own maxima cannot be compared by eye, which is the
 one thing this screen exists to allow.
 
 **Files:**
-- Modify: `library/brew/compare.ts:252` (`compareAxis`, and the `CompareAxis` type)
-- Modify: `hooks/useBrewComparison.ts:93`
-- Modify: `app/brewCompare.tsx:343`
+- Modify: `library/brew/compare.ts` (`compareAxis`, and the `CompareAxis` type)
+- Modify: `app/brewCompare.tsx` (the separate-lane branch of the comparison chart)
 - Test: `library/brew/__tests__/compare.test.ts`, `app/__tests__/brewCompare.test.tsx`
 
 - [ ] **Step 1: Write the failing tests**
@@ -1830,18 +1829,21 @@ Expected: FAIL.
 - [ ] **Step 3: Negotiate the axis**
 
 In `library/brew/compare.ts`, add `maxRate: number` to `CompareAxis` with a
-comment saying it is the larger of the two brews' peak rates and 0 when
-neither has a stream, then compute it in `compareAxis` from
-`maxRateOf(flowSeries(...))` for each side. Everything else in the function is
-unchanged.
+comment saying it is the larger of the two brews' retained peak rates and 0
+when neither has a stream, then compute it in `compareAxis` from
+`maxRateOf(flowSeries(samples, record.pours))` for each side. Guard on
+`record.hasStream`; a swept record must not contribute a rate even if a test
+accidentally hands samples to the pure helper. Everything else in the function
+is unchanged.
 
 - [ ] **Step 4: Draw the lanes**
 
-In `app/brewCompare.tsx`, below the two `CompareTrace` lanes, render a
-`BrewRateChart` for each side with `maxRate={axis.maxRate}` and the test IDs
-above. Reuse whatever the screen already has for each side's samples and
-accent; if a side has no samples its chart returns null on its own, which is
-what the second test asserts.
+In `app/brewCompare.tsx`, under each separate volume lane, render a
+`BrewRateChart` for that side with `maxRate={axis.maxRate}` and the test IDs
+above. Build each series with `flowSeries(samples, record.pours)`, not a
+bypass timestamp. Reuse the screen's existing samples and accent; if a side has
+no samples, or the retained stream cannot form a rate line, draw no rate lane
+for that side.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 

@@ -12,7 +12,7 @@ import {
     RATE_LABEL_SIZE,
     rateChartPlotTop
 } from "@/library/brew/rateChartGeometry";
-import {channelStyle} from "@/library/brew/traceStyle";
+import {channelStyle, type Role} from "@/library/brew/traceStyle";
 
 /**
  * Both channels' rate against real seconds, drawn under the volume trace.
@@ -50,6 +50,7 @@ type Props = {
     maxT: number;
     maxRate?: number;
     height?: number;
+    role?: Role;
 };
 
 function contiguousRuns(series: FlowPoint[]): FlowPoint[][] {
@@ -90,12 +91,12 @@ function channelPath(runs: FlowPoint[][], of: "cup" | "water", box: Box): string
  * where the bed never flowed rather than a chart the stream cannot support.
  */
 export default function BrewRateChart({
-    series, accent, width, maxT, maxRate, height = RATE_HEIGHT
+    series, accent, width, maxT, maxRate, height = RATE_HEIGHT, role = "subject"
 }: Props) {
     if (series.length < 2) return null;
 
-    const waterStyle = channelStyle("water", {accent});
-    const cupStyle = channelStyle("cup", {accent});
+    const waterStyle = channelStyle("water", {accent, role});
+    const cupStyle = channelStyle("cup", {accent, role});
     const verticalInset = Math.max(waterStyle.strokeWidth, cupStyle.strokeWidth) / 2;
     const labelSize = drawnFontSize(RATE_LABEL_SIZE);
     const labelRow = Math.ceil(labelSize * RATE_LABEL_LINE_HEIGHT);

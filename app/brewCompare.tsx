@@ -6,6 +6,7 @@ import Svg, {Line, Path} from "react-native-svg";
 import {Button, Text, XStack, YStack} from "tamagui";
 
 import BrewStars from "@/components/BrewStars";
+import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
 import CompareTable from "@/components/CompareTable";
 import CompareTrace, {compareTracePlotHeight} from "@/components/CompareTrace";
@@ -24,7 +25,8 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 import {plannedSeconds, toPath} from "@/library/brew/brewShape";
 import type {Point} from "@/library/brew/brewShape";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
-import {referenceCupColour} from "@/library/brew/traceStyle";
+import {flowSeries} from "@/library/brew/flowRate";
+import {referenceCupColour, type Role} from "@/library/brew/traceStyle";
 
 const CHART_HEIGHT = 220;
 const LANE_HEIGHT = 92;
@@ -165,6 +167,41 @@ function SeparateCupGap({
             <Path testID="compare-cup-gap-separate" d={d} fill={colour}
                   fillOpacity={0.14} stroke="none" />
         </Svg>
+    );
+}
+
+function CompareRateLane({
+    testID,
+    samples,
+    stages,
+    accent,
+    width,
+    maxT,
+    maxRate,
+    role = "subject"
+}: {
+    testID: string;
+    samples: Parameters<typeof flowSeries>[0];
+    stages: number;
+    accent: string;
+    width: number;
+    maxT: number;
+    maxRate: number;
+    role?: Role;
+}) {
+    const series = flowSeries(samples, stages);
+    if (series.length < 2) return null;
+    return (
+        <YStack testID={testID}>
+            <BrewRateChart
+                series={series}
+                accent={accent}
+                width={width}
+                maxT={maxT}
+                maxRate={maxRate}
+                role={role}
+            />
+        </YStack>
     );
 }
 
@@ -374,6 +411,16 @@ export default function BrewCompareScreen() {
                                                 plannedSeconds={plannedSeconds(axis.subjectPours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
                                             />
+                                            <CompareRateLane
+                                                testID="compare-rate-subject"
+                                                samples={subject.samples}
+                                                stages={subject.record.pours}
+                                                accent={subject.record.accent}
+                                                width={chartWidth}
+                                                maxT={axis.maxT}
+                                                maxRate={axis.maxRate}
+                                                role="reference"
+                                            />
                                         </YStack>
                                     )}
                                     <SeparateCupGap
@@ -402,6 +449,15 @@ export default function BrewCompareScreen() {
                                                 height={LANE_HEIGHT}
                                                 plannedSeconds={plannedSeconds(axis.referencePours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
+                                            />
+                                            <CompareRateLane
+                                                testID="compare-rate-reference"
+                                                samples={reference.samples}
+                                                stages={reference.record.pours}
+                                                accent={subject.record.accent}
+                                                width={chartWidth}
+                                                maxT={axis.maxT}
+                                                maxRate={axis.maxRate}
                                             />
                                         </YStack>
                                     )}
