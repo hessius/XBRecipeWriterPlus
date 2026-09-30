@@ -248,37 +248,8 @@ export default function BrewFigures(
                         justifyContent="center">
                     {hasDetailRow && (
                         <XStack testID="figures-detail-row" gap="$3">
-                            {drawdownText === null ? (
-                                <FigurePlaceholder testID="figures-drawdown-placeholder" />
-                            ) : (
-                                <Figure
-                                    testID="figures-drawdown"
-                                    label="DRAWDOWN"
-                                    value={drawdownText}
-                                    color={palette.text}
-                                    fontSize={DETAIL_ROW_VALUE_SIZE}
-                                    badge={drawdownRateText === null
-                                        ? undefined
-                                        : (
-                                            <FigureBadge testID="figures-drawdown-rate">
-                                                {`${drawdownRateText} G/S`}
-                                            </FigureBadge>
-                                        )}
-                                    accessibilityLabel={drawdownAccessibility}
-                                />
-                            )}
-                            {delay === null ? (
-                                <FigurePlaceholder testID="figures-delay-placeholder" />
-                            ) : (
-                                <Figure
-                                    testID="figures-delay"
-                                    label="DELAY"
-                                    value={`+${delay}`}
-                                    color={palette.warn}
-                                    fontSize={DETAIL_ROW_VALUE_SIZE}
-                                    accessibilityLabel={delayAccessibility}
-                                />
-                            )}
+                            {/* TIME is the right figure above, and DRAWDOWN is
+                                also a duration, so the right column rhymes. */}
                             {grind === null ? (
                                 <FigurePlaceholder testID="figures-grind-placeholder" />
                             ) : (
@@ -296,6 +267,37 @@ export default function BrewFigures(
                                             </FigureBadge>
                                         )}
                                     accessibilityLabel={grindAccessibility}
+                                />
+                            )}
+                            {delay === null ? (
+                                <FigurePlaceholder testID="figures-delay-placeholder" />
+                            ) : (
+                                <Figure
+                                    testID="figures-delay"
+                                    label="DELAY"
+                                    value={`+${delay}`}
+                                    color={palette.warn}
+                                    fontSize={DETAIL_ROW_VALUE_SIZE}
+                                    accessibilityLabel={delayAccessibility}
+                                />
+                            )}
+                            {drawdownText === null ? (
+                                <FigurePlaceholder testID="figures-drawdown-placeholder" />
+                            ) : (
+                                <Figure
+                                    testID="figures-drawdown"
+                                    label="DRAWDOWN"
+                                    value={drawdownText}
+                                    color={palette.text}
+                                    fontSize={DETAIL_ROW_VALUE_SIZE}
+                                    badge={drawdownRateText === null
+                                        ? undefined
+                                        : (
+                                            <FigureBadge testID="figures-drawdown-rate">
+                                                {`${drawdownRateText} G/S`}
+                                            </FigureBadge>
+                                        )}
+                                    accessibilityLabel={drawdownAccessibility}
                                 />
                             )}
                         </XStack>

@@ -194,11 +194,11 @@ described in §5.1 opens:
 ```
 WATER 214⁺³⁰        CUP 189          TIME 3:26
 FLOW  ▁▂▄▆▇▆▄      1.8 G/S          POUR 3.1 ML/S
-DRAWDOWN            DELAY            GRIND
-0:32 ⌐2.1 G/S¬      +5               53 ⌐RECIPE 60¬
+GRIND               DELAY            DRAWDOWN
+53 ⌐RECIPE 60¬      +5               0:32 ⌐2.1 G/S¬
 ```
 
-When the record positively says the grinder was switched off, the third
+When the record positively says the grinder was switched off, the first
 figure is `GRIND` / `OFF` with no recipe badge. It still occupies the same
 second-row slot as a numeric grind figure.
 
@@ -410,7 +410,8 @@ record that already merges by `id` and never overwrites.
 **Where it is shown:**
 
 - On the **record** and on the **finished brew**, `BrewFigures` draws DRAWDOWN
-  as the first figure in the smaller second row. The average drawdown rate is a
+  as the right figure in the smaller second row, under TIME. The average
+  drawdown rate is a
   dashed badge on that figure, for example `0:38 ⌐1.7 G/S¬`. The displayed rate
   is deliberately rounded to one decimal place. The badge is dropped whenever
   `drawdownRate` is null, which is the same rule the drawdown figure itself
@@ -431,6 +432,7 @@ record that already merges by `id` and never overwrites.
   no badge. A legacy row that only has a dial reading still draws nothing,
   because a missing grinder flag means "did not learn" rather than "learned it
   was off". The old prose line `MACHINE DIAL ...` is gone.
+  GRIND is the left figure, so the second row is `GRIND`, `DELAY`, `DRAWDOWN`.
 - The **history list row** gains one figure, `1.7 g/s`, beside the water and
   cup figures it already draws and before the stars. Silent when null, exactly
   as the pin and the rating already are. It joins the row's accessibility

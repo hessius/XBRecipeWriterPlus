@@ -252,6 +252,21 @@ describe("BrewFigures", () => {
         expect(screen.queryByTestId("figures-drawdown-rate")).toBeNull();
     });
 
+    it("orders the second-row figures by related columns", async () => {
+        await renderWithProviders(
+            <BrewFigures
+                water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                drawdown={40}
+                delay={5}
+                grind={{kind: "dial", dial: 53, recipe: null}}
+            />
+        );
+        const labels = screen.getAllByText(/^(GRIND|DELAY|DRAWDOWN)$/)
+            .map((node) => node.props.children);
+
+        expect(labels).toEqual(["GRIND", "DELAY", "DRAWDOWN"]);
+    });
+
     it("shows the delay as the middle second-row figure", async () => {
         await renderWithProviders(
             <BrewFigures
