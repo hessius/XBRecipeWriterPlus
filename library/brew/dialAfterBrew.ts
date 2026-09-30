@@ -1,5 +1,5 @@
-import type {BrewRecord} from "./BrewRecord";
-import {grindBand} from "@/library/grindBands";
+import {grinderRan, type BrewRecord} from "./BrewRecord";
+import {grindBand, grindValueMeansOff} from "@/library/grindBands";
 
 /** The part of `Machine` this needs. Narrow, so a test can be a literal. */
 export type DialMachine = {
@@ -63,10 +63,13 @@ export async function readDialAfterBrew(
     return dial;
 }
 
-export type GrindFigure = {
-    dial: number;
-    recipe: number | null;
-};
+export type GrindFigure =
+    | {kind: "off"}
+    | {
+        kind: "dial";
+        dial: number;
+        recipe: number | null;
+    };
 
 /**
  * The grind figure a surface may draw, or null when it may not say anything.
@@ -74,10 +77,18 @@ export type GrindFigure = {
  * Built here rather than in a component so the honesty rule is one testable
  * sentence rather than a condition spread across two screens and an export.
  *
- * Three rules:
+ * Four rules:
  *
- * - It reports the confirmed dial as GRIND. The dial proves where the dial
- *   was, not how the coffee was ground.
+ * - **The grinder-off fact is first class.** If the record explicitly says
+ *   `grinderUsed` was false, or the snapshotted recipe grind is the off
+ *   sentinel owned by `grindBands`, the surface may draw GRIND OFF. The dial
+ *   position is irrelevant then and the recipe badge is suppressed. If the two
+ *   independent records disagree, this takes the same cautious reading as
+ *   `grinderRan`: a brew that might have used beans ground elsewhere must not
+ *   be dressed as a machine grind.
+ * - It reports the confirmed dial as GRIND only when the record positively
+ *   says the grinder ran. The dial proves where the dial was, not how the
+ *   coffee was ground.
  * - **Only the post-brew reading may be reported.** The pre-send one may have
  *   been taken before the machine caught up with a dial that had just been
  *   moved, so a record holding only that cannot be presented as fact.
@@ -85,11 +96,22 @@ export type GrindFigure = {
  *   different setting.
  */
 export function dialNote(record: BrewRecord): GrindFigure | null {
+    const recipeGrind = record.grindSize;
+    const recipeSaysOff = typeof recipeGrind === "number"
+        && grindValueMeansOff(recipeGrind);
+    if (record.grinderUsed === false || recipeSaysOff) {
+        return {kind: "off"};
+    }
+    if (!grinderRan(record)) return null;
     const after = record.dialAfter ?? 0;
     if (after <= 0) return null;
-    const recipe = record.grindSize ?? 0;
     return {
+        kind: "dial",
         dial: after,
-        recipe: grindBand(recipe) !== undefined && recipe !== after ? recipe : null
+        recipe: typeof recipeGrind === "number"
+            && grindBand(recipeGrind) !== undefined
+            && recipeGrind !== after
+            ? recipeGrind
+            : null
     };
 }

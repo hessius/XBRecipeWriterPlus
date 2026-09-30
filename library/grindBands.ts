@@ -64,3 +64,8 @@ export function grindBand(value: number): GrindBand | undefined {
     // the value, not by the band it landed in.
     return {...match.band, onCard: match.band.onCard && value >= CARD_GRIND_MIN};
 }
+
+/** Whether this grind number is the card sentinel that means the grinder was off. */
+export function grindValueMeansOff(value: number): boolean {
+    return value === GRINDER_OFF_VALUE;
+}

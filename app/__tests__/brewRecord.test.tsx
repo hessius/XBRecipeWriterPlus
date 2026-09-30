@@ -1085,9 +1085,17 @@ describe("the drawdown on the record screen", () => {
     });
 
     it("reports the machine's dial as the grind figure", async () => {
-        await renderRecord({...record, grindSize: 52, dialAfter: 47});
+        await renderRecord({...record, grinderUsed: true, grindSize: 52, dialAfter: 47});
         expect(screen.getByText("47")).toBeTruthy();
         expect(screen.getByText("RECIPE 52")).toBeTruthy();
+    });
+
+    it("reports off when the grinder did not run", async () => {
+        await renderRecord({...record, grinderUsed: false, grindSize: 52, dialAfter: 47});
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByText("OFF")).toBeTruthy();
+        expect(screen.queryByTestId("figures-grind-recipe")).toBeNull();
+        expect(screen.getByLabelText("Grind, the grinder was off")).toBeTruthy();
     });
 
     it("says nothing about a dial the machine never confirmed", async () => {

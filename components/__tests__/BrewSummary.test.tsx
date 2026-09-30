@@ -220,7 +220,7 @@ describe("BrewSummary", () => {
             drawdown: 32,
             drawdownRate: 2.1,
             delay: 5,
-            grind: {dial: 53, recipe: 60}
+            grind: {kind: "dial", dial: 53, recipe: 60}
         });
 
         expect(screen.getByText("0:32")).toBeTruthy();

@@ -185,6 +185,10 @@ DRAWDOWN            DELAY            GRIND
 0:32 ⌐2.1 G/S¬      +5               53 ⌐RECIPE 60¬
 ```
 
+When the record positively says the grinder was switched off, the third
+figure is `GRIND` / `OFF` with no recipe badge. It still occupies the same
+second-row slot as a numeric grind figure.
+
 - A sparkline of the last 30 seconds of cup rate, then the current value, then
   the pour rate as a smaller second figure. Both carry their unit: the cup
   rate is grams per second and the pour rate millilitres per second, and a
@@ -395,8 +399,13 @@ record that already merges by `id` and never overwrites.
   which counted normal drawdown as lateness because a recipe plan has no
   drawdown stage.
 - The same row carries GRIND on a finished record when the post-brew dial was
-  confirmed. If the recipe's snapshotted grind differs, it appears as the badge
-  `RECIPE ${grindSize}`. The old prose line `MACHINE DIAL ...` is gone.
+  confirmed and the record positively says the grinder ran. If the recipe's
+  snapshotted grind differs, it appears as the badge `RECIPE ${grindSize}`.
+  When the record explicitly says the grinder was off, or the snapshotted
+  recipe grind is the grinder-off sentinel, the row draws `GRIND` / `OFF` and
+  no badge. A legacy row that only has a dial reading still draws nothing,
+  because a missing grinder flag means "did not learn" rather than "learned it
+  was off". The old prose line `MACHINE DIAL ...` is gone.
 - The **history list row** gains one figure, `1.7 g/s`, beside the water and
   cup figures it already draws and before the stars. Silent when null, exactly
   as the pin and the rating already are. It joins the row's accessibility

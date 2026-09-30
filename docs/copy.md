@@ -619,19 +619,19 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
-| `brew.figures.water` | `components/BrewFigures.tsx:199` | Doto figure label. | `WATER` |
-| `brew.figures.cup` | `components/BrewFigures.tsx:201` | Doto figure label. | `CUP` |
-| `brew.figures.time` | `components/BrewFigures.tsx:203` | Doto figure label. | `TIME` |
-| `brew.figures.flow` | `components/BrewFigures.tsx:217` | Doto flow row label, visible only when a cup rate can be said. | `FLOW` |
-| `brew.figures.flow.rate` | `components/BrewFigures.tsx:226` | Doto primary figure on the flow row. `${...}` is the cup rate in g/s to one decimal place. The design mockup used lowercase `g/s`, but the app renders Doto units uppercase by rule. | `${flow} G/S` |
-| `brew.figures.pour` | `components/BrewFigures.tsx:232` | Smaller second figure on the flow row. `${...}` is ml/s to one decimal place. The unit is spelled out because the figure beside it is grams per second. | `POUR ${pourRate.toFixed(1)} ML/S` |
+| `brew.figures.water` | `components/BrewFigures.tsx:201` | Doto figure label. | `WATER` |
+| `brew.figures.cup` | `components/BrewFigures.tsx:203` | Doto figure label. | `CUP` |
+| `brew.figures.time` | `components/BrewFigures.tsx:205` | Doto figure label. | `TIME` |
+| `brew.figures.flow` | `components/BrewFigures.tsx:219` | Doto flow row label, visible only when a cup rate can be said. | `FLOW` |
+| `brew.figures.flow.rate` | `components/BrewFigures.tsx:228` | Doto primary figure on the flow row. `${...}` is the cup rate in g/s to one decimal place. The design mockup used lowercase `g/s`, but the app renders Doto units uppercase by rule. | `${flow} G/S` |
+| `brew.figures.pour` | `components/BrewFigures.tsx:234` | Smaller second figure on the flow row. `${...}` is ml/s to one decimal place. The unit is spelled out because the figure beside it is grams per second. | `POUR ${pourRate.toFixed(1)} ML/S` |
 | `brew.figures.flow.a11y` | `components/BrewFigures.tsx:175` (a11y) | (a11y) The grouped flow row's spoken label. Grouping the row replaces its children's spoken text, so both rates and both units have to be in the label. Not a live region: on the brew screen the figures change continuously, and the user's focus should not be interrupted. | `Flow, 2.4 grams per second, pouring 3.1 millilitres per second` |
-| `brew.figures.drawdown` | `components/BrewFigures.tsx:254` | Doto second-row figure label. The rate badge is present only when a finished record can say it. `${...}` is the drawdown clock. | `DRAWDOWN` / `${clock(drawdown)}` / `${rate} G/S` |
+| `brew.figures.drawdown` | `components/BrewFigures.tsx:256` | Doto second-row figure label. The rate badge is present only when a finished record can say it. `${...}` is the drawdown clock. | `DRAWDOWN` / `${clock(drawdown)}` / `${rate} G/S` |
 | `brew.figures.drawdown.a11y` | `components/BrewFigures.tsx:182` (a11y) | (a11y) The drawdown figure's spoken label, with the rate spelled out when the badge is present. | `Drawdown, 40 seconds, average 2.0 grams per second` |
-| `brew.figures.delay` | `components/BrewFigures.tsx:273` | Doto second-row figure label and value. `${...}` is the pour-end delay in seconds, shown only when it reaches the reporting floor. | `DELAY` / `+${delay}` |
+| `brew.figures.delay` | `components/BrewFigures.tsx:275` | Doto second-row figure label and value. `${...}` is the pour-end delay in seconds, shown only when it reaches the reporting floor. | `DELAY` / `+${delay}` |
 | `brew.figures.delay.a11y` | `components/BrewFigures.tsx:189` (a11y) | (a11y) The delay figure's spoken label. | `Delay, 5 seconds` |
-| `brew.figures.grind` | `components/BrewFigures.tsx:285` | Doto second-row figure label and value. The badge appears only when the confirmed dial differed from the recipe grind. | `GRIND` / `${dial}` / `RECIPE ${recipeGrind}` |
-| `brew.figures.grind.a11y` | `components/BrewFigures.tsx:190` (a11y) | (a11y) The grind figure's spoken label, with the recipe grind spelled out when the badge is present. | `Grind, dial 53, recipe 60` |
+| `brew.figures.grind` | `components/BrewFigures.tsx:287` | Doto second-row figure label and value. A known grinder-off brew shows `OFF` with no badge. Otherwise the badge appears only when the confirmed dial differed from the recipe grind. | `GRIND` / `${dial}` / `RECIPE ${recipeGrind}` / `OFF` |
+| `brew.figures.grind.a11y` | `components/BrewFigures.tsx:190` (a11y) | (a11y) The grind figure's spoken label, with the recipe grind spelled out when the badge is present. Grinder off is spoken as a brew fact, not a control state. | `Grind, dial 53, recipe 60` / `Grind, the grinder was off` |
 | `brew.trace.a11y` | `components/BrewTrace.tsx:185,186` (a11y) | (a11y) The brew trace graph. | `Brew trace` |
 | `brew.rateChart.a11y` | `components/BrewRateChart.tsx:93` (a11y) | (a11y) The retained stream's flow rate chart on a finished brew record, shared image and compare screen. On the compare screen this child label sits inside the lane's own grouped label. | `Brew rate chart` |
 | `brew.rateChart.label` | `components/BrewRateChart.tsx:102` | Doto label above the retained stream's rate chart. Names what the second chart measures without pretending the unlabelled y axis is calibrated for reading exact values. | `FLOW RATE` |

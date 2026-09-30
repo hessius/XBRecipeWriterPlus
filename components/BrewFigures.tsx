@@ -189,9 +189,11 @@ export default function BrewFigures(
     const delayAccessibility = delay === null ? undefined : `Delay, ${delay} seconds`;
     const grindAccessibility = grind === null
         ? undefined
-        : `Grind, dial ${grind.dial}${
-            grind.recipe === null ? "" : `, recipe ${grind.recipe}`
-        }`;
+        : grind.kind === "off"
+            ? "Grind, the grinder was off"
+            : `Grind, dial ${grind.dial}${
+                grind.recipe === null ? "" : `, recipe ${grind.recipe}`
+            }`;
 
     return (
         <YStack gap="$1.5">
@@ -283,10 +285,10 @@ export default function BrewFigures(
                                 <Figure
                                     testID="figures-grind"
                                     label="GRIND"
-                                    value={String(grind.dial)}
+                                    value={grind.kind === "off" ? "OFF" : String(grind.dial)}
                                     color={palette.text}
                                     fontSize={DETAIL_ROW_VALUE_SIZE}
-                                    badge={grind.recipe === null
+                                    badge={grind.kind === "off" || grind.recipe === null
                                         ? undefined
                                         : (
                                             <FigureBadge testID="figures-grind-recipe">

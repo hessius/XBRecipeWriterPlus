@@ -278,7 +278,7 @@ describe("the grind dial", () => {
     it("shows the confirmed dial as the grind figure", async () => {
         await renderWithProviders(
             <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
-                         grind={{dial: 47, recipe: null}} />
+                         grind={{kind: "dial", dial: 47, recipe: null}} />
         );
         expect(screen.getByText("GRIND")).toBeTruthy();
         expect(screen.getByText("47")).toBeTruthy();
@@ -289,11 +289,22 @@ describe("the grind dial", () => {
     it("badges the recipe grind when it differed from the dial", async () => {
         await renderWithProviders(
             <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
-                         grind={{dial: 53, recipe: 60}} />
+                         grind={{kind: "dial", dial: 53, recipe: 60}} />
         );
         expect(screen.getByText("53")).toBeTruthy();
         expect(screen.getByText("RECIPE 60")).toBeTruthy();
         expect(screen.getByLabelText("Grind, dial 53, recipe 60")).toBeTruthy();
+    });
+
+    it("shows off without a recipe badge when the grinder was off", async () => {
+        await renderWithProviders(
+            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
+                         grind={{kind: "off"}} />
+        );
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByText("OFF")).toBeTruthy();
+        expect(screen.queryByTestId("figures-grind-recipe")).toBeNull();
+        expect(screen.getByLabelText("Grind, the grinder was off")).toBeTruthy();
     });
 
     it("draws no grind figure at all for a brew that took no reading", async () => {

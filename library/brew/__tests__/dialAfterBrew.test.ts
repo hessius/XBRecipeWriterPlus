@@ -110,22 +110,48 @@ describe("readDialAfterBrew", () => {
 
 describe("dialNote", () => {
     it("reports the confirmed dial as the grind figure", () => {
-        expect(dialNote(record({dialAfter: 47}))).toEqual({dial: 47, recipe: null});
+        expect(dialNote(record({grinderUsed: true, grindSize: 47, dialAfter: 47})))
+            .toEqual({kind: "dial", dial: 47, recipe: null});
     });
 
     it("badges the recipe grind when it differed from the dial", () => {
-        expect(dialNote(record({grindSize: 52, dialAfter: 47})))
-            .toEqual({dial: 47, recipe: 52});
+        expect(dialNote(record({grinderUsed: true, grindSize: 52, dialAfter: 47})))
+            .toEqual({kind: "dial", dial: 47, recipe: 52});
     });
 
     it("does not badge a recipe grind matching the dial", () => {
-        expect(dialNote(record({grindSize: 47, dialAfter: 47})))
-            .toEqual({dial: 47, recipe: null});
+        expect(dialNote(record({grinderUsed: true, grindSize: 47, dialAfter: 47})))
+            .toEqual({kind: "dial", dial: 47, recipe: null});
     });
 
-    it("does not badge the grinder-off sentinel as a recipe grind", () => {
-        expect(dialNote(record({grindSize: GRINDER_OFF_VALUE, dialAfter: 47})))
-            .toEqual({dial: 47, recipe: null});
+    it("reports off when the record says the grinder was off", () => {
+        expect(dialNote(record({grinderUsed: false, grindSize: 52, dialAfter: 47})))
+            .toEqual({kind: "off"});
+    });
+
+    it("reports off without needing a dial reading", () => {
+        expect(dialNote(record({grinderUsed: false, grindSize: 52})))
+            .toEqual({kind: "off"});
+    });
+
+    it("reports off when the snapshotted recipe grind means grinder off", () => {
+        expect(dialNote(record({
+            grinderUsed: undefined,
+            grindSize:   GRINDER_OFF_VALUE,
+            dialAfter:   47
+        }))).toEqual({kind: "off"});
+    });
+
+    it("reports off when the two grinder records disagree", () => {
+        expect(dialNote(record({
+            grinderUsed: true,
+            grindSize:   GRINDER_OFF_VALUE,
+            dialAfter:   47
+        }))).toEqual({kind: "off"});
+    });
+
+    it("says nothing about a legacy brew with only a dial reading", () => {
+        expect(dialNote(record({dialAfter: 47}))).toBeNull();
     });
 
     it("says nothing at all when only the pre-brew reading exists", () => {
