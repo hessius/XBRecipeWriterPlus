@@ -26,7 +26,9 @@ type Props = {
      * one.
      */
     summary: React.ReactNode | ((budget: StorySummaryBudget) => React.ReactNode);
-     stageCount?: number;
+    stageCount?: number;
+    /** Whether the retained stream can draw a rate chart on this story. */
+    hasRateChart?: boolean;
     /** When the brew happened, already formatted. */
     when: string;
     accent: string;
@@ -58,13 +60,13 @@ type Props = {
  */
 export default function BrewStoryCard({
     width, summary, stageCount = 2, when, accent, rating, coffee, tags,
-    hasBypass = false, figureExtraRows = 0
+    hasRateChart = true, hasBypass = false, figureExtraRows = 0
 }: Props) {
     const frame = storyFrame(width);
     const budget = storySummaryBudget({
         width,
         stages: stageCount,
-        hasRateChart: true,
+        hasRateChart,
         hasCoffee: coffee !== null,
         hasRating: rating > 0,
         tags,

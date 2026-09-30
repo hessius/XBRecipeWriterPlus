@@ -521,6 +521,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                         coffee={storyCoffeeLine(record)}
                         tags={record.tags ?? []}
                         stageCount={stages.length}
+                        hasRateChart={record.hasStream && samples.length > 0}
                         hasBypass={summary.bypass !== undefined}
                         figureExtraRows={[
                             summary.drawdown !== null,
@@ -531,7 +532,6 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 {...summary}
                                 width={cardWidth}
                                 testID="story-capture"
-                                availableHeight={budget.summaryAvailableHeight}
                                 traceHeight={budget.traceHeight}
                                 rateHeight={budget.rateHeight}
                                 capturePadding={budget.capturePadding}

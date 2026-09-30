@@ -632,9 +632,9 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 | `brew.rateChart.label` | `components/BrewRateChart.tsx:132` | Doto label above the retained stream's rate chart. Names what the second chart measures without pretending the unlabelled y axis is calibrated for reading exact values. | `FLOW RATE` |
 | `brew.story.sheet.title` | `components/BrewStorySheet.tsx:56` | Sheet title while previewing the fixed 9:16 story card before sharing. | `STORY CARD` |
 | `brew.story.share` | `components/BrewStorySheet.tsx:74` | Button to share the story card PNG. | `Share the card` |
-| `brew.story.when` | `components/BrewStoryCard.tsx:92` (`when`, passed from `app/brewRecord.tsx:518`) | Doto date and time row on the fixed 9:16 story card. | `${formatBrewDate(startedAt)} · ${formatBrewTime(startedAt)}` |
-| `brew.story.coffee` | `components/BrewStoryCard.tsx:106` (`coffee`, passed from `app/brewRecord.tsx:521`) | Optional Doto coffee line on the story card. Hidden when the story budget needs the space or the brew has no coffee metadata. | `${storyCoffeeLine(record)}` |
-| `brew.story.tags.more` | `components/BrewStoryCard.tsx:144` | Optional Doto overflow count on the story card when more tags exist than the budget can show. Hidden when the story budget drops tags. | `+${extra}` |
+| `brew.story.when` | `components/BrewStoryCard.tsx:91` (`when`, passed from `app/brewRecord.tsx:518`) | Doto date and time row on the fixed 9:16 story card. | `${formatBrewDate(startedAt)} · ${formatBrewTime(startedAt)}` |
+| `brew.story.coffee` | `components/BrewStoryCard.tsx:105` (`coffee`, passed from `app/brewRecord.tsx:521`) | Optional Doto coffee line on the story card. Hidden when the story budget needs the space or the brew has no coffee metadata. | `${storyCoffeeLine(record)}` |
+| `brew.story.tags.more` | `components/BrewStoryCard.tsx:143` | Optional Doto overflow count on the story card when more tags exist than the budget can show. Hidden when the story budget drops tags. | `+${extra}` |
 | `brew.trace.legend.water` | `components/BrewTrace.tsx:218` | Doto legend item. | `WATER` |
 | `brew.trace.legend.cup` | `components/BrewTrace.tsx:219` | Doto legend item. | `CUP` |
 | `brew.trace.legend.plan` | `components/BrewTrace.tsx:221` | Doto legend item. | `PLAN` |

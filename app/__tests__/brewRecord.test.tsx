@@ -1299,6 +1299,26 @@ describe("brew record's story card", () => {
         expect(style?.overflow).toBe("hidden");
     });
 
+    it("does not budget a story rate chart after the sample stream was swept", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating:    4,
+                origin:    "Huila",
+                roast:     "Medium",
+                tags:      ["filter", "washed"],
+                plan:      planFromPours(twoPours.pours),
+                hasStream: false
+            }),
+            samples: []
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+
+        expect(summaryProps.showRateChart).toBe(false);
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
+    });
+
     it("passes the story budget through to the summary", async () => {
         mockOpened = {
             record:  recordWithDrawdownRate({
@@ -1313,10 +1333,8 @@ describe("brew record's story card", () => {
 
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
         await openCard();
-
         expect(summaryProps).toEqual(expect.objectContaining({
             testID: "story-capture",
-            availableHeight: expect.any(Number),
             traceHeight: expect.any(Number),
             rateHeight: expect.any(Number),
             capturePadding: expect.any(Number),

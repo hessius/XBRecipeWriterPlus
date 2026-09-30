@@ -1,5 +1,5 @@
 import type {BrewRecord} from "./BrewRecord";
-import {BAR_FLOOR, GAP_FLOOR} from "./bands";
+import {BAR_CAP, BAR_FLOOR, GAP_CAP, GAP_FLOOR} from "./bands";
 import {resolvedOrigin, resolvedProcess} from "./beanTags";
 import {RATE_HEIGHT, rateChartLabelRowHeight} from "./rateChartGeometry";
 import {stageLadderRungMinHeight} from "./stageLadderGeometry";
@@ -166,6 +166,28 @@ function surroundingHeight(rows: number[]): number {
     return rows.reduce((sum, row) => sum + row, 0) + STORY_GAP * rows.length;
 }
 
+function storyBands(
+    margin: number,
+    ladderRows: number
+): {barHeight: number; rungGap: number; spent: number} {
+    if (ladderRows <= 0 || margin <= 0) {
+        return {barHeight: BAR_FLOOR, rungGap: GAP_FLOOR, spent: 0};
+    }
+
+    let slack = margin;
+    const barMore = Math.min(BAR_CAP - BAR_FLOOR, Math.floor(slack / ladderRows));
+    slack -= barMore * ladderRows;
+
+    const gapMore = Math.min(GAP_CAP - GAP_FLOOR, Math.floor(slack / ladderRows));
+    const spent = (barMore + gapMore) * ladderRows;
+
+    return {
+        barHeight: BAR_FLOOR + barMore,
+        rungGap:   GAP_FLOOR + gapMore,
+        spent
+    };
+}
+
 export function storySummaryBudget(
     {
         width, stages, hasRateChart, hasCoffee, hasRating, tags = [],
@@ -258,26 +280,32 @@ export function storySummaryBudget(
         }
     }
 
+    const margin = contentHeight - measured.required;
+    const bands = chosen.stages ? storyBands(margin, ladderRows) : {
+        barHeight: BAR_FLOOR, rungGap: GAP_FLOOR, spent: 0
+    };
+    const requiredHeight = measured.required + bands.spent;
+
     return {
         contentHeight,
         surroundingHeight: measured.around,
         summaryAvailableHeight: Math.max(0, contentHeight - measured.around),
-        minimumSummaryHeight: measured.summary,
-        requiredHeight: measured.required,
+        minimumSummaryHeight: measured.summary + bands.spent,
+        requiredHeight,
         traceHeight: chosen.trace,
         rateHeight: chosen.rate ? RATE_HEIGHT : 0,
         capturePadding: STORY_CAPTURE_PADDING,
         ladderTopGap: chosen.stages ? STORY_LADDER_TOP_GAP : 0,
         rateLabelRowHeight: rows.rateLabel,
-        barHeight: BAR_FLOOR,
-        rungGap: GAP_FLOOR,
+        barHeight: bands.barHeight,
+        rungGap: bands.rungGap,
         showRateChart: chosen.rate,
         showCoffee: chosen.coffee,
         showRating: chosen.rating,
         shownTagCount: chosen.tags ? shownTags.length : 0,
         tagRows: measured.tagLineCount,
         showStages: chosen.stages,
-        margin: contentHeight - measured.required
+        margin: contentHeight - requiredHeight
     };
 }
 

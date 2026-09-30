@@ -98,8 +98,7 @@ type Props = {
      *
      * Absent or zero keeps the frozen bands, which is what a caller that
      * has measured nothing gets. A measured summary uses the same floors and
-     * ceilings the live screen obeys, so the story card can shrink the ladder
-     * rather than clipping the PNG.
+     * ceilings the live screen obeys.
      */
     availableHeight?: number;
     traceHeight?: number;

@@ -65,12 +65,10 @@ export const SUMMARY_BANDS = {
 /**
  * The summary ladder's bands, fitted into whatever height it has been given.
  *
- * `SUMMARY_BANDS` is the unmeasured fallback, not the answer: a summary that has room should
- * look like the live screen, which reaches `BAR_MAX` on a real phone, rather
- * than staying frozen at the soft caps and reading thinner once the brew is
- * over than it did while it ran. A compact story card also gets a real height,
- * and there the same function may shrink the ladder to the live floors rather
- * than letting the PNG clip.
+ * `SUMMARY_BANDS` is the unmeasured fallback, not the answer: a summary that
+ * has room should look like the live screen, which reaches `BAR_MAX` on a real
+ * phone, rather than staying frozen at the soft caps and reading thinner once
+ * the brew is over than it did while it ran.
  *
  * Growth only, in the same order `allocateBands` uses: bars before gaps. A
  * ladder with no room keeps today's bands and scrolls, which is what it

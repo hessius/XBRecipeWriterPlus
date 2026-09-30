@@ -3,6 +3,7 @@ import {
     STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
     storyCoffeeLine, storyFrame, storySummaryBudget
 } from "../storyCard";
+import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
 
@@ -59,12 +60,35 @@ describe("the frame", () => {
         expect(budget.rateLabelRowHeight).toBeGreaterThan(0);
     });
 
+    it("spends spare story room on the ladder bands", () => {
+        const budget = storySummaryBudget({
+            width: 600,
+            stages: 2,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["a", "b", "c", "d"],
+            fontScale: 1
+        });
+
+        expect(budget.barHeight).toBeGreaterThan(BAR_FLOOR);
+        expect(budget.rungGap).toBeGreaterThan(GAP_FLOOR);
+        expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+    });
+
     it("fits every story sheet width, card stage count and bounded font scale", () => {
         let worst = {margin: Number.POSITIVE_INFINITY, width: 0, stages: 0, fontScale: 0};
+        const visibleRows = (budget: ReturnType<typeof storySummaryBudget>) =>
+            Number(budget.showCoffee)
+            + Number(budget.showRating)
+            + Number(budget.shownTagCount > 0)
+            + Number(budget.showRateChart)
+            + Number(budget.showStages);
 
-        for (const width of STORY_TEST_WIDTHS) {
-            for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
-                for (const fontScale of STORY_TEST_FONT_SCALES) {
+        for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+            for (const fontScale of STORY_TEST_FONT_SCALES) {
+                let rowsAtPreviousWidth = 0;
+                for (const width of STORY_TEST_WIDTHS) {
                     const budget = storySummaryBudget({
                         width,
                         stages,
@@ -79,26 +103,37 @@ describe("the frame", () => {
                     const margin = budget.contentHeight - budget.requiredHeight;
                     if (margin < worst.margin) worst = {margin, width, stages, fontScale};
 
-                    expect({
-                        width,
-                        stages,
-                        fontScale,
-                        requiredHeight: budget.requiredHeight,
-                        contentHeight: budget.contentHeight,
-                        budget
-                    }).toEqual(expect.objectContaining({
-                        requiredHeight: expect.any(Number),
-                        contentHeight: expect.any(Number)
-                    }));
                     expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
-                    expect(budget.summaryAvailableHeight).toBeGreaterThanOrEqual(
-                        budget.minimumSummaryHeight
-                    );
+                    expect(visibleRows(budget)).toBeGreaterThanOrEqual(rowsAtPreviousWidth);
+                    rowsAtPreviousWidth = visibleRows(budget);
                 }
             }
         }
 
         expect(worst.margin).toBeGreaterThanOrEqual(0);
+    });
+
+    it("fits every story sheet width with no retained rate chart", () => {
+        for (const width of STORY_TEST_WIDTHS) {
+            for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+                for (const fontScale of STORY_TEST_FONT_SCALES) {
+                    const budget = storySummaryBudget({
+                        width,
+                        stages,
+                        hasRateChart: false,
+                        hasCoffee: true,
+                        hasRating: true,
+                        tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
+                        fontScale,
+                        hasBypass: true,
+                        figureExtraRows: 2
+                    });
+
+                    expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+                    expect(budget.showRateChart).toBe(false);
+                }
+            }
+        }
     });
 });
 

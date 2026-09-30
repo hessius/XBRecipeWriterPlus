@@ -309,6 +309,24 @@ describe("LiveBrewProvider", () => {
         expect(h.written[0].record.recipeName).toBe("Ethiopia Guji");
     });
 
+    it("keeps the written record on the live snapshot after a terminal phase", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        await act(async () => { result.current.start(recipe()); });
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(200);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.setPhase({name: "done"});
+
+        expect(h.written).toHaveLength(1);
+        expect(result.current.run?.record).toBe(h.written[0].record);
+    });
+
     /**
      * On device: cancel a brew, start another, and the bar still said STOPPED
      * for several seconds. The run had already been replaced -- what lingered
