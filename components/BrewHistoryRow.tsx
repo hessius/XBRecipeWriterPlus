@@ -7,7 +7,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import {formatBrewDate, formatBrewDuration} from "@/library/brew/brewFormat";
-import {drawdownFigures, formatFlowRate} from "@/library/brew/flowRate";
+import {drawdownRate, formatFlowRate} from "@/library/brew/flowRate";
 
 type Props = {
     brew: StoredBrew;
@@ -46,11 +46,8 @@ export default function BrewHistoryRow({brew, onPress, selectionMode = false, se
     // machine measured nothing, which is a claim about the brew rather than
     // about the app, and a much worse one.
     const watched = brew.watched !== false;
-    const drawdown = watched ? drawdownFigures(brew) : null;
-    const drawdownRateText =
-        drawdown?.rate === null || drawdown?.rate === undefined
-            ? null
-            : formatFlowRate(drawdown.rate);
+    const drawdown = watched ? drawdownRate(brew) : null;
+    const drawdownRateText = drawdown === null ? null : formatFlowRate(drawdown);
 
     const label = [
         brew.recipeName,
@@ -132,7 +129,7 @@ export default function BrewHistoryRow({brew, onPress, selectionMode = false, se
                                 {drawdownRateText !== null && (
                                     <DotMatrixText fontSize={11} letterSpacing={1}
                                                    color={palette.text}>
-                                        {`${drawdownRateText} g/s`}
+                                        {`${drawdownRateText} G/S`}
                                     </DotMatrixText>
                                 )}
                                 <DotMatrixText fontSize={11} letterSpacing={1}

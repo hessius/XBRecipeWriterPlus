@@ -1713,14 +1713,16 @@ One figure, so a list can be scanned for the brew that ran fast.
                 onPress={jest.fn()}
             />
         );
-        expect(screen.getByText(/2\.0\s*g\/s/)).toBeTruthy();
+        expect(screen.getByText(/2\.0\s*G\/S/)).toBeTruthy();
     });
 
     it("says nothing where there is no rate", async () => {
         await renderWithProviders(
             <BrewHistoryRow brew={brew({drawdownAt: 0})} onPress={jest.fn()} />
         );
-        expect(screen.queryByText(/g\/s/)).toBeNull();
+        expect(screen.queryByText(/g\/s/i)).toBeNull();
+        expect(screen.getByRole("button").props.accessibilityLabel)
+            .not.toMatch(/grams per second/);
     });
 
     it("puts the rate in the row's spoken label", async () => {
@@ -1772,7 +1774,7 @@ Expected: PASS, whole file.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add components/BrewHistoryRow.tsx components/__tests__/BrewHistoryRow.test.tsx
+git add components/BrewHistoryRow.tsx components/__tests__/BrewHistoryRow.test.tsx docs/copy.md
 git commit -m "Name the drawdown rate in the history list"
 ```
 

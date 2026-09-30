@@ -164,7 +164,7 @@ describe("BrewHistoryRow", () => {
             />
         );
 
-        expect(screen.getByText("2.0 g/s")).toBeTruthy();
+        expect(screen.getByText("2.0 G/S")).toBeTruthy();
     });
 
     it("says nothing where there is no drawdown rate", async () => {
@@ -244,6 +244,26 @@ describe("BrewHistoryRow", () => {
             expect(label).not.toContain("0 grams");
             // The rating is the whole point of the record, so it still speaks.
             expect(label).toContain("4");
+        });
+
+        // A restored backup row can carry watched false beside a real
+        // drawdownAt. Without the guard the row would draw NOT WATCHED and no
+        // figures while the label still read out a rate.
+        it("keeps a restored rate off a brew it did not watch", async () => {
+            await renderWithProviders(
+                <BrewHistoryRow
+                    brew={brew({
+                        watched: false, pours: 0, waterTotal: 0, cupTotal: 0,
+                        heldSeconds: 0, endedAt: Date.UTC(2026, 8, 3, 7, 42),
+                        drawdownAt: 200_000, cupAtDrawdown: 164
+                    })}
+                    onPress={jest.fn()}
+                />
+            );
+
+            expect(screen.queryByText(/g\/s/i)).toBeNull();
+            expect(screen.getByRole("button").props.accessibilityLabel)
+                .not.toMatch(/grams per second/);
         });
 
         // The date is the one machine independent fact a hand-logged brew has,
