@@ -1708,27 +1708,27 @@ One figure, so a list can be scanned for the brew that ran fast.
 ```tsx
     it("names the drawdown rate", async () => {
         await renderWithProviders(
-            <BrewHistoryRow record={brewRecord({
-                drawdownAt: 100_000, endedAt: 1_140_000, startedAt: 1_000_000,
-                cupTotal: 200, cupAtDrawdown: 120
-            })} onPress={() => {}} />
+            <BrewHistoryRow
+                brew={brew({drawdownAt: 200_000, cupAtDrawdown: 164})}
+                onPress={jest.fn()}
+            />
         );
         expect(screen.getByText(/2\.0\s*g\/s/)).toBeTruthy();
     });
 
     it("says nothing where there is no rate", async () => {
         await renderWithProviders(
-            <BrewHistoryRow record={brewRecord({drawdownAt: 0})} onPress={() => {}} />
+            <BrewHistoryRow brew={brew({drawdownAt: 0})} onPress={jest.fn()} />
         );
         expect(screen.queryByText(/g\/s/)).toBeNull();
     });
 
     it("puts the rate in the row's spoken label", async () => {
         await renderWithProviders(
-            <BrewHistoryRow record={brewRecord({
-                drawdownAt: 100_000, endedAt: 1_140_000, startedAt: 1_000_000,
-                cupTotal: 200, cupAtDrawdown: 120
-            })} onPress={() => {}} />
+            <BrewHistoryRow
+                brew={brew({drawdownAt: 200_000, cupAtDrawdown: 164})}
+                onPress={jest.fn()}
+            />
         );
         const row = screen.getByRole("button");
         expect(row.props.accessibilityLabel).toMatch(/2\.0 grams per second/);
@@ -1745,14 +1745,18 @@ Expected: FAIL.
 Derive it once at the top of the component:
 
 ```tsx
-    const rate = drawdownRate(record);
+    const drawdown = watched ? drawdownFigures(brew) : null;
+    const drawdownRateText =
+        drawdown?.rate === null || drawdown?.rate === undefined
+            ? null
+            : formatFlowRate(drawdown.rate);
 ```
 
 Add it to the figure line beside the existing figures, guarded on null, and
 add a clause to the hand-built `label` array:
 
 ```tsx
-    if (rate !== null) label.push(`${rate.toFixed(1)} grams per second`);
+    drawdownRateText === null ? undefined : `${drawdownRateText} grams per second`
 ```
 
 The label is built by hand because `Pressable` with an explicit label replaces

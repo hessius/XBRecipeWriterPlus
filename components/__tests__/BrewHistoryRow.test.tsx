@@ -63,7 +63,7 @@ describe("BrewHistoryRow", () => {
     });
 
     it("shows the local date, not the UTC date", async () => {
-        // The fixture timestamp is 2026-09-04T03:00:00Z — Sep 4 in UTC.
+        // The fixture timestamp is 2026-09-04T03:00:00Z, Sep 4 in UTC.
         // We mock the local accessors to return Sep 3 values so the test is
         // non-vacuous: if the code calls getUTCDate() instead it bypasses the
         // spy and uses the real UTC value (4), producing "2026-09-04" instead.
@@ -89,7 +89,7 @@ describe("BrewHistoryRow", () => {
             <BrewHistoryRow brew={brew({outcome: "failed", failure: "noWater"})}
                             onPress={jest.fn()} />
         );
-        // DotMatrixText compiles colour into `style` — there is no `color` prop
+        // DotMatrixText compiles colour into `style`; there is no `color` prop
         // on the host node (see RecipeOverflowSheet.test.tsx's identical note).
         expect(getByText("STOPPED").props.style).toEqual(
             expect.arrayContaining([expect.objectContaining({color: palette.danger})])
@@ -154,6 +154,37 @@ describe("BrewHistoryRow", () => {
             <BrewHistoryRow brew={brew({rating: 4})} onPress={jest.fn()} />
         );
         expect(getByLabelText(/4 stars/)).toBeTruthy();
+    });
+
+    it("names the drawdown rate", async () => {
+        await renderWithProviders(
+            <BrewHistoryRow
+                brew={brew({drawdownAt: 200_000, cupAtDrawdown: 164})}
+                onPress={jest.fn()}
+            />
+        );
+
+        expect(screen.getByText("2.0 g/s")).toBeTruthy();
+    });
+
+    it("says nothing where there is no drawdown rate", async () => {
+        await renderWithProviders(
+            <BrewHistoryRow brew={brew({drawdownAt: 0})} onPress={jest.fn()} />
+        );
+
+        expect(screen.queryByText(/G\/S/)).toBeNull();
+    });
+
+    it("puts the drawdown rate in the row's spoken label", async () => {
+        await renderWithProviders(
+            <BrewHistoryRow
+                brew={brew({drawdownAt: 200_000, cupAtDrawdown: 164})}
+                onPress={jest.fn()}
+            />
+        );
+
+        const label = screen.getByRole("button").props.accessibilityLabel;
+        expect(label).toContain("2.0 grams per second");
     });
 
     it("says why an old brew still has a trace", async () => {

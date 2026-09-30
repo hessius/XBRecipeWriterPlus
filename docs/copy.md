@@ -738,11 +738,14 @@ empty library with nothing to explain it.
 | `brewHistory.confirm.delete` | `app/brewHistory.tsx:193` | Confirm-delete button label. | `Delete` |
 | `brewHistory.confirm.keep.a11y` | `app/brewHistory.tsx:197` (a11y) | (a11y) Cancel button. | `Keep this brew` |
 | `brewHistory.confirm.keep` | `app/brewHistory.tsx:200` | Cancel button label. | `Keep this brew` |
-| `brewHistory.row.a11y` | `components/BrewHistoryRow.tsx:51` (a11y) | (a11y) The whole row as one announcement -- the explicit label replaces every visible child, so the date, cup weight, duration and any flag have to be in it or a reader hears one indistinguishable name per brew. Empty parts are dropped. | `${name}, ${date}, ${grams} grams, ${duration}, ended early, stopped, no trace kept` |
-| `brewHistory.row.cup` | `components/BrewHistoryRow.tsx:60` | Doto cup weight on a row. `${...}` is grams. | `${Math.round(brew.cupTotal)} G` |
-| `brewHistory.row.endedEarly` | `components/BrewHistoryRow.tsx:77` | Doto flag, warn colour, on a brew the machine ended short. Deliberately not the danger colour: this is an observation, not a failure. | `ENDED EARLY` |
-| `brewHistory.row.stopped` | `components/BrewHistoryRow.tsx:83` | Doto flag on a cancelled, failed or link-lost brew. | `STOPPED` |
-| `brewHistory.row.noTrace` | `components/BrewHistoryRow.tsx:89` | Doto flag when no trace was kept. | `NO TRACE KEPT` |
+| `brewHistory.row.a11y` | `components/BrewHistoryRow.tsx:55` (a11y) | (a11y) The whole row as one announcement -- the explicit label replaces every visible child, so the date, cup weight, drawdown rate, duration and any flag have to be in it or a reader hears one indistinguishable name per brew. Empty parts are dropped. | `${name}, ${date}, ${grams} grams, ${rate} grams per second, ${duration}, ended early, stopped, no trace kept` |
+| `brewHistory.row.cup` | `components/BrewHistoryRow.tsx:130` | Doto cup weight on a row. `${...}` is grams. | `${Math.round(brew.cupTotal)} G` |
+| `brewHistory.row.drawdownRate` | `components/BrewHistoryRow.tsx:135` | Doto drawdown rate on a row. Hidden when the rate is absent. | `${drawdownRateText} g/s` |
+| `brewHistory.row.notWatched` | `components/BrewHistoryRow.tsx:146` | Doto flag for a brew the app did not watch. | `NOT WATCHED` |
+| `brewHistory.row.endedEarly` | `components/BrewHistoryRow.tsx:152` | Doto flag, warn colour, on a brew the machine ended short. Deliberately not the danger colour: this is an observation, not a failure. | `ENDED EARLY` |
+| `brewHistory.row.stopped` | `components/BrewHistoryRow.tsx:158` | Doto flag on a cancelled, failed or link-lost brew. | `STOPPED` |
+| `brewHistory.row.kept` | `components/BrewHistoryRow.tsx:171` | Doto flag on a pinned brew whose stream is kept through retention. | `KEPT` |
+| `brewHistory.row.noTrace` | `components/BrewHistoryRow.tsx:177` | Doto flag when no trace was kept. | `NO TRACE KEPT` |
 
 ---
 
