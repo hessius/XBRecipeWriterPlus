@@ -95,7 +95,7 @@ describe("the frame", () => {
                         tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
                         fontScale,
                         hasBypass: true,
-                        figureExtraRows: 2
+                        figureExtraRows: 1
                     });
                     expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
                     expect(visibleRows(budget)).toBeGreaterThanOrEqual(rowsAtPreviousWidth);
@@ -118,7 +118,7 @@ describe("the frame", () => {
                         tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
                         fontScale,
                         hasBypass: true,
-                        figureExtraRows: 2
+                        figureExtraRows: 1
                     });
 
                     expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
@@ -185,6 +185,27 @@ describe("the frame", () => {
         expect(withRate.rateBottomGap).toBe(12);
         expect(withRate.requiredHeight - withoutRate.requiredHeight)
             .toBe(RATE_HEIGHT + 12);
+    });
+
+    it("budgets one smaller figure row instead of the removed caption lines", () => {
+        const withoutSecondRow = storySummaryBudget({
+            width: 600,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false
+        });
+        const withSecondRow = storySummaryBudget({
+            width: 600,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            figureExtraRows: 1
+        });
+
+        expect(withSecondRow.requiredHeight - withoutSecondRow.requiredHeight)
+            .toBe(6 + dotoRowHeight(10, 1) + 4 + dotoRowHeight(20, 1));
     });
 });
 

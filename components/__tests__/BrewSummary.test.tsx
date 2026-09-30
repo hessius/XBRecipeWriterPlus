@@ -215,6 +215,21 @@ describe("BrewSummary", () => {
         expect(style?.marginBottom).toBe(12);
     });
 
+    it("passes delay and grind figures into the captured summary", async () => {
+        await draw({
+            drawdown: 32,
+            drawdownRate: 2.1,
+            delay: 5,
+            grind: {dial: 53, recipe: 60}
+        });
+
+        expect(screen.getByText("0:32")).toBeTruthy();
+        expect(screen.getByText("2.1 G/S")).toBeTruthy();
+        expect(screen.getByText("+5")).toBeTruthy();
+        expect(screen.getByText("53")).toBeTruthy();
+        expect(screen.getByText("RECIPE 60")).toBeTruthy();
+    });
+
     it("keeps the rate chart hidden for a swept record even if a caller hands over rates", async () => {
         await draw({
             hasStream: false,

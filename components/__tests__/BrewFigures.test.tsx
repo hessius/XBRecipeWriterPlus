@@ -2,7 +2,7 @@ import React from "react";
 import {screen} from "@testing-library/react-native";
 import {PixelRatio} from "react-native";
 
-import BrewFigures, {drawdownRowMinHeight, flowRowMinHeight} from "@/components/BrewFigures";
+import BrewFigures, {detailRowMinHeight, flowRowMinHeight} from "@/components/BrewFigures";
 import {FLOW_SPARKLINE_HEIGHT} from "@/components/FlowSparkline";
 import {accents} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
@@ -69,15 +69,14 @@ describe("BrewFigures", () => {
         expect(screen.getByText("+5")).toBeTruthy();
     });
 
-    it("gives the drawdown its own labelled line", async () => {
-        // On its own line rather than as a fourth column, and carrying the
-        // word: a second clock beside TIME with no label says nothing about
-        // which of the two it is.
+    it("gives the drawdown its own smaller figure", async () => {
         await renderWithProviders(
             <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8"
                          drawdown={22} />
         );
-        expect(screen.getByText("DRAWDOWN 0:22")).toBeTruthy();
+        expect(screen.getByText("DRAWDOWN")).toBeTruthy();
+        expect(screen.getByText("0:22")).toBeTruthy();
+        expect(screen.getByLabelText("Drawdown, 22 seconds")).toBeTruthy();
     });
 
     it("floors the drawdown rather than rounding it up", async () => {
@@ -88,7 +87,7 @@ describe("BrewFigures", () => {
             <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8"
                          drawdown={22.6} />
         );
-        expect(screen.getByText("DRAWDOWN 0:22")).toBeTruthy();
+        expect(screen.getByText("0:22")).toBeTruthy();
     });
 
     it("says nothing about a drawdown it has not been given", async () => {
@@ -98,6 +97,7 @@ describe("BrewFigures", () => {
             <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8" />
         );
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
+        expect(screen.queryByTestId("figures-detail-slot")).toBeNull();
     });
 
     it("shows no badge without a bypass", async () => {
@@ -223,49 +223,85 @@ describe("BrewFigures", () => {
                 reserveDrawdown
             />
         );
-        expect(screen.getByTestId("figures-drawdown-slot"))
-            .toHaveStyle({minHeight: drawdownRowMinHeight()});
+        expect(screen.getByTestId("figures-detail-slot"))
+            .toHaveStyle({minHeight: detailRowMinHeight()});
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
     });
 
-    it("puts the average rate on the drawdown line", async () => {
+    it("puts the average rate on the drawdown badge", async () => {
         await renderWithProviders(
             <BrewFigures
                 water={240} cup={200} seconds={140} accent={TEST_ACCENT}
                 drawdown={40} drawdownRate={2}
             />
         );
-        const line = screen.getByTestId("figures-drawdown");
-        expect(line).toHaveTextContent("DRAWDOWN 0:40 · 2.0 G/S");
+        expect(screen.getByText("0:40")).toBeTruthy();
+        expect(screen.getByText("2.0 G/S")).toBeTruthy();
+        expect(screen.getByLabelText(
+            "Drawdown, 40 seconds, average 2.0 grams per second"
+        )).toBeTruthy();
     });
 
-    it("leaves the drawdown line as it was when there is no rate", async () => {
+    it("leaves the drawdown badge out when there is no rate", async () => {
         await renderWithProviders(
             <BrewFigures
                 water={240} cup={200} seconds={140} accent={TEST_ACCENT}
                 drawdown={40}
             />
         );
-        const line = screen.getByTestId("figures-drawdown");
-        expect(line).not.toHaveTextContent("G/S");
+        expect(screen.queryByTestId("figures-drawdown-rate")).toBeNull();
+    });
+
+    it("shows the delay as the middle second-row figure", async () => {
+        await renderWithProviders(
+            <BrewFigures
+                water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                delay={5}
+            />
+        );
+        expect(screen.getByText("DELAY")).toBeTruthy();
+        expect(screen.getByText("+5")).toBeTruthy();
+        expect(screen.getByLabelText("Delay, 5 seconds")).toBeTruthy();
+        expect(screen.getByTestId("figures-drawdown-placeholder")).toBeTruthy();
+        expect(screen.getByTestId("figures-grind-placeholder")).toBeTruthy();
+    });
+
+    it("draws no second-row slot when every second-row figure is absent", async () => {
+        await renderWithProviders(
+            <BrewFigures water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
+        );
+        expect(screen.queryByTestId("figures-detail-slot")).toBeNull();
     });
 });
 
 describe("the grind dial", () => {
-    it("shows the line the record gave it", async () => {
+    it("shows the confirmed dial as the grind figure", async () => {
         await renderWithProviders(
             <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
-                         dial="MACHINE DIAL 47" />
+                         grind={{dial: 47, recipe: null}} />
         );
-        expect(screen.getByTestId("figures-dial")).toHaveTextContent("MACHINE DIAL 47");
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByText("47")).toBeTruthy();
+        expect(screen.queryByTestId("figures-grind-recipe")).toBeNull();
+        expect(screen.getByLabelText("Grind, dial 47")).toBeTruthy();
     });
 
-    it("draws no line at all for a brew that took no reading", async () => {
+    it("badges the recipe grind when it differed from the dial", async () => {
+        await renderWithProviders(
+            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
+                         grind={{dial: 53, recipe: 60}} />
+        );
+        expect(screen.getByText("53")).toBeTruthy();
+        expect(screen.getByText("RECIPE 60")).toBeTruthy();
+        expect(screen.getByLabelText("Grind, dial 53, recipe 60")).toBeTruthy();
+    });
+
+    it("draws no grind figure at all for a brew that took no reading", async () => {
         // Absent, never zero. A dial of 0 is not a setting, and printing one
         // would be an invented fact next to three measured ones.
         await renderWithProviders(
             <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT} />
         );
-        expect(screen.queryByTestId("figures-dial")).toBeNull();
+        expect(screen.queryByTestId("figures-grind")).toBeNull();
     });
 });

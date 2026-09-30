@@ -153,9 +153,13 @@ describe("BrewTrace", () => {
         expect(getByTestId("trace-plan").props.d).toContain("300");
     });
 
-    it("stretches the axis when the brew overran, and labels the gap", async () => {
-        const {getByText} = await draw({samples: samples([0, 0, 0], [84_000, 200, 190])});
-        expect(getByText("+14 S")).toBeTruthy();
+    it("stretches the axis when the brew ran past the plan", async () => {
+        const {getByTestId, queryByText} = await draw({
+            samples: samples([0, 0, 0], [84_000, 200, 190])
+        });
+        expect(getByTestId("trace-plan").props.d).not.toContain("300");
+        expect(getByTestId("trace-water").props.d).toContain("300");
+        expect(queryByText("+14 S")).toBeNull();
     });
 
     it("says nothing about a gap the user cannot see", async () => {
@@ -185,31 +189,17 @@ describe("BrewTrace", () => {
             samples: samples([0, 0, 0], [84_000, 200, 190]),
             plannedSeconds: 70,
         });
-        // The overrun label must not appear in compact mode.
+        // The delay figure lives in BrewFigures, not on the trace.
         expect(queryByText("+14 S")).toBeNull();
         // The chart itself must still render.
         expect(getByTestId("trace-water")).toBeTruthy();
     });
 
-    it("a plan of no seconds cannot be overrun", async () => {
-        const {queryByText} = await draw({
-            pours: [],
-            plannedSeconds: 0,
-            samples: samples([0, 0, 0], [10_000, 50, 40]),
+    it("does not reserve the removed overrun row", async () => {
+        const {queryByTestId} = await draw({
+            samples: samples([0, 0, 0], [84_000, 200, 190]),
         });
-        // Overrun label must not appear when there is no plan.
-        expect(queryByText(/^\+/)).toBeNull();
-    });
-
-    it("gives the overrun label a row tall enough to hold it", async () => {
-        // A 16 pt row cropped the descenders off "+96 S" on a real brew. Doto's
-        // line box is about 1.35em, so twelve-point text needs seventeen — and
-        // more again for a user with text sizing turned up, which is why the
-        // row measures the size the glyphs are *drawn* at rather than the size
-        // it asked for.
-        const {getByTestId} = await draw({samples: samples([0, 0, 0], [84_000, 200, 190])});
-        const row = StyleSheet.flatten(getByTestId("trace-overrun-row").props.style);
-        expect(row.height).toBeGreaterThanOrEqual(drawnFontSize(12) * 1.35);
+        expect(queryByTestId("trace-overrun-row")).toBeNull();
     });
 
     it("gives the legend a row tall enough to hold it", async () => {
@@ -222,11 +212,10 @@ describe("BrewTrace", () => {
 
     it("the plot fits inside the height it was given", async () => {
         const knownHeight = 140;
-        // Non-compact, the legend and overrun rows take their height first.
-        // Not pinned to a literal: both rows scale with the OS text size, and
+        // Non-compact, the legend row takes its height first.
+        // Not pinned to a literal: the row scales with the OS text size, and
         // jest-expo does not run at the device default.
-        const chrome = Math.ceil(drawnFontSize(12) * 1.35)
-                     + Math.ceil(drawnFontSize(9) * 1.35);
+        const chrome = Math.ceil(drawnFontSize(9) * 1.35);
         const {getByLabelText: getLabelA} = await draw({height: knownHeight, compact: false});
         const {getByLabelText: getLabelB} = await draw({height: knownHeight, compact: true});
 

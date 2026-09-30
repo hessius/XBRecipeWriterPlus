@@ -39,7 +39,7 @@ import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {liveDrawdown} from "@/library/brew/liveDrawdown";
-import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
+import {pauseSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
 import Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
@@ -165,6 +165,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
         ? []
         : flowTail(samples, stages, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
     const finalStageTargetMl = Math.max(recipe.pours[stages - 1]?.volume ?? 0, 0);
+    const plannedSecs = plannedSeconds(recipe.pours);
     const liveDrawdownFigure = liveDrawdown({
         samples,
         stages,
@@ -176,6 +177,14 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const doneDrawdownFigures = run?.record === undefined ? null : drawdownFigures(run.record);
     const doneDrawdown = phase.name === "done" ? doneDrawdownFigures?.seconds ?? null : null;
     const doneDrawdownRate = phase.name === "done" ? doneDrawdownFigures?.rate ?? null : null;
+    const doneDelay = phase.name === "done"
+        ? pourEndDelaySeconds(elapsed, doneDrawdown, plannedSecs)
+        : null;
+    const liveDelay = pourEndDelaySeconds(
+        elapsed,
+        liveDrawdownFigure.drawdown,
+        plannedSecs
+    );
     const doneRateSeries = phase.name === "done" && samples.length > 0
         ? flowSeries(samples, stages)
         : [];
@@ -351,7 +360,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // takes the capture's width from its parent, and this
                         // prop only sizes the trace inside it.
                         width={width - SCREEN_PADDING * 2}
-                        plannedSeconds={plannedSeconds(recipe.pours)}
+                        plannedSeconds={plannedSecs}
                         water={brewWater}
                         cup={last?.cup ?? 0}
                         seconds={elapsed}
@@ -360,6 +369,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         stalls={stalls}
                         drawdown={doneDrawdown}
                         drawdownRate={doneDrawdownRate}
+                        delay={doneDelay}
                         rateSeries={doneRateSeries}
                         note={finalOutcome("done", brewWater, plannedWater)
                             === "endedOnMachine" ? ENDED_ON_MACHINE_NOTE : undefined}
@@ -379,7 +389,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             accent={accent}
                             width={width - SCREEN_PADDING * 2}
                             height={bands.traceHeight}
-                            plannedSeconds={plannedSeconds(recipe.pours)}
+                            plannedSeconds={plannedSecs}
                             holding={holding}
                             planOpacity={motion.opacity}
                             planColor={planColor}
@@ -417,6 +427,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         {...(liveDrawdownFigure.drawdown === null
                             ? {}
                             : {drawdown: liveDrawdownFigure.drawdown})}
+                        {...(liveDelay === null ? {} : {delay: liveDelay})}
                     />
 
                             {/* Held for the whole run. Between the last pour and the

@@ -14,6 +14,7 @@ import {summaryBands} from "@/library/brew/bands";
 import {traceAxisFor} from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {BypassView} from "@/library/brew/bypassState";
+import type {GrindFigure} from "@/library/brew/dialAfterBrew";
 import type {FlowPoint} from "@/library/brew/flowRate";
 import {
     hasDrawableRateRun,
@@ -83,12 +84,10 @@ type Props = {
     rateSeries?: FlowPoint[];
     /** Average drawdown flow rate, or null when the record cannot say. */
     drawdownRate?: number | null;
-    /**
-     * What the machine's grind dial read, as a ready line from `dialNote`, or
-     * null when the record may not say. Null on the live screen: the reading
-     * is taken after the brew has ended.
-     */
-    dial?: string | null;
+    /** Seconds late to the pour end, or null when nobody can say. */
+    delay?: number | null;
+    /** The confirmed machine grind dial, and recipe grind when it differed. */
+    grind?: GrindFigure | null;
     /**
      * The capture target's id.
      *
@@ -137,7 +136,8 @@ export default function BrewSummary({
     recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
-    drawdown = null, rateSeries, drawdownRate = null, dial = null, availableHeight = 0,
+    drawdown = null, rateSeries, drawdownRate = null, delay = null, grind = null,
+    availableHeight = 0,
     traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT, rateBottomGap = RATE_BOTTOM_GAP,
     capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
     storyBands, showRateChart = true, showStages = true,
@@ -235,7 +235,8 @@ export default function BrewSummary({
                 bypass={bypass?.delivered}
                 drawdown={drawdown}
                 drawdownRate={drawdownRate}
-                dial={dial}
+                delay={delay}
+                grind={grind}
             />
             </View>
             {/* Spaced by hand: the capture has no gap, so the trace and the

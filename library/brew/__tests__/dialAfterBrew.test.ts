@@ -124,20 +124,18 @@ describe("dialWasMoved", () => {
 });
 
 describe("dialNote", () => {
-    it("reports where the dial was and stops", () => {
-        // Not "ground at 47". The dial proves the dial's position and nothing
-        // about how the coffee was ground, and somebody using a hand grinder
-        // has one sitting wherever it was last left.
-        expect(dialNote(record({dialAfter: 47}))).toBe("MACHINE DIAL 47");
+    it("reports the confirmed dial as the grind figure", () => {
+        expect(dialNote(record({dialAfter: 47}))).toEqual({dial: 47, recipe: null});
     });
 
-    it("says so when the dial was moved during the brew", () => {
-        expect(dialNote(record({dialBefore: 52, dialAfter: 47})))
-            .toBe("MACHINE DIAL 47, MOVED FROM 52");
+    it("badges the recipe grind when it differed from the dial", () => {
+        expect(dialNote(record({grindSize: 52, dialAfter: 47})))
+            .toEqual({dial: 47, recipe: 52});
     });
 
-    it("says nothing about a dial that did not move", () => {
-        expect(dialNote(record({dialBefore: 47, dialAfter: 47}))).toBe("MACHINE DIAL 47");
+    it("does not badge a recipe grind matching the dial", () => {
+        expect(dialNote(record({grindSize: 47, dialAfter: 47})))
+            .toEqual({dial: 47, recipe: null});
     });
 
     it("says nothing at all when only the pre-brew reading exists", () => {

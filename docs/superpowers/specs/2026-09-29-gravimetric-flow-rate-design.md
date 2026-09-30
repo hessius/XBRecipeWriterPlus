@@ -1,7 +1,7 @@
 # Gravimetric flow rate
 
 **Date:** 2026-09-29
-**Status:** designed, not implemented
+**Status:** implemented
 
 ## The request
 
@@ -173,14 +173,16 @@ to make.
 
 ## 5. The live screen
 
-One new row in `BrewFigures`, in the slot the record's drawdown line already
-proved works, plus a drawdown clock of its own (§5.1) which is hidden until
-the gate described there opens:
+One flow row plus a smaller second figures row in `BrewFigures`. The second row
+aligns under WATER, CUP and TIME, so a partial row keeps its column rather than
+stretching across the card. The drawdown clock is hidden until the gate
+described in §5.1 opens:
 
 ```
-WATER 240      CUP 186      TIME 2:41
-FLOW  ▁▂▄▆▇▆▄  1.8 g/s   POUR 3.1 ml/s
-DRAWDOWN 0:38
+WATER 214⁺³⁰        CUP 189          TIME 3:26
+FLOW  ▁▂▄▆▇▆▄      1.8 G/S          POUR 3.1 ML/S
+DRAWDOWN            DELAY            GRIND
+0:32 ⌐2.1 G/S¬      +5               53 ⌐RECIPE 60¬
 ```
 
 - A sparkline of the last 30 seconds of cup rate, then the current value, then
@@ -192,10 +194,14 @@ DRAWDOWN 0:38
   stream, and a row reading `0.0 g/s` through waking, sending and grinding
   would be a measurement of nothing presented as a measurement. The row appears
   with the first drop, on the same condition the stage counter already uses.
-- The live screen draws **no drawdown rate**. `drawdownRate` averages over a
-  finished drawdown, and an average of a thing still happening is a figure that
+- The live screen draws **no drawdown rate** and no grind figure. `drawdownRate`
+  averages over a finished drawdown, and an average of a thing still happening
   changes meaning as it is read. The live rate is the FLOW row's instantaneous
-  one, and the two must not be conflated.
+  one, and the two must not be conflated. The grind dial is read after the brew.
+- The live screen reserves the second figures row once the drawdown boundary is
+  known, even before the clock opens. That is the same anti-jump rule the FLOW
+  row already follows, applied at the moment the row can later gain DRAWDOWN or
+  DELAY.
 - No new band, so `bands.ts` is untouched and no height is taken from the trace
   or the ladder.
 - No control, no mode, nothing to operate with wet hands and a timer running.
@@ -374,13 +380,23 @@ record that already merges by `id` and never overwrites.
 
 **Where it is shown:**
 
-- On the **record** and on the **finished brew**, `BrewFigures` grows a second
-  term on the drawdown line it already draws: `DRAWDOWN 0:38 · 1.7 g/s`. The
-  displayed rate is deliberately rounded to one decimal place. The
-  rate is dropped and the line reads as it does today whenever `drawdownRate`
-  is null, which is the same rule the drawdown figure itself already follows.
-  Not on the live screen, whose drawdown line (§5.1) is a clock only: a rate
-  averaged over a drawdown still happening changes meaning as it is read.
+- On the **record** and on the **finished brew**, `BrewFigures` draws DRAWDOWN
+  as the first figure in the smaller second row. The average drawdown rate is a
+  dashed badge on that figure, for example `0:38 ⌐1.7 G/S¬`. The displayed rate
+  is deliberately rounded to one decimal place. The badge is dropped whenever
+  `drawdownRate` is null, which is the same rule the drawdown figure itself
+  already follows. Not on the live screen, whose drawdown figure (§5.1) is a
+  clock only: a rate averaged over a drawdown still happening changes meaning
+  as it is read.
+- The same row carries DELAY when the pour end can be separated from drawdown:
+  `pourEnd = seconds - drawdown`, then `delay = pourEnd - plannedSeconds`.
+  Unknown drawdown means unknown delay, and a delay below the reporting floor is
+  omitted rather than shown as zero. This replaces the old trace overrun badge,
+  which counted normal drawdown as lateness because a recipe plan has no
+  drawdown stage.
+- The same row carries GRIND on a finished record when the post-brew dial was
+  confirmed. If the recipe's snapshotted grind differs, it appears as the badge
+  `RECIPE ${grindSize}`. The old prose line `MACHINE DIAL ...` is gone.
 - The **history list row** gains one figure, `1.7 g/s`, beside the water and
   cup figures it already draws and before the stars. Silent when null, exactly
   as the pin and the rating already are. It joins the row's accessibility

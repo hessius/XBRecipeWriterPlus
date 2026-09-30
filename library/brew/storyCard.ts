@@ -108,7 +108,9 @@ const STORY_TAG_GAP = 8;
 const STORY_TAG_MORE_CHARS = 3;
 const STORY_FIGURE_LABEL_SIZE = 10;
 const STORY_FIGURE_VALUE_SIZE = 28;
+const STORY_FIGURE_DETAIL_VALUE_SIZE = 20;
 const STORY_FIGURE_GAP = 4;
+const STORY_FIGURE_ROW_GAP = 6;
 
 type StoryRows = {
     header: number;
@@ -120,6 +122,12 @@ type StoryRows = {
     rateLabel: number;
 };
 
+function figureRowHeight(valueSize: number, fontScale: number): number {
+    return dotoRowHeight(STORY_FIGURE_LABEL_SIZE, fontScale)
+        + STORY_FIGURE_GAP
+        + dotoRowHeight(valueSize, fontScale);
+}
+
 function storyRows(fontScale: number): StoryRows {
     return {
         header: Math.max(
@@ -127,9 +135,7 @@ function storyRows(fontScale: number): StoryRows {
             dotoRowHeight(STORY_HEADER_DATE, fontScale)
         ),
         name: dotoRowHeight(STORY_NAME_SIZE, fontScale) + STORY_NAME_MARGIN,
-        figures: dotoRowHeight(STORY_FIGURE_LABEL_SIZE, fontScale)
-            + STORY_FIGURE_GAP
-            + dotoRowHeight(STORY_FIGURE_VALUE_SIZE, fontScale),
+        figures: figureRowHeight(STORY_FIGURE_VALUE_SIZE, fontScale),
         coffee: dotoRowHeight(STORY_COFFEE_SIZE, fontScale),
         rating: Math.ceil(Math.max(STORY_RATING_SIZE, dotoRowHeight(11, fontScale))),
         tag: dotoRowHeight(STORY_TAG_SIZE, fontScale) + STORY_TAG_PAD_Y * 2,
@@ -228,7 +234,10 @@ export function storySummaryBudget(
                     : ladderRows * stageLadderRungMinHeight(fontScale, BAR_FLOOR, GAP_FLOOR))
             : 0;
         const figureBlock = rows.figures
-            + Math.max(0, figureExtraRows) * (dotoRowHeight(10, fontScale) + STORY_GAP)
+            + Math.max(0, figureExtraRows) * (
+                STORY_FIGURE_ROW_GAP
+                + figureRowHeight(STORY_FIGURE_DETAIL_VALUE_SIZE, fontScale)
+            )
             + (hasSummaryNote ? dotoRowHeight(11, fontScale) + 8 : 0);
         const summary = STORY_CAPTURE_PADDING * 2
             + rows.name

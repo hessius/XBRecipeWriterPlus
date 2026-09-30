@@ -4,7 +4,7 @@ import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
     from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
-import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
+import {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
@@ -23,7 +23,7 @@ type Props = {
     samples: BrewSample[];
     accent: string;
     width: number;
-    /** Total rendered height of the component. In non-compact mode this includes the legend and overrun rows. */
+    /** Total rendered height of the component. In non-compact mode this includes the legend row. */
     height: number;
     plannedSeconds: number;
     /**
@@ -60,7 +60,7 @@ type Props = {
     planDashed?: boolean;
     /** 0 to 1: how far the lit head has travelled. 1 means no head. */
     planHeadAt?: number;
-    /** When true, render only the SVG at exactly width by height, no stage counter, no overrun label. */
+    /** When true, render only the SVG at exactly width by height, no stage counter. */
     compact?: boolean;
     /**
      * The stages a tap resolves against. Defaults to `pours`.
@@ -86,9 +86,6 @@ type Props = {
      */
     bypass?: BypassView;
 };
-/** Point size of the overrun label. */
-const OVERRUN_SIZE = 12;
-
 /** The gradient's opacity at the line and at the floor. */
 const FILL_TOP = 0.28;
 const FILL_BOTTOM = 0;
@@ -133,9 +130,6 @@ const PLOT_FLOOR = 10;
 
 /** Minimum rendered bypass box size on the volume axis, unrelated to temperature mark width. */
 const BYPASS_BOX_MIN = 2;
-
-/** Below this an overrun is rounding, not a hold worth naming. */
-const GAP_FLOOR_SECONDS = 2;
 
 /** The lit head's length, as a fraction of the curve. */
 const LIT = 0.12;
@@ -221,10 +215,10 @@ export default function BrewTrace({
     const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
     const extent = axis ?? traceAxisFor(pours, samples, plannedSeconds, bypass);
     // In compact mode the SVG fills the full height; otherwise the legend row
-    // and the overrun row take theirs first.
+    // takes its height first.
     const svgHeight = compact
         ? height
-        : Math.max(height - rowHeight(OVERRUN_SIZE) - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
+        : Math.max(height - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
     const box: Box = {
         width,
         height: svgHeight,
@@ -282,9 +276,6 @@ export default function BrewTrace({
         x: (selected.start / box.maxT) * box.width,
         width: Math.max(((selected.end - selected.start) / box.maxT) * box.width, 1)
     } : undefined;
-
-    // Only meaningful when there is an actual plan; a plan of nothing cannot be overrun.
-    const overrun = plannedSeconds > 0 ? Math.round(ranTo - plannedSeconds) : 0;
 
     // Sized in the box's own units, so it moves with the axis rather than
     // needing its own scale.
@@ -574,15 +565,6 @@ export default function BrewTrace({
                 <TraceLegendItem colour={cupStyle.stroke} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
                     <TraceLegendItem colour={planStyle.stroke} label="PLAN" dashed />
-                )}
-            </XStack>
-            <XStack testID="trace-overrun-row" justifyContent="flex-end"
-                    alignItems="center" height={rowHeight(OVERRUN_SIZE)}>
-                {overrun >= GAP_FLOOR_SECONDS && (
-                    <DotMatrixText fontSize={OVERRUN_SIZE} weight="bold" letterSpacing={1.4}
-                                   color={palette.warn}>
-                        {`+${overrun} S`}
-                    </DotMatrixText>
                 )}
             </XStack>
         </YStack>

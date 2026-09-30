@@ -8,19 +8,25 @@ import FlowSparkline, {
 } from "@/components/FlowSparkline";
 import {palette} from "@/constants/colors";
 import {formatBrewClock} from "@/library/brew/brewFormat";
+import type {GrindFigure} from "@/library/brew/dialAfterBrew";
 import {formatFlowRate} from "@/library/brew/flowRate";
 
 const DOTO_LINE_HEIGHT = 1.35;
 const FLOW_ROW_VERTICAL_ROOM = 4;
-const DRAWDOWN_ROW_VERTICAL_ROOM = 0;
+const DETAIL_ROW_VALUE_SIZE = 20;
+const FIGURE_VALUE_SIZE = 28;
+const FIGURE_LABEL_SIZE = 10;
+const FIGURE_INTERNAL_GAP = 4;
 
 export function flowRowMinHeight(): number {
     const cupRateHeight = Math.ceil(drawnFontSize(14) * DOTO_LINE_HEIGHT);
     return Math.max(FLOW_SPARKLINE_HEIGHT, cupRateHeight) + FLOW_ROW_VERTICAL_ROOM;
 }
 
-export function drawdownRowMinHeight(): number {
-    return Math.ceil(drawnFontSize(10) * DOTO_LINE_HEIGHT) + DRAWDOWN_ROW_VERTICAL_ROOM;
+export function detailRowMinHeight(): number {
+    return Math.ceil(drawnFontSize(FIGURE_LABEL_SIZE) * DOTO_LINE_HEIGHT)
+        + FIGURE_INTERNAL_GAP
+        + Math.ceil(drawnFontSize(DETAIL_ROW_VALUE_SIZE) * DOTO_LINE_HEIGHT);
 }
 
 type Props = {
@@ -74,48 +80,72 @@ type Props = {
      */
     reserveFlow?: boolean;
     /**
-     * Reserve the live drawdown row's height before the clock may print.
+     * Reserve the live second figures row before the clock may print.
      *
-     * Live only. Records and shared images either have a drawdown line or do
-     * not, but the live screen can learn it a second after the boundary.
+     * Live only. Records and shared images either have row two or do not, but
+     * the live screen can learn drawdown and delay after the boundary.
      */
     reserveDrawdown?: boolean;
     /**
      * The average rate across the drawdown, in g/s.
      *
-     * It sits on the drawdown line because it is a property of that same
+     * It sits on the drawdown figure because it is a property of that same
      * interval, not a fourth total beside water, cup and time.
      */
     drawdownRate?: number | null;
+    /** Seconds late to the pour end, or null when nobody can say. */
+    delay?: number | null;
     /**
-     * What the machine's grind dial read, as a ready line, or null when there
-     * is nothing the record may say.
+     * What the machine's grind dial read, and the recipe grind if it differed.
      *
-     * A line rather than a number because the wording is the honesty rule:
-     * `dialNote` owns both, so one screen cannot start claiming the coffee
-     * was ground at a setting while another reports where a dial was. Null on
-     * the live screen, where the reading is taken after the brew has ended.
+     * Null on the live screen, where the reading is taken after the brew has
+     * ended.
      */
-    dial?: string | null;
+    grind?: GrindFigure | null;
 };
 
-function Figure({label, value, color, badge}: {
-    label: string; value: string; color: string; badge?: React.ReactNode;
+function FigureBadge({children, testID}: {children: string | number; testID?: string}) {
+    return (
+        <XStack testID={testID}
+                paddingHorizontal={4} paddingVertical={1}
+                borderRadius="$2" borderWidth={1} borderStyle="dashed"
+                borderColor={palette.line}>
+            <DotMatrixText fontSize={11} weight="bold" color={palette.dim}>
+                {children}
+            </DotMatrixText>
+        </XStack>
+    );
+}
+
+function Figure({label, value, color, badge, fontSize, testID, accessibilityLabel}: {
+    label: string;
+    value: string;
+    color: string;
+    badge?: React.ReactNode;
+    fontSize: number;
+    testID?: string;
+    accessibilityLabel?: string;
 }) {
     return (
-        <YStack flex={1} gap="$1">
-            <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
+        <YStack flex={1} gap="$1" testID={testID}
+                accessible={accessibilityLabel !== undefined}
+                accessibilityLabel={accessibilityLabel}>
+            <DotMatrixText fontSize={FIGURE_LABEL_SIZE} weight="bold" letterSpacing={1.6}
                            color={palette.dim}>
                 {label}
             </DotMatrixText>
             <XStack alignItems="center" gap="$1.5">
-                <DotMatrixText fontSize={28} weight="bold" color={color}>
+                <DotMatrixText fontSize={fontSize} weight="bold" color={color}>
                     {value}
                 </DotMatrixText>
                 {badge}
             </XStack>
         </YStack>
     );
+}
+
+function FigurePlaceholder({testID}: {testID: string}) {
+    return <YStack testID={testID} flex={1} />;
 }
 
 /**
@@ -128,18 +158,11 @@ export default function BrewFigures(
     {
         water, cup, seconds, accent, bypass, drawdown = null, flow = null,
         flowTail, pourRate = null, reserveFlow = false, reserveDrawdown = false,
-        drawdownRate = null, dial = null
+        drawdownRate = null, delay = null, grind = null
     }: Props
 ) {
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
-        <XStack testID="figures-bypass"
-                paddingHorizontal={4} paddingVertical={1}
-                borderRadius="$2" borderWidth={1} borderStyle="dashed"
-                borderColor={palette.line}>
-            <DotMatrixText fontSize={11} weight="bold" color={palette.dim}>
-                {`+${Math.round(bypass)}`}
-            </DotMatrixText>
-        </XStack>
+        <FigureBadge testID="figures-bypass">{`+${Math.round(bypass)}`}</FigureBadge>
     );
     const flowText = flow === null ? null : formatFlowRate(flow);
     const pourRateText = pourRate === null ? null : formatFlowRate(pourRate);
@@ -154,19 +177,31 @@ export default function BrewFigures(
         : `Flow, ${flowText} grams per second${
             pourRateText === null ? "" : `, pouring ${pourRateText} millilitres per second`
         }`;
-    const drawdownText = drawdown === null
-        ? null
-        : `DRAWDOWN ${formatBrewClock(drawdown)}${
-            drawdownRateText === null ? "" : ` · ${drawdownRateText} G/S`
+    const drawdownText = drawdown === null ? null : formatBrewClock(drawdown);
+    const hasDetailRow = drawdownText !== null || delay !== null || grind !== null;
+    const drawdownAccessibility = drawdown === null
+        ? undefined
+        : `Drawdown, ${Math.floor(drawdown)} seconds${
+            drawdownRateText === null
+                ? ""
+                : `, average ${drawdownRateText} grams per second`
+        }`;
+    const delayAccessibility = delay === null ? undefined : `Delay, ${delay} seconds`;
+    const grindAccessibility = grind === null
+        ? undefined
+        : `Grind, dial ${grind.dial}${
+            grind.recipe === null ? "" : `, recipe ${grind.recipe}`
         }`;
 
     return (
         <YStack gap="$1.5">
             <XStack gap="$3">
                 <Figure label="WATER" value={String(Math.round(water))} color={accent}
-                        badge={badge} />
-                <Figure label="CUP" value={String(Math.round(cup))} color={palette.text} />
-                <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text} />
+                        badge={badge} fontSize={FIGURE_VALUE_SIZE} />
+                <Figure label="CUP" value={String(Math.round(cup))} color={palette.text}
+                        fontSize={FIGURE_VALUE_SIZE} />
+                <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text}
+                        fontSize={FIGURE_VALUE_SIZE} />
             </XStack>
             {(hasFlow || reserveFlow) && (
                 <YStack testID="figures-flow-slot"
@@ -202,27 +237,68 @@ export default function BrewFigures(
                     )}
                 </YStack>
             )}
-            {/* Absent, not zero, when it was not measured. A brew that was
-                interrupted never drew down and a record written before the
-                boundary was kept cannot say, and printing 0:00 for either
-                would invent a figure somebody might dial a grind against. */}
-            {(drawdownText !== null || reserveDrawdown) && (
-                <YStack testID="figures-drawdown-slot"
-                        minHeight={reserveDrawdown ? drawdownRowMinHeight() : undefined}
+            {/* Absent, not zero, when a figure was not measured. A cancelled
+                brew never drew down, an old record cannot say, and 0:00 would
+                invent a figure somebody might dial a grind against. */}
+            {(hasDetailRow || reserveDrawdown) && (
+                <YStack testID="figures-detail-slot"
+                        minHeight={reserveDrawdown ? detailRowMinHeight() : undefined}
                         justifyContent="center">
-                    {drawdownText !== null && (
-                        <DotMatrixText testID="figures-drawdown" fontSize={10} weight="bold"
-                                       letterSpacing={1.6} color={palette.dim}>
-                            {drawdownText}
-                        </DotMatrixText>
+                    {hasDetailRow && (
+                        <XStack testID="figures-detail-row" gap="$3">
+                            {drawdownText === null ? (
+                                <FigurePlaceholder testID="figures-drawdown-placeholder" />
+                            ) : (
+                                <Figure
+                                    testID="figures-drawdown"
+                                    label="DRAWDOWN"
+                                    value={drawdownText}
+                                    color={palette.text}
+                                    fontSize={DETAIL_ROW_VALUE_SIZE}
+                                    badge={drawdownRateText === null
+                                        ? undefined
+                                        : (
+                                            <FigureBadge testID="figures-drawdown-rate">
+                                                {`${drawdownRateText} G/S`}
+                                            </FigureBadge>
+                                        )}
+                                    accessibilityLabel={drawdownAccessibility}
+                                />
+                            )}
+                            {delay === null ? (
+                                <FigurePlaceholder testID="figures-delay-placeholder" />
+                            ) : (
+                                <Figure
+                                    testID="figures-delay"
+                                    label="DELAY"
+                                    value={`+${delay}`}
+                                    color={palette.warn}
+                                    fontSize={DETAIL_ROW_VALUE_SIZE}
+                                    accessibilityLabel={delayAccessibility}
+                                />
+                            )}
+                            {grind === null ? (
+                                <FigurePlaceholder testID="figures-grind-placeholder" />
+                            ) : (
+                                <Figure
+                                    testID="figures-grind"
+                                    label="GRIND"
+                                    value={String(grind.dial)}
+                                    color={palette.text}
+                                    fontSize={DETAIL_ROW_VALUE_SIZE}
+                                    badge={grind.recipe === null
+                                        ? undefined
+                                        : (
+                                            <FigureBadge testID="figures-grind-recipe">
+                                                {`RECIPE ${grind.recipe}`}
+                                            </FigureBadge>
+                                        )}
+                                    accessibilityLabel={grindAccessibility}
+                                />
+                            )}
+                        </XStack>
                     )}
                 </YStack>
-            )}
-            {dial !== null && (
-                <DotMatrixText testID="figures-dial" fontSize={10} weight="bold"
-                               letterSpacing={1.6} color={palette.dim}>
-                    {dial}
-                </DotMatrixText>
             )}
         </YStack>
     );

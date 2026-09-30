@@ -80,29 +80,33 @@ export function dialWasMoved(record: BrewRecord): boolean {
     return before > 0 && after > 0 && before !== after;
 }
 
+export type GrindFigure = {
+    dial: number;
+    recipe: number | null;
+};
+
 /**
- * How a surface says what the dial read, or null when it may not say anything.
+ * The grind figure a surface may draw, or null when it may not say anything.
  *
  * Built here rather than in a component so the honesty rule is one testable
  * sentence rather than a condition spread across two screens and an export.
  *
- * Three rules, all of them the issue's:
+ * Three rules:
  *
- * - It reports the dial and stops. "Machine dial" rather than "ground at",
- *   because the dial proves where the dial was and nothing more: somebody
- *   using a hand grinder has one sitting wherever it was last left. The same
- *   discipline `endedOnMachine` already follows, which records that a brew
- *   came up short and declines to say why.
+ * - It reports the confirmed dial as GRIND. The dial proves where the dial
+ *   was, not how the coffee was ground.
  * - **Only the post-brew reading may be reported.** The pre-send one may have
  *   been taken before the machine caught up with a dial that had just been
  *   moved, so a record holding only that cannot be presented as fact.
- * - A difference between the two is worth saying, because it is the positive
- *   observation that the dial was turned for this brew rather than left where
- *   the last one put it.
+ * - A recipe grind badge appears only when the recorded recipe asked for a
+ *   different setting.
  */
-export function dialNote(record: BrewRecord): string | null {
+export function dialNote(record: BrewRecord): GrindFigure | null {
     const after = record.dialAfter ?? 0;
     if (after <= 0) return null;
-    if (!dialWasMoved(record)) return `MACHINE DIAL ${after}`;
-    return `MACHINE DIAL ${after}, MOVED FROM ${record.dialBefore}`;
+    const recipe = record.grindSize ?? 0;
+    return {
+        dial: after,
+        recipe: recipe > 0 && recipe !== after ? recipe : null
+    };
 }

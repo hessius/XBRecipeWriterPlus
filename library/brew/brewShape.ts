@@ -14,6 +14,9 @@ export type Point = {t: number; v: number};
  */
 const DEFAULT_FLOW_ML_S = 3.2;
 
+/** Below this a pour-end delay is rounding, not a hold worth naming. */
+export const DELAY_FLOOR_SECONDS = 2;
+
 /** How long a pour takes. `flowRate` is stored times ten. */
 export function pourSeconds(pour: Pour): number {
     const volume = Math.max(pour.volume, 0);
@@ -46,6 +49,25 @@ export function bypassSeconds(volume: number): number {
 /** How long the recipe says the whole brew should take. */
 export function plannedSeconds(pours: Pour[]): number {
     return pours.reduce((total, pour) => total + pourSeconds(pour) + pauseSeconds(pour), 0);
+}
+
+/**
+ * How late the pour section ended, separated from drawdown.
+ *
+ * A recipe's plan ends when the last pour ends. It has no drawdown stage, so a
+ * delay measured to the end of the brew mostly reports a normal bed drawdown.
+ * Null means nobody can separate the two, or the separated delay is too small
+ * to name.
+ */
+export function pourEndDelaySeconds(
+    seconds: number,
+    drawdown: number | null,
+    planSeconds: number
+): number | null {
+    if (drawdown === null || planSeconds <= 0) return null;
+    const pourEnd = seconds - drawdown;
+    const delay = Math.round(pourEnd - planSeconds);
+    return delay >= DELAY_FLOOR_SECONDS ? delay : null;
 }
 
 /** Where one stage begins, stops pouring, and finally ends. Seconds. */

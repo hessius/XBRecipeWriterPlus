@@ -37,7 +37,7 @@ import {hasDrawableRateRun} from "@/library/brew/rateChartGeometry";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {storyCoffeeLine} from "@/library/brew/storyCard";
-import {plannedSeconds} from "@/library/brew/brewShape";
+import {plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
@@ -305,7 +305,12 @@ export default function BrewRecord({recipeLookup}: Props) {
         rateSeries:        record.hasStream && samples.length > 0
             ? flowSeries(samples, record.pours)
             : [],
-        dial:              dialNote(record)
+        delay:             pourEndDelaySeconds(
+            durationSeconds,
+            drawdown?.seconds ?? null,
+            plannedSecs
+        ),
+        grind:             dialNote(record)
     };
 
     return (
@@ -528,8 +533,9 @@ export default function BrewRecord({recipeLookup}: Props) {
                         stagesUnavailable={summary.stagesUnavailable}
                         figureExtraRows={[
                             summary.drawdown !== null,
-                            summary.dial !== null
-                        ].filter(Boolean).length}
+                            summary.delay !== null,
+                            summary.grind !== null
+                        ].some(Boolean) ? 1 : 0}
                         summary={(budget) => (
                             <BrewSummary
                                 {...summary}

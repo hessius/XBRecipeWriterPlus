@@ -830,7 +830,7 @@ describe("live flow and drawdown", () => {
 
         await renderWithProviders(<Brew />);
 
-        expect(screen.getByTestId("figures-drawdown")).toHaveTextContent("DRAWDOWN 0:12");
+        expect(screen.getByText("0:12")).toBeTruthy();
         expect(drawdownSeconds({
             ...record,
             startedAt: 0,
@@ -847,7 +847,7 @@ describe("live flow and drawdown", () => {
         await renderWithProviders(<Brew />);
 
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
-        expect(screen.getByTestId("figures-drawdown-slot")).toBeTruthy();
+        expect(screen.getByTestId("figures-detail-slot")).toBeTruthy();
     });
 
     it("does not reset the live drawdown on a noisy plateau", async () => {
@@ -870,7 +870,7 @@ describe("live flow and drawdown", () => {
 
         await renderWithProviders(<Brew />);
 
-        expect(screen.getByTestId("figures-drawdown")).toHaveTextContent("DRAWDOWN 0:12");
+        expect(screen.getByText("0:12")).toBeTruthy();
     });
 
     it("keeps the drawdown row reserved while bypass is running inside it", async () => {
@@ -898,8 +898,8 @@ describe("live flow and drawdown", () => {
 
         await renderWithProviders(<Brew />);
 
-        expect(screen.getByTestId("figures-drawdown")).toHaveTextContent("DRAWDOWN 0:04");
-        expect(screen.getByTestId("figures-drawdown-slot")).toBeTruthy();
+        expect(screen.getByText("0:04")).toBeTruthy();
+        expect(screen.getByTestId("figures-detail-slot")).toBeTruthy();
     });
 
     it("shows no drawdown clock during a planned pause between stages", async () => {
