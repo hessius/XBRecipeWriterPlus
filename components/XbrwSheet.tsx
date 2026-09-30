@@ -30,6 +30,10 @@ type Props = {
      * dialog on a wide screen as well -- and a `Sheet.ScrollView` in a dialog is
      * not a thing. The sheet that hit this opened at zero height and looked
      * exactly like a control that did nothing.
+     *
+     * The live content wrapper keeps `flex: 1` for the same reason: a sheet
+     * with a percent height must pass that height to previews whose own body
+     * uses flex. The prewarm copy stays clipped to zero height on purpose.
      */
     heightPercent?: number;
     /**
@@ -220,7 +224,7 @@ export default function XbrwSheet({
                     separates rows within the content. The heading is a label
                     for the sheet rather than its first row, and at `$3` it
                     crowded the first control enough to read as part of it. */}
-                <YStack gap="$5" aria-label={title} accessibilityViewIsModal={shown}>
+                <YStack flex={1} gap="$5" aria-label={title} accessibilityViewIsModal={shown}>
                     {heading}
                     {children}
                 </YStack>
