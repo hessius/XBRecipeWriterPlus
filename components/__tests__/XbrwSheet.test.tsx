@@ -21,6 +21,13 @@ describe("XbrwSheet", () => {
         expect(screen.getByText("the body")).toBeTruthy();
     });
 
+    it("passes the sheet height to flex content", async () => {
+        await open();
+
+        expect(screen.getByLabelText("ABOUT").props.style)
+            .toEqual(expect.objectContaining({flex: 1}));
+    });
+
     it("can be dismissed without the platform gesture", async () => {
         // The only other way out is a backdrop tap or a swipe, neither of which
         // a screen reader announces as a control.
