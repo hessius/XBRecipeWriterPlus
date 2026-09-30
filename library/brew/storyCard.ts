@@ -62,6 +62,8 @@ export type StorySummaryBudgetInput = {
     tagCount?: number;
     hasBypass?: boolean;
     figureExtraRows?: number;
+    hasSummaryNote?: boolean;
+    stagesUnavailable?: boolean;
     fontScale?: number;
 };
 
@@ -189,6 +191,7 @@ export function storySummaryBudget(
     {
         width, stages, hasRateChart, hasCoffee, hasRating, tags = [],
         tagCount = tags.length, hasBypass = false, figureExtraRows = 0,
+        hasSummaryNote = false, stagesUnavailable = false,
         fontScale = 1
     }: StorySummaryBudgetInput
 ): StorySummaryBudget {
@@ -219,10 +222,13 @@ export function storySummaryBudget(
         const around = surroundingHeight([rows.header, ...optionalRows]);
         const ladder = showStages
             ? STORY_LADDER_TOP_GAP
-                + ladderRows * stageLadderRungMinHeight(fontScale, BAR_FLOOR, GAP_FLOOR)
+                + (stagesUnavailable
+                    ? dotoRowHeight(11, fontScale)
+                    : ladderRows * stageLadderRungMinHeight(fontScale, BAR_FLOOR, GAP_FLOOR))
             : 0;
         const figureBlock = rows.figures
-            + Math.max(0, figureExtraRows) * (dotoRowHeight(10, fontScale) + STORY_GAP);
+            + Math.max(0, figureExtraRows) * (dotoRowHeight(10, fontScale) + STORY_GAP)
+            + (hasSummaryNote ? dotoRowHeight(11, fontScale) + 8 : 0);
         const summary = STORY_CAPTURE_PADDING * 2
             + rows.name
             + traceHeight

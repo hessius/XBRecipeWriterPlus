@@ -6,6 +6,7 @@ import {
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
+import {dotoRowHeight} from "@/library/dotoMetrics";
 
 const brew = (over: Partial<BrewRecord> = {}) =>
     ({id: "a", ...over}) as BrewRecord;
@@ -124,6 +125,43 @@ describe("the frame", () => {
                 }
             }
         }
+    });
+
+    it("budgets the deleted-recipe row when no stage snapshot is available", () => {
+        const withoutNote = storySummaryBudget({
+            width: 600,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            stagesUnavailable: false
+        });
+        const withUnavailableRow = storySummaryBudget({
+            width: 600,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            stagesUnavailable: true
+        });
+
+        expect(withUnavailableRow.requiredHeight - withoutNote.requiredHeight)
+            .toBe(dotoRowHeight(11, 1));
+    });
+
+    it("budgets the ended-on-machine note at narrow story widths", () => {
+        const budget = storySummaryBudget({
+            width: 270,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            stagesUnavailable: true,
+            hasSummaryNote: true,
+            fontScale: 1.2
+        });
+
+        expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
     });
 });
 

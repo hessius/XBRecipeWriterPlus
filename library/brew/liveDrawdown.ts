@@ -1,5 +1,5 @@
-import type {BrewSample} from "./BrewRecord";
-import {MIN_STALL_SECONDS, NOISE_FLOOR_ML, TARGET_TOLERANCE_ML, stageWaterFrom} from "./stalls";
+import {drawdownFrom, type BrewSample} from "./BrewRecord";
+import {MIN_STALL_SECONDS, TARGET_TOLERANCE_ML, stageWaterFrom} from "./stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 
 /**
@@ -54,46 +54,11 @@ export type LiveDrawdownOptions = {
 /**
  * Where the live final-stage drawdown began, in milliseconds, or 0.
  *
- * Unlike the finished record's `drawdownFrom`, this is asked on every render
- * against a growing stream. A rise has to clear the scale's noise floor before
- * it can move the boundary, but the retake threshold is measured from the
- * highest level actually seen. That leaves the full noise floor above a legal
- * 3 ml/s pour whose last frame did not itself clear the ratchet.
+ * The same noise-aware boundary the recorder persists, asked on every render
+ * against a growing stream.
  */
 export function liveDrawdownFrom(samples: BrewSample[], stages: number): number {
-    let at = 0;
-    let boundaryLevel = 0;
-    let seenHighest = 0;
-    let plateauBase = 0;
-    let plateauSeen = false;
-    for (const sample of samples) {
-        if (sample.pour !== stages) continue;
-
-        if (sample.water <= seenHighest) {
-            plateauSeen = true;
-            plateauBase = seenHighest;
-            continue;
-        }
-
-        if (plateauSeen) {
-            if (sample.water - plateauBase > NOISE_FLOOR_ML) {
-                seenHighest = sample.water;
-                boundaryLevel = sample.water;
-                at = sample.at;
-                plateauSeen = false;
-            } else {
-                seenHighest = sample.water;
-            }
-            continue;
-        }
-
-        seenHighest = sample.water;
-        if (sample.water - boundaryLevel > NOISE_FLOOR_ML) {
-            boundaryLevel = sample.water;
-            at = sample.at;
-        }
-    }
-    return at;
+    return drawdownFrom(samples, stages, true);
 }
 
 /**

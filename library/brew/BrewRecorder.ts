@@ -417,7 +417,11 @@ export default class BrewRecorder {
         const drawdownAt = outcome === "cancelled" || outcome === "lostContact"
                            || outcome === "failed"
             ? 0
-            : drawdownFrom(this.collected, stages);
+            : drawdownFrom(
+                this.collected,
+                stages,
+                this.collected.some((sample) => sample.pour === stages)
+            );
         const cupAtDrawdown = cupAtDrawdownFrom(this.collected, stages, drawdownAt);
         const record: BrewRecord = {
             id: (this.options.newId ?? newBrewId)(),

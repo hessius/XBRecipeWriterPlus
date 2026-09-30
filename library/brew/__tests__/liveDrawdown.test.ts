@@ -1,4 +1,5 @@
 import type {BrewSample} from "@/library/brew/BrewRecord";
+import {drawdownFrom} from "@/library/brew/BrewRecord";
 import {
     DRAWDOWN_OPEN_MARGIN_MS,
     liveDrawdown,
@@ -102,6 +103,7 @@ describe("liveDrawdownFrom", () => {
         const stream = [...poured, ...noisyPlateau(lastPour, 12)];
 
         expect(liveDrawdownFrom(stream, 1)).toBe(lastPour.at);
+        expect(drawdownFrom(stream, 1)).toBe(liveDrawdownFrom(stream, 1));
     });
 
     it("keeps the noise headroom when a legal pour stops off ratchet cadence", () => {
@@ -110,6 +112,7 @@ describe("liveDrawdownFrom", () => {
         const stream = [...poured, ...noisyPlateau(lastPour, 12)];
 
         expect(liveDrawdownFrom(stream, 1)).toBe(5800);
+        expect(drawdownFrom(stream, 1)).toBe(liveDrawdownFrom(stream, 1));
     });
 
     it("tracks only the final brew stage", () => {

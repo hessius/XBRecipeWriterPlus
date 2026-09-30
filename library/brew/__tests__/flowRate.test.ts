@@ -184,6 +184,8 @@ describe("flowAt", () => {
 
         // Read at the height of the bypass. The bed's rate is what it was.
         expect(flowAt(samples, 2, 10_000)!.cup).toBeCloseTo(2, 6);
+        // The first bypass frame is enough to make the prior fit stale.
+        expect(flowAt(samples, 2, 10_100)).toBeNull();
         // And once the window holds nothing but bypass, there is nothing to say.
         expect(flowAt(samples, 2, 12_000)).toBeNull();
     });
@@ -196,6 +198,15 @@ describe("flowNow", () => {
 
     it("is null on a stream that has not started", () => {
         expect(flowNow([], 1)).toBeNull();
+    });
+
+    it("stops reporting the last brew rate as soon as bypass starts", () => {
+        const samples = [
+            ...ramp(10, 2),
+            {at: 10_100, water: 22, cup: 22, pour: 2}
+        ];
+
+        expect(flowNow(samples, 1)).toBeNull();
     });
 });
 

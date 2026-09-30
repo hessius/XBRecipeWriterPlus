@@ -40,6 +40,8 @@ type Props = {
     tags: string[];
     hasBypass?: boolean;
     figureExtraRows?: number;
+    hasSummaryNote?: boolean;
+    stagesUnavailable?: boolean;
 };
 
 /**
@@ -60,7 +62,8 @@ type Props = {
  */
 export default function BrewStoryCard({
     width, summary, stageCount = 2, when, accent, rating, coffee, tags,
-    hasRateChart = true, hasBypass = false, figureExtraRows = 0
+    hasRateChart = true, hasBypass = false, figureExtraRows = 0,
+    hasSummaryNote = false, stagesUnavailable = false
 }: Props) {
     const frame = storyFrame(width);
     const budget = storySummaryBudget({
@@ -72,7 +75,9 @@ export default function BrewStoryCard({
         tags,
         fontScale: PixelRatio.getFontScale(),
         hasBypass,
-        figureExtraRows
+        figureExtraRows,
+        hasSummaryNote,
+        stagesUnavailable
     });
     const shown = tags.slice(0, Math.min(MAX_SHOWN_TAGS, budget.shownTagCount));
     const extra = tags.length - shown.length;

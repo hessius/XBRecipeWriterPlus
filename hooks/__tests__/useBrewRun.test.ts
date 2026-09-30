@@ -143,6 +143,22 @@ describe("useBrewRun", () => {
         expect(result.current.samples).toHaveLength(2);
     });
 
+    it("keeps publishing live samples and elapsed time during bypass", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 2, pours: 2});
+        await h.water(200);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.setPhase({name: "bypass"});
+        await h.water(210);
+        await act(async () => { jest.advanceTimersByTime(250); });
+
+        expect(result.current.phase.name).toBe("bypass");
+        expect(result.current.samples).toHaveLength(2);
+        expect(result.current.samples[1].pour).toBe(3);
+        expect(result.current.elapsed).toBeGreaterThan(result.current.samples[0].at / 1000);
+    });
+
     it("reports the live stage, zero-based", async () => {
         const h = harness();
         const {result} = await renderHook(() => useBrewRun(recipe(), h.store));

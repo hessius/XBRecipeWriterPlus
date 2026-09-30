@@ -33,6 +33,7 @@ import {brewFigures} from "@/library/brew/brewFigures";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
 import {dialNote} from "@/library/brew/dialAfterBrew";
 import {drawdownFigures, flowSeries} from "@/library/brew/flowRate";
+import {hasDrawableRateRun} from "@/library/brew/rateChartGeometry";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {storyCoffeeLine} from "@/library/brew/storyCard";
@@ -521,8 +522,10 @@ export default function BrewRecord({recipeLookup}: Props) {
                         coffee={storyCoffeeLine(record)}
                         tags={record.tags ?? []}
                         stageCount={stages.length}
-                        hasRateChart={record.hasStream && samples.length > 0}
+                        hasRateChart={hasDrawableRateRun(summary.rateSeries)}
                         hasBypass={summary.bypass !== undefined}
+                        hasSummaryNote={summary.note !== undefined}
+                        stagesUnavailable={summary.stagesUnavailable}
                         figureExtraRows={[
                             summary.drawdown !== null,
                             summary.dial !== null

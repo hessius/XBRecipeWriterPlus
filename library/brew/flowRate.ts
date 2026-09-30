@@ -203,6 +203,17 @@ function slope(window: BrewSample[], of: "cup" | "water"): number | null {
 export function flowAt(
     samples: BrewSample[], stages: number, at: number
 ): FlowPoint | null {
+    let latest: BrewSample | undefined;
+    for (const sample of samples) {
+        if (
+            sample.at <= at &&
+            (latest === undefined || sample.at > latest.at)
+        ) {
+            latest = sample;
+        }
+    }
+    if (latest === undefined || latest.pour < 1 || latest.pour > stages) return null;
+
     const from = at - FLOW_WINDOW_MS;
     const window = brewOnly(samples, stages)
         .filter((s) => s.at >= from && s.at <= at);
