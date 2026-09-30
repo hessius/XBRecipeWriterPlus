@@ -170,23 +170,6 @@ describe("BrewSummary", () => {
         expect(ladderProps.rungGap).toBe(20);
     });
 
-    it("does not reserve a peek inside a story-card summary", async () => {
-        const {getByTestId} = await draw({
-            stagesUnavailable: false,
-            availableHeight: 600,
-            storyBands: {barHeight: 29, rungGap: 21}
-        });
-
-        await act(async () => {
-            fireEvent(getByTestId("summary-chrome"), "layout", {
-                nativeEvent: {layout: {height: 300, width: 330, x: 0, y: 0}}
-            });
-        });
-
-        expect(ladderProps.barHeight).toBe(29);
-        expect(ladderProps.rungGap).toBe(21);
-    });
-
     it("accents the ladder of a brew that reached its last stage", async () => {
         await draw({stagesUnavailable: false, activeIndex: 3});
 

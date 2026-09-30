@@ -127,10 +127,9 @@ export function livePoints(samples: BrewSample[], of: "water" | "cup"): Point[] 
  * The pieces a trace's horizontal axis is built from.
  *
  * `BrewTrace` needs the parts as well as the total: the bypass box is drawn
- * at `bypassFrom` and is `bypassWide` seconds across, and the overrun label
- * reads off `ranTo`. Returning them from here rather than letting the
- * component recompute them keeps the box and the axis it is measured against
- * from drifting apart if either is ever retuned.
+ * at `bypassFrom` and is `bypassWide` seconds across. Returning them from here
+ * rather than letting the component recompute them keeps the box and the axis
+ * it is measured against from drifting apart if either is ever retuned.
  */
 export type TraceTimeParts = {
     ranTo: number;

@@ -4,10 +4,16 @@ import {resolvedOrigin, resolvedProcess} from "./beanTags";
 import {
     RATE_BOTTOM_GAP,
     RATE_HEIGHT,
-    RATE_TOP_GAP,
-    rateChartLabelRowHeight
+    RATE_TOP_GAP
 } from "./rateChartGeometry";
 import {stageLadderRungMinHeight} from "./stageLadderGeometry";
+import {
+    BREW_FIGURE_DETAIL_VALUE_SIZE,
+    BREW_FIGURE_INTERNAL_GAP,
+    BREW_FIGURE_LABEL_SIZE,
+    BREW_FIGURE_ROW_GAP,
+    BREW_FIGURE_VALUE_SIZE
+} from "@/library/brew/figureGeometry";
 import {dotoRowHeight, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
 
 /**
@@ -112,12 +118,6 @@ const STORY_TAG_PAD_X = 8;
 const STORY_TAG_PAD_Y = 4;
 const STORY_TAG_GAP = 8;
 const STORY_TAG_MORE_CHARS = 3;
-const STORY_FIGURE_LABEL_SIZE = 10;
-const STORY_FIGURE_VALUE_SIZE = 28;
-const STORY_FIGURE_DETAIL_VALUE_SIZE = 20;
-const STORY_FIGURE_GAP = 4;
-const STORY_FIGURE_ROW_GAP = 6;
-
 type StoryRows = {
     header: number;
     name: number;
@@ -125,12 +125,11 @@ type StoryRows = {
     coffee: number;
     rating: number;
     tag: number;
-    rateLabel: number;
 };
 
 function figureRowHeight(valueSize: number, fontScale: number): number {
-    return dotoRowHeight(STORY_FIGURE_LABEL_SIZE, fontScale)
-        + STORY_FIGURE_GAP
+    return dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+        + BREW_FIGURE_INTERNAL_GAP
         + dotoRowHeight(valueSize, fontScale);
 }
 
@@ -141,11 +140,10 @@ function storyRows(fontScale: number): StoryRows {
             dotoRowHeight(STORY_HEADER_DATE, fontScale)
         ),
         name: dotoRowHeight(STORY_NAME_SIZE, fontScale) + STORY_NAME_MARGIN,
-        figures: figureRowHeight(STORY_FIGURE_VALUE_SIZE, fontScale),
+        figures: figureRowHeight(BREW_FIGURE_VALUE_SIZE, fontScale),
         coffee: dotoRowHeight(STORY_COFFEE_SIZE, fontScale),
         rating: Math.ceil(Math.max(STORY_RATING_SIZE, dotoRowHeight(11, fontScale))),
-        tag: dotoRowHeight(STORY_TAG_SIZE, fontScale) + STORY_TAG_PAD_Y * 2,
-        rateLabel: rateChartLabelRowHeight(fontScale)
+        tag: dotoRowHeight(STORY_TAG_SIZE, fontScale) + STORY_TAG_PAD_Y * 2
     };
 }
 
@@ -241,8 +239,8 @@ export function storySummaryBudget(
             : 0;
         const figureBlock = rows.figures
             + Math.max(0, figureExtraRows) * (
-                STORY_FIGURE_ROW_GAP
-                + figureRowHeight(STORY_FIGURE_DETAIL_VALUE_SIZE, fontScale)
+                BREW_FIGURE_ROW_GAP
+                + figureRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale)
             )
             + (hasSummaryNote ? dotoRowHeight(11, fontScale) + 8 : 0);
         const summary = STORY_CAPTURE_PADDING * 2

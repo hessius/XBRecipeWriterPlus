@@ -9,14 +9,17 @@ import FlowSparkline, {
 import {palette} from "@/constants/colors";
 import {formatBrewClock} from "@/library/brew/brewFormat";
 import type {GrindFigure} from "@/library/brew/dialAfterBrew";
+import {
+    BREW_FIGURE_DETAIL_VALUE_SIZE,
+    BREW_FIGURE_INTERNAL_GAP,
+    BREW_FIGURE_LABEL_SIZE,
+    BREW_FIGURE_ROW_GAP,
+    BREW_FIGURE_VALUE_SIZE
+} from "@/library/brew/figureGeometry";
 import {formatFlowRate} from "@/library/brew/flowRate";
 
 const DOTO_LINE_HEIGHT = 1.35;
 const FLOW_ROW_VERTICAL_ROOM = 4;
-const DETAIL_ROW_VALUE_SIZE = 20;
-const FIGURE_VALUE_SIZE = 28;
-const FIGURE_LABEL_SIZE = 10;
-const FIGURE_INTERNAL_GAP = 4;
 
 export function flowRowMinHeight(): number {
     const cupRateHeight = Math.ceil(drawnFontSize(14) * DOTO_LINE_HEIGHT);
@@ -24,9 +27,9 @@ export function flowRowMinHeight(): number {
 }
 
 export function detailRowMinHeight(): number {
-    return Math.ceil(drawnFontSize(FIGURE_LABEL_SIZE) * DOTO_LINE_HEIGHT)
-        + FIGURE_INTERNAL_GAP
-        + Math.ceil(drawnFontSize(DETAIL_ROW_VALUE_SIZE) * DOTO_LINE_HEIGHT);
+    return Math.ceil(drawnFontSize(BREW_FIGURE_LABEL_SIZE) * DOTO_LINE_HEIGHT)
+        + BREW_FIGURE_INTERNAL_GAP
+        + Math.ceil(drawnFontSize(BREW_FIGURE_DETAIL_VALUE_SIZE) * DOTO_LINE_HEIGHT);
 }
 
 type Props = {
@@ -127,11 +130,11 @@ function Figure({label, value, color, badge, fontSize, testID, accessibilityLabe
     accessibilityLabel?: string;
 }) {
     return (
-        <YStack flex={1} gap="$1" testID={testID}
+        <YStack flex={1} gap={BREW_FIGURE_INTERNAL_GAP} testID={testID}
                 accessible={accessibilityLabel !== undefined}
                 accessibilityLabel={accessibilityLabel}>
-            <DotMatrixText fontSize={FIGURE_LABEL_SIZE} weight="bold" letterSpacing={1.6}
-                           color={palette.dim}>
+            <DotMatrixText fontSize={BREW_FIGURE_LABEL_SIZE} weight="bold"
+                           letterSpacing={1.6} color={palette.dim}>
                 {label}
             </DotMatrixText>
             <XStack alignItems="center" gap="$1.5">
@@ -196,14 +199,14 @@ export default function BrewFigures(
             }`;
 
     return (
-        <YStack gap="$1.5">
+        <YStack testID="brew-figures" gap={BREW_FIGURE_ROW_GAP}>
             <XStack gap="$3">
                 <Figure label="WATER" value={String(Math.round(water))} color={accent}
-                        badge={badge} fontSize={FIGURE_VALUE_SIZE} />
+                        badge={badge} fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-water" />
                 <Figure label="CUP" value={String(Math.round(cup))} color={palette.text}
-                        fontSize={FIGURE_VALUE_SIZE} />
+                        fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-cup" />
                 <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text}
-                        fontSize={FIGURE_VALUE_SIZE} />
+                        fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-time" />
             </XStack>
             {(hasFlow || reserveFlow) && (
                 <YStack testID="figures-flow-slot"
@@ -258,7 +261,7 @@ export default function BrewFigures(
                                     label="GRIND"
                                     value={grind.kind === "off" ? "OFF" : String(grind.dial)}
                                     color={palette.text}
-                                    fontSize={DETAIL_ROW_VALUE_SIZE}
+                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
                                     badge={grind.kind === "off" || grind.recipe === null
                                         ? undefined
                                         : (
@@ -277,7 +280,7 @@ export default function BrewFigures(
                                     label="DELAY"
                                     value={`+${delay}`}
                                     color={palette.warn}
-                                    fontSize={DETAIL_ROW_VALUE_SIZE}
+                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
                                     accessibilityLabel={delayAccessibility}
                                 />
                             )}
@@ -289,7 +292,7 @@ export default function BrewFigures(
                                     label="DRAWDOWN"
                                     value={drawdownText}
                                     color={palette.text}
-                                    fontSize={DETAIL_ROW_VALUE_SIZE}
+                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
                                     badge={drawdownRateText === null
                                         ? undefined
                                         : (

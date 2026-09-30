@@ -121,6 +121,21 @@ function noisySquareWave(): BrewSample[] {
     return out;
 }
 
+function quantisedSteadyFlow(): BrewSample[] {
+    const out: BrewSample[] = [];
+    for (let i = 0; i <= 600; i += 1) {
+        const at = i * 100;
+        const value = Math.round((2 * (at / 1000)) / 0.5) * 0.5;
+        out.push({
+            at,
+            water: value,
+            cup: value,
+            pour: 1
+        });
+    }
+    return out;
+}
+
 function populationSpread(values: number[]): number {
     const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
     return Math.sqrt(
@@ -387,6 +402,35 @@ describe("flowSeries", () => {
 });
 
 describe("retrospectiveFlowSeries", () => {
+    it("smooths run endpoints instead of letting raw quantisation set the axis", () => {
+        const smoothed = retrospectiveFlowSeries(quantisedSteadyFlow(), 1);
+        const first = smoothed[0];
+        const last = smoothed[smoothed.length - 1];
+
+        expect(smoothed).toHaveLength(600);
+        expect(first.cup).toBeGreaterThan(1.8);
+        expect(first.cup).toBeLessThan(2.2);
+        expect(last.cup).toBeGreaterThan(1.8);
+        expect(last.cup).toBeLessThan(2.2);
+        expect(maxRateOf(smoothed)).toBeLessThan(2.25);
+    });
+
+    it("keeps short retrospective runs honest without raw fallback points", () => {
+        const tooShort: BrewSample[] = [
+            {at: 0, water: 0, cup: 0, pour: 1},
+            {at: 1000, water: 1, cup: 1, pour: 1},
+            {at: 2000, water: 2, cup: 2, pour: 1}
+        ];
+        const exactlyThree = [...tooShort, {at: 3000, water: 3, cup: 3, pour: 1}];
+
+        expect(retrospectiveFlowSeries(tooShort, 1)).toEqual([]);
+        expect(retrospectiveFlowSeries(exactlyThree, 1)).toEqual([
+            {at: 1000, cup: 1, water: 1},
+            {at: 2000, cup: 1, water: 1},
+            {at: 3000, cup: 1, water: 1}
+        ]);
+    });
+
     it("flattens noisy square-wave plateaus while keeping the real edges sharp", () => {
         const samples = noisySquareWave();
         const smoothed = retrospectiveFlowSeries(samples, 1);

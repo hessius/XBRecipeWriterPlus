@@ -6,6 +6,12 @@ import {
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
 import {RATE_BOTTOM_GAP, RATE_HEIGHT, RATE_TOP_GAP} from "../rateChartGeometry";
+import {
+    BREW_FIGURE_DETAIL_VALUE_SIZE,
+    BREW_FIGURE_INTERNAL_GAP,
+    BREW_FIGURE_LABEL_SIZE,
+    BREW_FIGURE_ROW_GAP
+} from "../figureGeometry";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
 import {dotoRowHeight} from "@/library/dotoMetrics";
 
@@ -206,7 +212,10 @@ describe("the frame", () => {
         });
 
         expect(withSecondRow.requiredHeight - withoutSecondRow.requiredHeight)
-            .toBe(6 + dotoRowHeight(10, 1) + 4 + dotoRowHeight(20, 1));
+            .toBe(BREW_FIGURE_ROW_GAP
+                + dotoRowHeight(BREW_FIGURE_LABEL_SIZE, 1)
+                + BREW_FIGURE_INTERNAL_GAP
+                + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, 1));
     });
 });
 

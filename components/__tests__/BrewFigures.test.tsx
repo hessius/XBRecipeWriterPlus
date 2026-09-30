@@ -5,6 +5,10 @@ import {PixelRatio} from "react-native";
 import BrewFigures, {detailRowMinHeight, flowRowMinHeight} from "@/components/BrewFigures";
 import {FLOW_SPARKLINE_HEIGHT} from "@/components/FlowSparkline";
 import {accents} from "@/constants/colors";
+import {
+    BREW_FIGURE_INTERNAL_GAP,
+    BREW_FIGURE_ROW_GAP
+} from "@/library/brew/figureGeometry";
 import {renderWithProviders} from "@/test-utils/render";
 
 jest.mock("@/components/FlowSparkline", () => {
@@ -41,6 +45,17 @@ describe("BrewFigures", () => {
             <BrewFigures water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
         );
         ["WATER", "CUP", "TIME"].forEach((label) => expect(getByText(label)).toBeTruthy());
+    });
+
+    it("renders the figure gaps the story budget uses", async () => {
+        await renderWithProviders(
+            <BrewFigures water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
+        );
+
+        expect(screen.getByTestId("brew-figures")).toHaveStyle({gap: BREW_FIGURE_ROW_GAP});
+        expect(screen.getByTestId("figures-water")).toHaveStyle({
+            gap: BREW_FIGURE_INTERNAL_GAP
+        });
     });
 
     it("rounds to whole units", async () => {

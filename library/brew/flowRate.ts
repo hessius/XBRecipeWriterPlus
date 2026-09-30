@@ -412,21 +412,44 @@ function savitzkyGolayAt(
     return clampToWindow(coefficients[0], window, of);
 }
 
+function retrospectiveWindowFor(
+    run: FlowPoint[], pointAt: number, windowMs: number
+): FlowPoint[] {
+    const first = run[0];
+    const last = run[run.length - 1];
+    if (first === undefined || last === undefined) return [];
+    if (last.at - first.at <= windowMs) return run;
+
+    const halfWindow = windowMs / 2;
+    let from = pointAt - halfWindow;
+    let to = pointAt + halfWindow;
+
+    if (from < first.at) {
+        from = first.at;
+        to = first.at + windowMs;
+    } else if (to > last.at) {
+        to = last.at;
+        from = last.at - windowMs;
+    }
+
+    return run.filter((candidate) => candidate.at >= from && candidate.at <= to);
+}
+
 function smoothRetrospectiveRun(run: FlowPoint[]): FlowPoint[] {
     const first = run[0];
     const last = run[run.length - 1];
     if (first === undefined || last === undefined) return [];
 
-    const halfWindow = retrospectiveWindowMs(run) / 2;
-    return run.map((point) => {
-        const radius = Math.min(halfWindow, point.at - first.at, last.at - point.at);
-        const window = run.filter((candidate) => Math.abs(candidate.at - point.at) <= radius);
+    const windowMs = retrospectiveWindowMs(run);
+    return run.flatMap((point) => {
+        const window = retrospectiveWindowFor(run, point.at, windowMs);
         const cup = savitzkyGolayAt(window, point.at, "cup");
         const water = savitzkyGolayAt(window, point.at, "water");
+        if (cup === null || water === null) return [];
         return {
             at:    point.at,
-            cup:   cup ?? point.cup,
-            water: water ?? point.water
+            cup,
+            water
         };
     });
 }
