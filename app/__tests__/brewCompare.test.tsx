@@ -74,7 +74,7 @@ function shortRateSamples(rate: number) {
 }
 
 function isolatedRateSamples(rate: number) {
-    return [0, 1_000, 1_200].map((at) => {
+    return [0, 1_000, 60_000, 61_000].map((at) => {
         const seconds = at / 1000;
         return {
             at,

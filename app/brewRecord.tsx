@@ -537,6 +537,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 testID="story-capture"
                                 traceHeight={budget.traceHeight}
                                 rateHeight={budget.rateHeight}
+                                rateBottomGap={budget.rateBottomGap}
                                 capturePadding={budget.capturePadding}
                                 ladderTopGap={budget.ladderTopGap}
                                 storyBands={{

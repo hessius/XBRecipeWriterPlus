@@ -199,6 +199,22 @@ describe("BrewSummary", () => {
         expect(rateX).toBeCloseTo(traceX, 1);
     });
 
+    it("gives a drawable rate chart the shared bottom gap", async () => {
+        await draw({
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        const style = StyleSheet.flatten(
+            screen.getByTestId("rate-chart-slot").props.style as StyleProp<ViewStyle>
+        );
+        // The chart should breathe like the trace above it, not collapse onto
+        // the figure rows below. Pinned as a literal so a zero gap fails here.
+        expect(style?.marginBottom).toBe(12);
+    });
+
     it("keeps the rate chart hidden for a swept record even if a caller hands over rates", async () => {
         await draw({
             hasStream: false,
@@ -215,6 +231,7 @@ describe("BrewSummary", () => {
         await draw({rateSeries: [{at: 60_000, cup: 1.7, water: 3.2}]});
 
         expect(screen.queryByTestId("rate-chart")).toBeNull();
+        expect(screen.queryByTestId("rate-chart-slot")).toBeNull();
     });
 });
 

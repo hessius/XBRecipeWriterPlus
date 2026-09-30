@@ -1,7 +1,7 @@
 import type {BrewRecord} from "./BrewRecord";
 import {BAR_CAP, BAR_FLOOR, GAP_CAP, GAP_FLOOR} from "./bands";
 import {resolvedOrigin, resolvedProcess} from "./beanTags";
-import {RATE_HEIGHT, rateChartLabelRowHeight} from "./rateChartGeometry";
+import {RATE_BOTTOM_GAP, RATE_HEIGHT, rateChartLabelRowHeight} from "./rateChartGeometry";
 import {stageLadderRungMinHeight} from "./stageLadderGeometry";
 import {dotoRowHeight, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
 
@@ -73,6 +73,7 @@ export type StorySummaryBudget = {
     requiredHeight: number;
     traceHeight: number;
     rateHeight: number;
+    rateBottomGap: number;
     capturePadding: number;
     ladderTopGap: number;
     barHeight: number;
@@ -232,7 +233,7 @@ export function storySummaryBudget(
         const summary = STORY_CAPTURE_PADDING * 2
             + rows.name
             + traceHeight
-            + (showRate ? RATE_HEIGHT : 0)
+            + (showRate ? RATE_HEIGHT + RATE_BOTTOM_GAP : 0)
             + figureBlock
             + ladder;
         return {
@@ -295,6 +296,7 @@ export function storySummaryBudget(
         requiredHeight,
         traceHeight: chosen.trace,
         rateHeight: chosen.rate ? RATE_HEIGHT : 0,
+        rateBottomGap: chosen.rate ? RATE_BOTTOM_GAP : 0,
         capturePadding: STORY_CAPTURE_PADDING,
         ladderTopGap: chosen.stages ? STORY_LADDER_TOP_GAP : 0,
         barHeight: bands.barHeight,

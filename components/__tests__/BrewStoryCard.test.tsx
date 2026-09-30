@@ -44,7 +44,8 @@ describe("the story card", () => {
             showRateChart: true,
             showStages: true,
             traceHeight: expect.any(Number),
-            rateHeight: expect.any(Number)
+            rateHeight: expect.any(Number),
+            rateBottomGap: expect.any(Number)
         }));
         const calls = renderSummary.mock.calls as unknown as [[StorySummaryBudget]];
         const budget = calls[0][0];

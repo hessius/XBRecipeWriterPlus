@@ -27,8 +27,8 @@ const series: FlowPoint[] = Array.from({length: 40}, (_, i) => ({
 function isolatedSeries(): FlowPoint[] {
     return [
         {at: 1_000, cup: 1, water: 2},
-        {at: 1_200, cup: 1.2, water: 2.2},
-        {at: 1_400, cup: 1.4, water: 2.4}
+        {at: 1_500, cup: 1.2, water: 2.2},
+        {at: 2_000, cup: 1.4, water: 2.4}
     ];
 }
 
@@ -103,16 +103,17 @@ describe("BrewRateChart", () => {
         expect(queryByTestId("rate-chart")).toBeNull();
     });
 
-    it("draws no line when every point is isolated by a missing sample", async () => {
-        const {queryByTestId} = await renderWithProviders(
+    it("draws a steady sparse hardware cadence as a continuous line", async () => {
+        const {getByTestId} = await renderWithProviders(
             <BrewRateChart series={isolatedSeries()} accent={ACCENT} width={WIDTH} maxT={2} />
         );
 
-        expect(queryByTestId("rate-chart-cup")).toBeNull();
-        expect(queryByTestId("rate-chart-water")).toBeNull();
+        const d = getByTestId("rate-chart-cup").props.d as string;
+        expect(d.match(/M/g)).toHaveLength(1);
+        expect(d.match(/L/g)).toHaveLength(2);
     });
 
-    it("breaks the line for one missing rate point", async () => {
+    it("keeps the old 150 ms split for a dense stream with one missing rate point", async () => {
         const gapped: FlowPoint[] = [
             {at: 1_000, cup: 1, water: 2},
             {at: 1_100, cup: 1.2, water: 2.2},
@@ -126,6 +127,22 @@ describe("BrewRateChart", () => {
 
         const d = getByTestId("rate-chart-cup").props.d as string;
         expect(d.match(/M/g)).toHaveLength(2);
+    });
+
+    it("draws nothing for two points an entire minute apart", async () => {
+        const {queryByTestId} = await renderWithProviders(
+            <BrewRateChart
+                series={[
+                    {at: 1_000, cup: 1, water: 2},
+                    {at: 61_000, cup: 1.2, water: 2.2}
+                ]}
+                accent={ACCENT}
+                width={WIDTH}
+                maxT={62}
+            />
+        );
+
+        expect(queryByTestId("rate-chart")).toBeNull();
     });
 
     it("breaks a real flowSeries line across a bypass-shaped omission", async () => {

@@ -5,6 +5,7 @@ import {
 } from "../storyCard";
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
+import {RATE_HEIGHT} from "../rateChartGeometry";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
 import {dotoRowHeight} from "@/library/dotoMetrics";
 
@@ -162,6 +163,28 @@ describe("the frame", () => {
         });
 
         expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+    });
+
+    it("budgets the rate chart's drawn height and bottom gap separately", () => {
+        const withoutRate = storySummaryBudget({
+            width: 600,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false
+        });
+        const withRate = storySummaryBudget({
+            width: 600,
+            stages: 0,
+            hasRateChart: true,
+            hasCoffee: false,
+            hasRating: false
+        });
+
+        expect(withRate.rateHeight).toBe(RATE_HEIGHT);
+        expect(withRate.rateBottomGap).toBe(12);
+        expect(withRate.requiredHeight - withoutRate.requiredHeight)
+            .toBe(RATE_HEIGHT + 12);
     });
 });
 

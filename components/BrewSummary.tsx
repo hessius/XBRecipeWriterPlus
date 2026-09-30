@@ -3,7 +3,7 @@ import {StyleSheet, View} from "react-native";
 import {Text, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
-import BrewRateChart, {RATE_HEIGHT} from "@/components/BrewRateChart";
+import BrewRateChart from "@/components/BrewRateChart";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
 import MarqueeText from "@/components/MarqueeText";
@@ -15,6 +15,11 @@ import {traceAxisFor} from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {BypassView} from "@/library/brew/bypassState";
 import type {FlowPoint} from "@/library/brew/flowRate";
+import {
+    hasDrawableRateRun,
+    RATE_BOTTOM_GAP,
+    RATE_HEIGHT
+} from "@/library/brew/rateChartGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -103,6 +108,7 @@ type Props = {
     availableHeight?: number;
     traceHeight?: number;
     rateHeight?: number;
+    rateBottomGap?: number;
     capturePadding?: number;
     ladderTopGap?: number;
     storyBands?: {barHeight: number; rungGap: number};
@@ -132,7 +138,7 @@ export default function BrewSummary({
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
     drawdown = null, rateSeries, drawdownRate = null, dial = null, availableHeight = 0,
-    traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT,
+    traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT, rateBottomGap = RATE_BOTTOM_GAP,
     capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
     storyBands, showRateChart = true, showStages = true,
     testID = "brew-capture"
@@ -140,6 +146,8 @@ export default function BrewSummary({
     // The drawable width inside the capture's own padding.
     const traceWidth = width - capturePadding * 2;
     const traceAxis = traceAxisFor(NO_PLAN, samples, plannedSeconds, bypass);
+    const rates = rateSeries ?? [];
+    const drawsRateChart = hasStream && showRateChart && hasDrawableRateRun(rates);
 
     // Measured from an onLayout event, never an effect. Everything above the
     // ladder is one subtree, so its height is one reading; the ladder's own
@@ -199,14 +207,16 @@ export default function BrewSummary({
                 </YStack>
             )}
 
-            {hasStream && showRateChart && (
+            {drawsRateChart && (
+                <View testID="rate-chart-slot" style={{marginBottom: rateBottomGap}}>
                 <BrewRateChart
-                    series={rateSeries ?? []}
+                    series={rates}
                     accent={accent}
                     width={traceWidth}
                     maxT={traceAxis.maxT}
                     height={rateHeight}
                 />
+                </View>
             )}
 
             {note !== undefined && (
