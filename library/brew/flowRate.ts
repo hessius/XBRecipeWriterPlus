@@ -530,14 +530,22 @@ function retrospectiveFitAt(
         leftSupportMs < halfWindowMs ||
         rightSupportMs < halfWindowMs
     ) {
-        // Less support gets less flexible rate models: a quadratic cumulative
-        // fit at endpoints, capped by the verified endpoint rate fit.
+        // Endpoint windows have less support, so they get stricter fits. With
+        // fewer than the minimum samples, the cumulative path falls back to a
+        // linear slope because a quadratic fit would be invented. Otherwise it
+        // uses the quadratic cumulative derivative, blended back toward the
+        // linear slope by support squared so short endpoints cannot flatten
+        // into a shelf. The result is capped by the verified endpoint rate fit
+        // so cumulative curvature cannot claim flow before the first drop or
+        // after the run has ended. Finally, negative endpoint noise clamps to
+        // zero here, where the rate becomes a claim.
         const cumulative = window.length < RETROSPECTIVE_FLOW_MIN_SAMPLES
             ? cumulativeSlopeAt(window, pointAt, of)
             : cumulativeQuadraticDerivativeAt(window, pointAt, windowMs, of);
         if (cumulative === null) return null;
         const rateFit = savitzkyGolayAt(window, pointAt, of);
-        return rateFit === null ? cumulative : Math.min(cumulative, rateFit);
+        const fitted = rateFit === null ? cumulative : Math.min(cumulative, rateFit);
+        return Math.max(0, fitted);
     }
 
     return savitzkyGolayAt(window, pointAt, of);

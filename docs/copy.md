@@ -619,7 +619,7 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
-| `brew.figures.water` | `components/BrewFigures.tsx:201` | Doto figure label. | `WATER` |
+| `brew.figures.water` | `components/BrewFigures.tsx:204` | Doto figure label. | `WATER` |
 | `brew.figures.cup` | `components/BrewFigures.tsx:206` | Doto figure label. | `CUP` |
 | `brew.figures.time` | `components/BrewFigures.tsx:208` | Doto figure label. | `TIME` |
 | `brew.figures.flow` | `components/BrewFigures.tsx:222` | Doto flow row label, visible only when a cup rate can be said. | `FLOW` |

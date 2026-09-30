@@ -157,6 +157,16 @@ function quantisedProfile(
     return out;
 }
 
+function realisticRampProfile(): BrewSample[] {
+    return quantisedProfile(36, (at) => {
+        if (at < 1_000) return 0;
+        if (at < 2_000) return 4 * ((at - 1_000) / 1_000);
+        if (at < 30_000) return 4;
+        if (at < 36_000) return 4 * (1 - ((at - 30_000) / 6_000));
+        return 0;
+    });
+}
+
 function populationSpread(values: number[]): number {
     const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
     return Math.sqrt(
@@ -459,6 +469,31 @@ describe("retrospectiveFlowSeries", () => {
         expect(ending.length).toBeGreaterThan(10);
         expect(distinct.size).toBeGreaterThan(5);
         expect(ending[ending.length - 1]).toBeLessThan(0.5);
+    });
+
+    it("keeps a realistic ramp head at zero before the first drop and rising after it", () => {
+        const smoothed = retrospectiveFlowSeries(realisticRampProfile(), 1);
+        const deadHead = smoothed
+            .filter((point) => point.at <= 400)
+            .map((point) => point.cup);
+        const earlyRamp = smoothed
+            .filter((point) => point.at >= 2_000 && point.at <= 2_900)
+            .map((point) => Number(point.cup.toFixed(3)));
+        const atTwoSeconds = smoothed.find((point) => point.at === 2_000);
+        const interior = smoothed.find((point) => point.at === 10_000);
+
+        expect(deadHead).toHaveLength(4);
+        expect(Math.max(...deadHead)).toBeLessThan(0.001);
+        expect(atTwoSeconds).toBeDefined();
+        expect(interior).toBeDefined();
+        expect(atTwoSeconds!.cup).toBeLessThan(interior!.cup);
+        expect(new Set(earlyRamp).size).toBeGreaterThan(8);
+    });
+
+    it("never reports a negative retrospective rate", () => {
+        const smoothed = retrospectiveFlowSeries(realisticRampProfile(), 1);
+
+        expect(smoothed.every((point) => point.cup >= 0 && point.water >= 0)).toBe(true);
     });
 
     it("fits a drawable two point retrospective run without raw spikes", () => {

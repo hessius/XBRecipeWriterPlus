@@ -42,14 +42,12 @@ export function summaryLadderHeight(
     availableHeight: number,
     chromeHeight: number,
     capturePadding: number,
-    ladderTopGap: number,
-    storyBands: {barHeight: number; rungGap: number} | undefined
+    ladderTopGap: number
 ): number {
     if (availableHeight === 0 || chromeHeight === 0) return 0;
-    const scrollPeek = storyBands === undefined ? SUMMARY_SCROLL_PEEK : 0;
     return Math.max(
         0,
-        availableHeight - chromeHeight - capturePadding * 2 - ladderTopGap - scrollPeek
+        availableHeight - chromeHeight - capturePadding * 2 - ladderTopGap - SUMMARY_SCROLL_PEEK
     );
 }
 
@@ -177,8 +175,7 @@ export default function BrewSummary({
         availableHeight,
         chromeHeight,
         capturePadding,
-        ladderTopGap,
-        storyBands
+        ladderTopGap
     );
     const bands = storyBands ?? summaryBands(ladderHeight, stages.length);
 

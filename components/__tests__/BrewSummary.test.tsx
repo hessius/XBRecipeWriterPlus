@@ -2,7 +2,7 @@ import React from "react";
 import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, within} from "@testing-library/react-native";
 
-import BrewSummary, {SUMMARY_SCROLL_PEEK, summaryLadderHeight} from "@/components/BrewSummary";
+import BrewSummary from "@/components/BrewSummary";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
@@ -191,13 +191,6 @@ describe("BrewSummary", () => {
         expect(style?.height).toBeUndefined();
         expect(ladderProps.barHeight).toBe(28);
         expect(ladderProps.rungGap).toBe(20);
-    });
-
-    it("does not reserve the scroll peek inside a story-card summary", async () => {
-        const measuredHeight = summaryLadderHeight(600, 300, 30, 12, undefined);
-        const storyHeight = summaryLadderHeight(600, 300, 30, 12, {barHeight: 28, rungGap: 20});
-
-        expect(storyHeight - measuredHeight).toBe(SUMMARY_SCROLL_PEEK);
     });
 
     it("accents the ladder of a brew that reached its last stage", async () => {
