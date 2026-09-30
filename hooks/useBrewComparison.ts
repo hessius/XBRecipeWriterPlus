@@ -29,6 +29,7 @@ type ReadyComparison = {
     referencePlan: string | undefined;
     subjectHasTrace: boolean;
     referenceHasTrace: boolean;
+    showRateLanes: boolean;
     traceCount: number;
     survivingTrace: BrewUnderComparison | null;
     hasChart: boolean;
@@ -104,6 +105,9 @@ export function useBrewComparison({
         : undefined;
     const subjectHasTrace = hasTrace(subject);
     const referenceHasTrace = hasTrace(reference);
+    // A rate lane's only value is comparison. One lane on its own scaled axis
+    // suggests a second brew that is not there, so rate lanes are all or nothing.
+    const showRateLanes = axis.subjectRate.length >= 2 && axis.referenceRate.length >= 2;
     const traceCount = (subjectHasTrace ? 1 : 0) + (referenceHasTrace ? 1 : 0);
     const survivingTrace = traceCount === 1
         ? subjectHasTrace ? subject : reference
@@ -133,6 +137,7 @@ export function useBrewComparison({
         referencePlan,
         subjectHasTrace,
         referenceHasTrace,
+        showRateLanes,
         traceCount,
         survivingTrace,
         hasChart: traceCount > 0,

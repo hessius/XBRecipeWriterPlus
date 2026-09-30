@@ -61,6 +61,18 @@ function rateSamples(rate: number) {
     });
 }
 
+function shortRateSamples(rate: number) {
+    return Array.from({length: 3}, (_, i) => {
+        const seconds = i / 10;
+        return {
+            at: i * 100,
+            water: rate * seconds,
+            cup: rate * seconds,
+            pour: 1
+        };
+    });
+}
+
 function pair(over: Parameters<typeof makeBrewRecordFixture>[0] = {}) {
     const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
     const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan, ...over});
@@ -141,12 +153,31 @@ describe("the comparison screen", () => {
             .getByTestId("rate-chart-cup");
         const referenceCup = within(getByTestId("compare-rate-reference"))
             .getByTestId("rate-chart-cup");
+        // The subject's 2 G/S line sits 36.3 px down from the shared 5 G/S axis top.
         expect(subjectCup.props.d).toContain(" 36.3");
-        expect(referenceCup.props.d).toContain(" 0");
         expect(subjectCup.props.stroke)
             .toEqual(expect.objectContaining({payload: processColor(cupLineFor(a.accent))}));
         expect(referenceCup.props.stroke)
             .toEqual(expect.objectContaining({payload: processColor(referenceCupColour)}));
+    });
+
+    it("draws no rate lanes when one retained stream is too short to derive rate", async () => {
+        const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
+        const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan});
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
+            b: {record: b, samples: makeBrewRecordSamples(shortRateSamples(5)), frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByLabelText, getByTestId, queryByTestId} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        expect(getByTestId("compare-lane-a")).toBeTruthy();
+        expect(getByTestId("compare-lane-b")).toBeTruthy();
+        expect(queryByTestId("compare-rate-subject")).toBeNull();
+        expect(queryByTestId("compare-rate-reference")).toBeNull();
     });
 
     it("returns to overlay after switching to separate", async () => {
@@ -194,8 +225,8 @@ describe("the comparison screen", () => {
             waterTotal: 400
         });
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
+            b: {record: b, samples: makeBrewRecordSamples(rateSamples(3)), frames: ""}
         });
         setParams({a: "a", b: "b"});
 
@@ -205,14 +236,24 @@ describe("the comparison screen", () => {
         expect(within(getByTestId("compare-lane-a")).getByTestId("trace-cup").props.stroke)
             .toEqual(expect.objectContaining({payload: processColor(cupLineFor("#C86A3B"))}));
         expect(getByLabelText(
-            `This brew trace, ${formatBrewDate(0)} ${formatBrewTime(0)}`
+            `This brew trace with flow rate, ${formatBrewDate(0)} ${formatBrewTime(0)}`
+        )).toBeTruthy();
+        expect(getByLabelText(
+            `That brew trace with flow rate, ${formatBrewDate(3_600_000)} ${
+                formatBrewTime(3_600_000)
+            }`
         )).toBeTruthy();
 
         await fireEvent.press(getByLabelText("Swap which brew leads"));
         expect(within(getByTestId("compare-lane-a")).getByTestId("trace-cup").props.stroke)
             .toEqual(expect.objectContaining({payload: processColor(cupLineFor("#3377AA"))}));
         expect(getByLabelText(
-            `This brew trace, ${formatBrewDate(3_600_000)} ${formatBrewTime(3_600_000)}`
+            `This brew trace with flow rate, ${formatBrewDate(3_600_000)} ${
+                formatBrewTime(3_600_000)
+            }`
+        )).toBeTruthy();
+        expect(getByLabelText(
+            `That brew trace with flow rate, ${formatBrewDate(0)} ${formatBrewTime(0)}`
         )).toBeTruthy();
     });
 

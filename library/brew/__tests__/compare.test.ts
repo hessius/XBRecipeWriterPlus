@@ -327,6 +327,8 @@ describe("compareAxis", () => {
         );
 
         expect(axis.maxRate).toBeCloseTo(5, 6);
+        expect(axis.subjectRate).toHaveLength(11);
+        expect(axis.referenceRate).toHaveLength(11);
     });
 
     it("excludes bypass samples with the brew's stage count", () => {
@@ -341,6 +343,7 @@ describe("compareAxis", () => {
         );
 
         expect(axis.maxRate).toBeCloseTo(3, 6);
+        expect(axis.subjectRate.every((point) => point.cup < 3)).toBe(true);
     });
 
     it("has a rate axis of 0 when neither brew kept its stream", () => {
@@ -350,6 +353,25 @@ describe("compareAxis", () => {
         );
 
         expect(axis.maxRate).toBe(0);
+        expect(axis.subjectRate).toEqual([]);
+        expect(axis.referenceRate).toEqual([]);
+    });
+
+    it("keeps a retained short stream out of the drawable rate series", () => {
+        const axis = compareAxis(
+            underRate(2),
+            {
+                record: brew({id: "b", pours: 1}),
+                samples: [
+                    {at: 0, water: 0, cup: 0, pour: 1},
+                    {at: 100, water: 0.5, cup: 0.5, pour: 1},
+                    {at: 200, water: 1, cup: 1, pour: 1}
+                ]
+            }
+        );
+
+        expect(axis.subjectRate.length).toBeGreaterThanOrEqual(2);
+        expect(axis.referenceRate).toEqual([]);
     });
 });
 

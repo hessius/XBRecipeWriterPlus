@@ -25,7 +25,7 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 import {plannedSeconds, toPath} from "@/library/brew/brewShape";
 import type {Point} from "@/library/brew/brewShape";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
-import {flowSeries} from "@/library/brew/flowRate";
+import type {FlowPoint} from "@/library/brew/flowRate";
 import {referenceCupColour, type Role} from "@/library/brew/traceStyle";
 
 const CHART_HEIGHT = 220;
@@ -172,8 +172,7 @@ function SeparateCupGap({
 
 function CompareRateLane({
     testID,
-    samples,
-    stages,
+    series,
     accent,
     width,
     maxT,
@@ -181,15 +180,13 @@ function CompareRateLane({
     role = "subject"
 }: {
     testID: string;
-    samples: Parameters<typeof flowSeries>[0];
-    stages: number;
+    series: FlowPoint[];
     accent: string;
     width: number;
     maxT: number;
     maxRate: number;
     role?: Role;
 }) {
-    const series = flowSeries(samples, stages);
     if (series.length < 2) return null;
     return (
         <YStack testID={testID}>
@@ -203,6 +200,13 @@ function CompareRateLane({
             />
         </YStack>
     );
+}
+
+function traceLaneLabel(kind: "This" | "That", drewRate: boolean, startedAt: number): string {
+    const suffix = `${formatBrewDate(startedAt)} ${formatBrewTime(startedAt)}`;
+    return drewRate
+        ? `${kind} brew trace with flow rate, ${suffix}`
+        : `${kind} brew trace, ${suffix}`;
 }
 
 /**
@@ -265,6 +269,7 @@ export default function BrewCompareScreen() {
         referencePlan,
         subjectHasTrace,
         referenceHasTrace,
+        showRateLanes,
         traceCount,
         survivingTrace,
         hasChart,
@@ -272,7 +277,6 @@ export default function BrewCompareScreen() {
         keepSurvivingTrace
     } = comparisonState;
     const copy = COMPARE_COPY[comparison.pour.verdict];
-    const showRateLanes = subjectHasTrace && referenceHasTrace;
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -396,11 +400,11 @@ export default function BrewCompareScreen() {
                                         <YStack testID="compare-lane-a"
                                                 accessible accessibilityRole="image"
                                                 accessibilityLabel={
-                                                    `This brew trace, ${
-                                                        formatBrewDate(subject.record.startedAt)
-                                                    } ${
-                                                        formatBrewTime(subject.record.startedAt)
-                                                    }`
+                                                    traceLaneLabel(
+                                                        "This",
+                                                        showRateLanes,
+                                                        subject.record.startedAt
+                                                    )
                                                 }>
                                             <BrewTrace
                                                 compact
@@ -415,8 +419,7 @@ export default function BrewCompareScreen() {
                                             {showRateLanes && (
                                                 <CompareRateLane
                                                     testID="compare-rate-subject"
-                                                    samples={subject.samples}
-                                                    stages={subject.record.pours}
+                                                    series={axis.subjectRate}
                                                     accent={subject.record.accent}
                                                     width={chartWidth}
                                                     maxT={axis.maxT}
@@ -435,11 +438,11 @@ export default function BrewCompareScreen() {
                                         <YStack testID="compare-lane-b"
                                                 accessible accessibilityRole="image"
                                                 accessibilityLabel={
-                                                    `That brew trace, ${
-                                                        formatBrewDate(reference.record.startedAt)
-                                                    } ${
-                                                        formatBrewTime(reference.record.startedAt)
-                                                    }`
+                                                    traceLaneLabel(
+                                                        "That",
+                                                        showRateLanes,
+                                                        reference.record.startedAt
+                                                    )
                                                 }>
                                             <BrewTrace
                                                 compact
@@ -455,8 +458,7 @@ export default function BrewCompareScreen() {
                                             {showRateLanes && (
                                                 <CompareRateLane
                                                     testID="compare-rate-reference"
-                                                    samples={reference.samples}
-                                                    stages={reference.record.pours}
+                                                    series={axis.referenceRate}
                                                     accent={subject.record.accent}
                                                     width={chartWidth}
                                                     maxT={axis.maxT}

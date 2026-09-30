@@ -1836,25 +1836,24 @@ Expected: FAIL.
 
 - [ ] **Step 3: Negotiate the axis**
 
-In `library/brew/compare.ts`, add `maxRate: number` to `CompareAxis` with a
-comment saying it is the larger of the two brews' retained peak rates and 0
-when neither has a stream, then compute it in `compareAxis` from
-`maxRateOf(flowSeries(samples, record.pours))` for each side. Guard on
-`record.hasStream`; a swept record must not contribute a rate even if a test
-accidentally hands samples to the pure helper. Everything else in the function
-is unchanged.
+In `library/brew/compare.ts`, add `maxRate: number`, `subjectRate` and
+`referenceRate` to `CompareAxis`. Build each series once from
+`flowSeries(samples, record.pours)`, compute `maxRate` from those arrays, and
+return empty arrays for swept streams so they cannot contribute a rate even if
+a test accidentally hands samples to the pure helper. Everything else in the
+function is unchanged.
 
 - [ ] **Step 4: Draw the lanes**
 
 In `app/brewCompare.tsx`, under each separate volume lane, render a
 `BrewRateChart` for that side with `maxRate={axis.maxRate}` and the test IDs
-above. Build each series with `flowSeries(samples, record.pours)`, not a
-bypass timestamp. Reuse the screen's existing samples and accent. Gate rate
-lanes on both brews having retained streams, because a lone rate lane is not a
-comparison. This is deliberately asymmetric with the volume trace: a surviving
-volume lane still draws alone, but the rate lanes are all or nothing. If both
-streams survived but a retained stream cannot form a rate line, draw no rate
-lane for that side.
+above. Pass the ready `axis.subjectRate` and `axis.referenceRate` series rather
+than deriving them in the screen. Reuse the screen's existing samples and
+accent. Gate rate lanes on both derived series having at least two points,
+because a lone rate lane is not a comparison. This is deliberately asymmetric
+with the volume trace: a surviving volume lane still draws alone, but the rate
+lanes are all or nothing. If either retained stream cannot form a rate line,
+draw neither rate lane.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
