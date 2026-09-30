@@ -3,7 +3,7 @@ import React from "react";
 import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import BrewHistory from "@/app/brewHistory";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, SHEET_PRESS_TIMEOUT} from "@/test-utils/render";
 import type {StoredBrew} from "@/library/BrewDatabase";
 
 const mockPush = jest.fn();
@@ -88,10 +88,16 @@ function makeBrews(): StoredBrew[] {
  * for is the press taking effect, and that is the only honest test of it.
  */
 async function pressOnSheet(label: string, landed: () => boolean): Promise<void> {
-    await waitFor(async () => {
-        await fireEvent.press(screen.getByLabelText(label));
-        expect(landed()).toBe(true);
-    });
+    // waitFor's own budget, not jest's. The default second is enough on a
+    // developer's machine and is not enough on a shared CI runner, where the
+    // sheet's entrance animation and a dozen sibling workers share four cores.
+    await waitFor(
+        async () => {
+            await fireEvent.press(screen.getByLabelText(label));
+            expect(landed()).toBe(true);
+        },
+        {timeout: SHEET_PRESS_TIMEOUT}
+    );
 }
 
 describe("brew history", () => {

@@ -11,6 +11,7 @@ import {useCloudImport} from "@/hooks/useCloudImport";
 
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type {CloudErrorKind} from "@/library/cloud/transport";
+import {UNCLIPPED_LIST} from "@/constants/lists";
 
 /**
  * Sign in to xBloom and bring your own recipes across.
@@ -146,7 +147,7 @@ export default function ImportCloudScreen() {
         <YStack flex={1} backgroundColor={palette.base}>
             <ScreenHeader title="xBloom account" onBack={() => router.back()}/>
 
-            <FlatList
+            <FlatList {...UNCLIPPED_LIST}
                 data={listed}
                 keyExtractor={(item) => String(item.cloudId)}
                 renderItem={({item}) => (

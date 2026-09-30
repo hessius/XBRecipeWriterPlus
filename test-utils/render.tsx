@@ -41,3 +41,14 @@ export function renderWithProviders(
 ) {
     return render(ui, {wrapper: Providers, ...options});
 }
+
+/**
+ * How long to keep retrying a press aimed at an open sheet.
+ *
+ * A sheet gates its open state on a requestAnimationFrame, so for a frame or
+ * two after it mounts the node is findable but the press is discarded with no
+ * error. The cure is to retry the press until it lands, and waitFor's default
+ * budget of one second is enough for that on a developer's machine and is not
+ * enough on a shared CI runner.
+ */
+export const SHEET_PRESS_TIMEOUT = 5_000;

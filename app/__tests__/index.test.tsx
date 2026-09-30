@@ -1,5 +1,5 @@
 import React from "react";
-import {AccessibilityInfo, BackHandler} from "react-native";
+import {AccessibilityInfo, BackHandler, Platform} from "react-native";
 import {act, screen, fireEvent, waitFor, within} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
 
@@ -211,7 +211,12 @@ jest.mock("@/library/NFC", () => ({
         cancel:       jest.fn(),
         readCard:     jest.fn()
     })),
-    setNfcAlertIOS: jest.fn()
+    setNfcAlertIOS: jest.fn(),
+    // The read path asks the phone whether it has a usable radio before it
+    // opens a ceremony. Without this the probe is undefined and every card
+    // read fails before it starts.
+    checkNfcAvailability: jest.fn().mockResolvedValue("ready"),
+    openNfcSettings: jest.fn()
 }));
 
 function memoryStorage(raw: Record<string, unknown> = {}): SettingsStorage {
@@ -755,6 +760,15 @@ describe("HomeScreen", () => {
 
 describe("import", () => {
     /** Put the tile into its iOS disguised-paste mode and wait for the control. */
+    /**
+     * The tile's paste shortcut is a `UIPasteControl`, which is iOS 16 only.
+     * `ImportTile` refuses paste mode on Android before it even looks at the
+     * clipboard, so `renderPasteMode` has nothing to wait for there. The
+     * Android half of that contract lives in `ImportTile.test.tsx`; what is
+     * gated here is only the import flow that the shortcut feeds.
+     */
+    const itWithPasteControl = Platform.OS === "ios" ? it : it.skip;
+
     async function renderPasteMode() {
         (Clipboard.isPasteButtonAvailable as unknown as boolean) = true;
         (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
@@ -1033,7 +1047,7 @@ describe("import", () => {
         await waitFor(() => expect(XBloomRecipe).toHaveBeenCalledTimes(2));
     });
 
-    it("resolves at once when a pasted value parses, with no field to type in", async () => {
+    itWithPasteControl("resolves at once when a pasted value parses, with no field to type in", async () => {
         // The tile's paste shortcut is atomic input: a value that parses resolves
         // without asking and needs no field, exactly like a share intent.
         mockFetchRecipeDetail = () => new Promise<void>(() => {});
@@ -1047,7 +1061,7 @@ describe("import", () => {
         expect(screen.queryByLabelText("Share link or pod code")).toBeNull();
     });
 
-    it("opens a plain field when a pasted value does not parse", async () => {
+    itWithPasteControl("opens a plain field when a pasted value does not parse", async () => {
         // The fallback the whole shortcut rests on: junk on the clipboard opens
         // the sheet exactly as a plain tap would, indistinguishable from one.
         await renderPasteMode();
@@ -1060,7 +1074,7 @@ describe("import", () => {
         expect(screen.queryByTestId("import-resolving")).toBeNull();
     });
 
-    it("opens the editor when the shortcut resolves a recipe not yet held", async () => {
+    itWithPasteControl("opens the editor when the shortcut resolves a recipe not yet held", async () => {
         // The tile's promise is one tap: a genuinely new recipe on the clipboard
         // navigates straight to the editor, exactly as a share intent would.
         mockGetRecipe = () => new Recipe();
@@ -1073,7 +1087,7 @@ describe("import", () => {
         await waitFor(() => expect(mockPush).toHaveBeenCalled());
     });
 
-    it("stops at the field when the shortcut resolves a recipe already held", async () => {
+    itWithPasteControl("stops at the field when the shortcut resolves a recipe already held", async () => {
         // The sticky-clipboard trap: recipe A's link is still on the clipboard
         // after importing A, so tapping IMPORT resolves A again. The shortcut
         // must not re-open A -- it degrades to the found panel and restores the

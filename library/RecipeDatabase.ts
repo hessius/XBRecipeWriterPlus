@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import {appDatabase} from '@/library/appDatabase';
 
 import Recipe from './Recipe';
 import {reassignIfCrossed} from './accent';
@@ -174,7 +175,7 @@ class RecipeDatabase {
     }
 
     constructor() {
-        this.db = SQLite.openDatabaseSync('xbrecipewriter.db')
+        this.db = appDatabase();
         this.createTable();
         // The library query joins the recipe index to an aggregate over the
         // brew tables, which `BrewDatabase` owns. On a fresh install the

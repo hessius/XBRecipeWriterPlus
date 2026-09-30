@@ -10,8 +10,10 @@ npx expo start         # dev server (needs a dev client, not Expo Go — NFC is 
 npm run ios            # expo run:ios   (add --device for real NFC)
 npm run android        # expo run:android
 npm run lint           # eslint . (whole repo, not just app/ and components/)
-npm test               # jest; npm run test:watch to watch
-npx jest path/to/file  # single file; add -t "name" for a single test
+npm test               # jest, BOTH platforms; npm run test:watch to watch
+npm run test:ios       # one platform, when you want the whole machine on it
+npm run test:android
+npx jest --runTestsByPath path/to/file   # single file; add -t "name" for one test
 npm run typecheck      # tsc --noEmit
 npx expo-doctor        # dependency/config health
 ```
@@ -28,7 +30,31 @@ stays empty and the test silently passes for the wrong reason. Always render via
 `jest.config.js` extends jest-expo's preset rather than replacing it; new deps that ship
 untranspiled ESM need adding to `extraEsmPackages` there.
 
-NFC cannot be exercised in a simulator/emulator. Card read/write changes must be verified on a physical device with a real card.
+**The suite runs twice, as two jest projects: `ios` and `android`.** It used to run once.
+`jest-expo/jest-preset` pins `haste.defaultPlatform` to `"ios"`, so for the whole life of this
+repo `Platform.OS` was `"ios"` in every test and every Android branch in the codebase was
+unexecuted -- the first Android run failed 40 tests. So do not assume a platform. A test that
+needs one must set `Platform.OS` and put it back afterwards (`Platform.Version` is a getter with
+no setter; use `Object.defineProperty`), and a test that asserts platform-selected copy should
+assert against the constant rather than spelling the string out, because `Platform.select` at
+module scope is decided at load and does not follow a later reassignment.
+
+Two consequences worth knowing. `testTimeout` must stay at the top level beside `projects`:
+jest silently drops it from a project entry, which is why `library/__tests__/platformHarness.test.ts`
+asserts the resolved value. And `maxWorkers` is capped below jest's default, because twice the
+suites through one pool tipped the heavy screen suites into timing out -- they pass one at a
+time, so it is contention and not a defect.
+
+`test-utils/nfcV.ts` is a card, not a handler: one image of memory answering both the iOS
+handler and raw ISO 15693 frames, so a card test written once runs on both transports and fails
+if they ever disagree.
+
+NFC cannot be exercised in a simulator/emulator, and on Android it cannot be emulated at all:
+there is no public API for acting as an ISO 15693 tag, and HCE is 14443-A/B only. Card
+read/write changes must be verified on a physical device with a real card. Android writing
+deserves more of that hardware time than reading: reader mode drops its tag handle on brief
+signal loss more readily than Core NFC does, and writes go block by block, so a half-written
+genuine card is the likely failure and is not trivially recoverable.
 
 ## Architecture
 

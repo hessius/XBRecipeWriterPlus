@@ -1,4 +1,4 @@
-import {EventSubscription, Platform} from "react-native";
+import {EventSubscription, PermissionsAndroid, Platform} from "react-native";
 
 import {RadioUnavailableError} from "./errors";
 import BleManager, {
@@ -475,22 +475,52 @@ export class BleTransport implements MachineTransport {
 }
 
 /**
+ * What the platform said when asked for the radio.
+ *
+ * Android has a state iOS does not have. Refuse the system dialog twice and it
+ * never appears again; from then on only the app's own page in Settings can
+ * undo it. Telling that user "XBRW++ needs permission to use Bluetooth" invites
+ * them to do a thing the OS will now silently ignore, so the two refusals have
+ * to be distinguishable here or they cannot be distinguishable anywhere.
+ */
+export type BluetoothPermissionResult =
+    | {granted: true}
+    | {granted: false; permanentlyDenied: boolean};
+
+/**
  * Ask for whatever this platform needs before the radio is usable.
  *
  * iOS asks for itself, on first use, using the purpose string in `app.json`.
  *
  * Android split this in two. From API 31 the radio has its own permissions,
  * BLUETOOTH_SCAN and BLUETOOTH_CONNECT. Before that, scanning was treated as a
- * way of working out where you are, and so required ACCESS_FINE_LOCATION —
- * asking only for the newer pair on Android 11 grants nothing at all, and the
+ * way of working out where you are, and so required ACCESS_FINE_LOCATION.
+ * Asking only for the newer pair on Android 11 grants nothing at all, and the
  * scan comes back empty with no explanation.
+ *
+ * `PermissionsAndroid` is imported at the top of the file rather than pulled in
+ * by a dynamic `import("react-native")`. The dynamic form saved nothing -- the
+ * module already imports `Platform` from the same place -- and it made this
+ * function unreachable from a test, which is why the Android permission gate
+ * and the whole first-run machine experience behind it had never been run.
  */
-export async function ensureBluetoothPermission(): Promise<boolean> {
-    if (Platform.OS !== "android") return true;
-    const {PermissionsAndroid} = await import("react-native");
+export async function ensureBluetoothPermission(): Promise<BluetoothPermissionResult> {
+    if (Platform.OS !== "android") return {granted: true};
     const needed = Number(Platform.Version) >= 31
-        ? ["android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_CONNECT"]
-        : ["android.permission.ACCESS_FINE_LOCATION"];
-    const granted = await PermissionsAndroid.requestMultiple(needed as never[]);
-    return Object.values(granted).every((result) => result === "granted");
+        ? [
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+            PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT
+        ]
+        : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
+    const granted = await PermissionsAndroid.requestMultiple(needed);
+    const results = Object.values(granted);
+    if (results.every((result) => result === PermissionsAndroid.RESULTS.GRANTED)) {
+        return {granted: true};
+    }
+    return {
+        granted: false,
+        permanentlyDenied: results.some(
+            (result) => result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
+        )
+    };
 }

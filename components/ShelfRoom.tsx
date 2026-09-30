@@ -9,6 +9,7 @@ import RecipeShelfTile from "@/components/RecipeShelfTile";
 import type {RecipeEvidence} from "@/library/libraryQuery";
 import {onAccent, palette} from "@/constants/colors";
 import type Recipe from "@/library/Recipe";
+import {UNCLIPPED_LIST} from "@/constants/lists";
 
 /** Two per row, the same as the shelf grid, so a room reads as the same grid. */
 const COLUMNS = 2;
@@ -161,7 +162,7 @@ export default function ShelfRoom({
     );
 
     return (
-        <FlatList testID="shelf-room"
+        <FlatList {...UNCLIPPED_LIST} testID="shelf-room"
                   data={rows}
                   keyExtractor={(row) => row[0].uuid}
                   // The header collapses on this view's scroll the same way

@@ -1,6 +1,6 @@
 import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 import * as Clipboard from "expo-clipboard";
-import {AccessibilityInfo, AppState, StyleSheet} from "react-native";
+import {AccessibilityInfo, AppState, Platform, StyleSheet} from "react-native";
 
 import ImportTile from "@/components/ImportTile";
 import {palette} from "@/constants/colors";
@@ -41,6 +41,16 @@ jest.mock("expo-clipboard", () => ({
 }));
 
 type Mutable = {isPasteButtonAvailable: boolean};
+
+/**
+ * The paste-mode tests, which only have a subject on iOS.
+ *
+ * `UIPasteControl` is an iOS 16 API. Android has no equivalent, so
+ * `clipboardPasteMode` refuses at the top and the tile stays a plain button
+ * whatever is on the clipboard. That refusal is a feature, not a gap, and it
+ * is asserted by its own tests below rather than by seventeen failures.
+ */
+const itWithPasteControl = Platform.OS === "ios" ? it : it.skip;
 
 /** DFS order of testIDs in the rendered host tree, for z-order assertions. */
 function testIdOrder(): string[] {
@@ -85,7 +95,7 @@ it("is a plain button when the clipboard is empty", async () => {
     expect(screen.queryByTestId("native-paste-control", {includeHiddenElements: true})).toBeNull();
 });
 
-it("becomes a paste control when the clipboard holds text", async () => {
+itWithPasteControl("becomes a paste control when the clipboard holds text", async () => {
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
 
     await renderWithProviders(<ImportTile onOpen={() => {}} onPasted={() => {}}/>);
@@ -95,7 +105,7 @@ it("becomes a paste control when the clipboard holds text", async () => {
     );
 });
 
-it("hands the pasted text upward", async () => {
+itWithPasteControl("hands the pasted text upward", async () => {
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
     const onPasted = jest.fn();
 
@@ -109,7 +119,7 @@ it("hands the pasted text upward", async () => {
     expect(onPasted).toHaveBeenCalledWith("ETH120");
 });
 
-it.each<[string, PastePayload]>([
+itWithPasteControl.each<[string, PastePayload]>([
     ["an empty string", {type: "text", text: ""}],
     ["a blank string", {type: "text", text: "   "}],
     ["an image", {type: "image", data: "data:image/png;base64,AAAA"}]
@@ -133,7 +143,7 @@ it.each<[string, PastePayload]>([
     expect(onPasted).not.toHaveBeenCalled();
 });
 
-it("keeps the visible tile face in paste mode", async () => {
+itWithPasteControl("keeps the visible tile face in paste mode", async () => {
     // Deleting the face would leave a blank, invisible tile in the home grid.
     // The wrapper carries the label now, so this asserts the face's own glyph.
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
@@ -146,7 +156,7 @@ it("keeps the visible tile face in paste mode", async () => {
     expect(screen.getByTestId("cta-tile-icon", {includeHiddenElements: true})).toBeTruthy();
 });
 
-it("stretches the tile face to the wrapper instead of collapsing it", async () => {
+itWithPasteControl("stretches the tile face to the wrapper instead of collapsing it", async () => {
     // The face wraps `CtaTile`, whose own `flex: 1` is `flexBasis: 0` and
     // collapses to nothing unless the face gives it a definite height. The home
     // row stretches the wrapper to the READ CARD tile's height, so the face
@@ -164,7 +174,7 @@ it("stretches the tile face to the wrapper instead of collapsing it", async () =
     expect(StyleSheet.flatten(face.props.style)).toMatchObject({flex: 1});
 });
 
-it("makes the paste control invisible by alpha, not tappably by zero", async () => {
+itWithPasteControl("makes the paste control invisible by alpha, not tappably by zero", async () => {
     // The disguise now rides on view alpha, which iOS cannot override the way it
     // overrides the control's own colours. `0.02` is below visibility yet above
     // UIKit's `alpha < 0.01` hit-testing cutoff, so the control still receives
@@ -182,7 +192,7 @@ it("makes the paste control invisible by alpha, not tappably by zero", async () 
     expect(style.opacity).toBeGreaterThanOrEqual(0.01);
 });
 
-it("draws the paste control above the face so the tap is the consent", async () => {
+itWithPasteControl("draws the paste control above the face so the tap is the consent", async () => {
     // The whole design is that the tap reaches the control, not the face.
     // Reversing the z-order would route every tap to `onOpen` and never paste,
     // and no press-based test can see it, so the order is asserted directly.
@@ -197,7 +207,7 @@ it("draws the paste control above the face so the tap is the consent", async () 
     expect(order.indexOf("cta-tile-icon")).toBeLessThan(order.indexOf("native-paste-control"));
 });
 
-it("keeps the face out of the tap path in paste mode", async () => {
+itWithPasteControl("keeps the face out of the tap path in paste mode", async () => {
     // `pointerEvents` none is what lets a sighted tap fall through to the
     // control beneath; without it the face swallows the tap.
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
@@ -211,7 +221,7 @@ it("keeps the face out of the tap path in paste mode", async () => {
     expect(face.props.pointerEvents).toBe("none");
 });
 
-it("restricts the paste control to text and links", async () => {
+itWithPasteControl("restricts the paste control to text and links", async () => {
     // The default also accepts `image`, which would activate the control on an
     // image clipboard and deliver a payload with no text.
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
@@ -225,7 +235,7 @@ it("restricts the paste control to text and links", async () => {
     expect(control.props.acceptedContentTypes).toEqual(["plain-text", "url"]);
 });
 
-it("colours the paste control to the tile so its glyph disappears", async () => {
+itWithPasteControl("colours the paste control to the tile so its glyph disappears", async () => {
     // The disguise is the whole point: both colours are the tile's own
     // `raised`, so the control vanishes into the face with no visible glyph. A
     // visible foreground or a contrasting background would expose it.
@@ -241,7 +251,7 @@ it("colours the paste control to the tile so its glyph disappears", async () => 
     expect(control.props.foregroundColor).toBe(palette.raised);
 });
 
-it("hides the paste control from the accessibility tree", async () => {
+itWithPasteControl("hides the paste control from the accessibility tree", async () => {
     // Voice Control, Switch Control and Full Keyboard Access all read the tree
     // while `isScreenReaderEnabled()` is false, so in paste mode the control's
     // forced "Paste" element must be hidden, leaving only the tile's label.
@@ -257,7 +267,7 @@ it("hides the paste control from the accessibility tree", async () => {
     expect(screen.queryByTestId("native-paste-control")).toBeNull();
 });
 
-it("announces one element, and that element opens the sheet", async () => {
+itWithPasteControl("announces one element, and that element opens the sheet", async () => {
     // The announced element must be the actionable one: a synthesized
     // activation from Voice Control reaches whatever carries the label, so that
     // element -- not the disabled face -- has to route to `onOpen`.
@@ -315,7 +325,7 @@ it("stays a plain button when the paste-button API is absent (Android / iOS 15)"
     );
 });
 
-it("re-samples when the app returns to the foreground", async () => {
+itWithPasteControl("re-samples when the app returns to the foreground", async () => {
     // The clipboard changes behind the app's back, so the answer is re-asked on
     // foreground. Start empty (plain), fill the clipboard, foreground: paste.
     let onAppChange: ((state: string) => void) | undefined;
@@ -362,7 +372,7 @@ it("ignores foreground changes that are not 'active'", async () => {
     );
 });
 
-it("drops to plain mode when VoiceOver is switched on mid-session", async () => {
+itWithPasteControl("drops to plain mode when VoiceOver is switched on mid-session", async () => {
     // A user who turns VoiceOver on mid-session must not be left with a control
     // announcing "Paste" over a tile that says IMPORT.
     (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
@@ -389,7 +399,7 @@ it("drops to plain mode when VoiceOver is switched on mid-session", async () => 
     );
 });
 
-it("lets the newest sample win when two resolve out of order", async () => {
+itWithPasteControl("lets the newest sample win when two resolve out of order", async () => {
     // Two samples in flight resolve in completion order, not start order. An
     // earlier sample must never overwrite a newer one: the generation counter is
     // what stops a stale `true` (paste) outliving a fresh `false` (plain).
@@ -451,4 +461,46 @@ it("lets the newest sample win when two resolve out of order", async () => {
     await waitFor(() =>
         expect(screen.queryByTestId("native-paste-control", {includeHiddenElements: true})).toBeNull()
     );
+});
+
+// The other half of the platform contract, which nothing asserted while the
+// suite only ever ran as an iPhone. `clipboardPasteMode` checks `Platform.OS`
+// before it checks `isPasteButtonAvailable`, deliberately, so that the gate
+// says "Android has no UIPasteControl" out loud rather than relying on the API
+// happening to be absent. These force the API present to prove the first check
+// is the one doing the work.
+const itWithoutPasteControl = Platform.OS === "android" ? it : it.skip;
+
+itWithoutPasteControl("stays a plain button even with text on the clipboard", async () => {
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+
+    await renderWithProviders(<ImportTile onOpen={() => {}} onPasted={() => {}}/>);
+
+    expect(await screen.findByLabelText("Import a recipe")).toBeTruthy();
+    await waitFor(() =>
+        expect(screen.queryByTestId("native-paste-control", {includeHiddenElements: true})).toBeNull()
+    );
+});
+
+itWithoutPasteControl("opens the sheet rather than pasting", async () => {
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+    const onOpen = jest.fn();
+    const onPasted = jest.fn();
+
+    await renderWithProviders(<ImportTile onOpen={onOpen} onPasted={onPasted}/>);
+    await fireEvent.press(await screen.findByLabelText("Import a recipe"));
+
+    expect(onOpen).toHaveBeenCalled();
+    expect(onPasted).not.toHaveBeenCalled();
+});
+
+itWithoutPasteControl("never reads the clipboard's contents", async () => {
+    // The presence check is silent; `getStringAsync` is what would cost a
+    // system paste prompt. On Android the tile has no reason to ask at all.
+    (Clipboard.hasStringAsync as jest.Mock).mockResolvedValue(true);
+
+    await renderWithProviders(<ImportTile onOpen={() => {}} onPasted={() => {}}/>);
+    await screen.findByLabelText("Import a recipe");
+
+    expect(Clipboard.getStringAsync).not.toHaveBeenCalled();
 });
