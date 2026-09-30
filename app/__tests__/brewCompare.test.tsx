@@ -14,6 +14,7 @@ import {
 import {renderWithProviders} from "@/test-utils/render";
 import {planFromPours} from "@/library/brew/BrewRecord";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
+import {referenceCupColour} from "@/library/brew/traceStyle";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 
 const {setParams} = createExpoRouterMock();
@@ -142,7 +143,10 @@ describe("the comparison screen", () => {
             .getByTestId("rate-chart-cup");
         expect(subjectCup.props.d).toContain(" 36.3");
         expect(referenceCup.props.d).toContain(" 0");
-        expect(referenceCup.props.stroke).not.toEqual(subjectCup.props.stroke);
+        expect(subjectCup.props.stroke)
+            .toEqual(expect.objectContaining({payload: processColor(cupLineFor(a.accent))}));
+        expect(referenceCup.props.stroke)
+            .toEqual(expect.objectContaining({payload: processColor(referenceCupColour)}));
     });
 
     it("returns to overlay after switching to separate", async () => {
@@ -225,6 +229,25 @@ describe("the comparison screen", () => {
         expect(getByText(COMPARE_DEGRADED.one)).toBeTruthy();
         expect(getByTestId("trace-cup-subject")).toBeTruthy();
         expect(queryByTestId("trace-cup-reference")).toBeNull();
+    });
+
+    it("draws no rate lanes when only one brew kept its stream", async () => {
+        const a = makeBrewRecordFixture({id: "a"});
+        const b = makeBrewRecordFixture({id: "b", hasStream: false});
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
+            b: {record: b, samples: [], frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByLabelText, getByTestId, queryByTestId} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        expect(getByTestId("compare-lane-a")).toBeTruthy();
+        expect(queryByTestId("compare-lane-b")).toBeNull();
+        expect(queryByTestId("compare-rate-subject")).toBeNull();
+        expect(queryByTestId("compare-rate-reference")).toBeNull();
     });
 
     it("draws the reference survivor when the subject trace has been swept", async () => {
@@ -311,7 +334,10 @@ describe("the comparison screen", () => {
         });
         setParams({a: "a", b: "b"});
 
-        const {queryByTestId} = await renderWithProviders(<BrewCompareScreen />);
+        const {getByLabelText, queryByTestId} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
 
         expect(queryByTestId("compare-rate-subject")).toBeNull();
         expect(queryByTestId("compare-rate-reference")).toBeNull();

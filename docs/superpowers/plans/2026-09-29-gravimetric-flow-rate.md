@@ -1819,6 +1819,14 @@ In `app/__tests__/brewCompare.test.tsx`:
         await renderCompareInTest(twoSweptBrews());
         expect(screen.queryByTestId("compare-rate-subject")).toBeNull();
     });
+
+    it("draws no rate lanes when only one brew kept its stream", async () => {
+        await renderCompareInTest(oneSweptBrew());
+        await switchToSeparateMode();
+        expect(screen.getByTestId("compare-lane-a")).toBeTruthy();
+        expect(screen.queryByTestId("compare-rate-subject")).toBeNull();
+        expect(screen.queryByTestId("compare-rate-reference")).toBeNull();
+    });
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -1841,9 +1849,12 @@ is unchanged.
 In `app/brewCompare.tsx`, under each separate volume lane, render a
 `BrewRateChart` for that side with `maxRate={axis.maxRate}` and the test IDs
 above. Build each series with `flowSeries(samples, record.pours)`, not a
-bypass timestamp. Reuse the screen's existing samples and accent; if a side has
-no samples, or the retained stream cannot form a rate line, draw no rate lane
-for that side.
+bypass timestamp. Reuse the screen's existing samples and accent. Gate rate
+lanes on both brews having retained streams, because a lone rate lane is not a
+comparison. This is deliberately asymmetric with the volume trace: a surviving
+volume lane still draws alone, but the rate lanes are all or nothing. If both
+streams survived but a retained stream cannot form a rate line, draw no rate
+lane for that side.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 

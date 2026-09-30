@@ -272,6 +272,7 @@ export default function BrewCompareScreen() {
         keepSurvivingTrace
     } = comparisonState;
     const copy = COMPARE_COPY[comparison.pour.verdict];
+    const showRateLanes = subjectHasTrace && referenceHasTrace;
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -411,16 +412,17 @@ export default function BrewCompareScreen() {
                                                 plannedSeconds={plannedSeconds(axis.subjectPours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
                                             />
-                                            <CompareRateLane
-                                                testID="compare-rate-subject"
-                                                samples={subject.samples}
-                                                stages={subject.record.pours}
-                                                accent={subject.record.accent}
-                                                width={chartWidth}
-                                                maxT={axis.maxT}
-                                                maxRate={axis.maxRate}
-                                                role="reference"
-                                            />
+                                            {showRateLanes && (
+                                                <CompareRateLane
+                                                    testID="compare-rate-subject"
+                                                    samples={subject.samples}
+                                                    stages={subject.record.pours}
+                                                    accent={subject.record.accent}
+                                                    width={chartWidth}
+                                                    maxT={axis.maxT}
+                                                    maxRate={axis.maxRate}
+                                                />
+                                            )}
                                         </YStack>
                                     )}
                                     <SeparateCupGap
@@ -450,15 +452,18 @@ export default function BrewCompareScreen() {
                                                 plannedSeconds={plannedSeconds(axis.referencePours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
                                             />
-                                            <CompareRateLane
-                                                testID="compare-rate-reference"
-                                                samples={reference.samples}
-                                                stages={reference.record.pours}
-                                                accent={subject.record.accent}
-                                                width={chartWidth}
-                                                maxT={axis.maxT}
-                                                maxRate={axis.maxRate}
-                                            />
+                                            {showRateLanes && (
+                                                <CompareRateLane
+                                                    testID="compare-rate-reference"
+                                                    samples={reference.samples}
+                                                    stages={reference.record.pours}
+                                                    accent={subject.record.accent}
+                                                    width={chartWidth}
+                                                    maxT={axis.maxT}
+                                                    maxRate={axis.maxRate}
+                                                    role="reference"
+                                                />
+                                            )}
                                         </YStack>
                                     )}
                                 </YStack>
