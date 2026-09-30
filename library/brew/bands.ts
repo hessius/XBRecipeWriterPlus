@@ -46,7 +46,7 @@ export type Bands = {
  * divide, so there is nothing to measure and `allocateBands` cannot be called.
  *
  * It still has to look like the same ladder the live screen draws. So it takes
- * the two bands' *soft caps* — the thickness and spacing the live screen holds
+ * the two bands' *soft caps*, the thickness and spacing the live screen holds
  * a comfortably-filled ladder at before it starts spending leftover height on
  * a second helping. At a mid-range phone height a four-to-nine stage brew
  * settles at exactly these values, so the frozen summary and the live screen
@@ -63,16 +63,16 @@ export const SUMMARY_BANDS = {
 } as const;
 
 /**
- * The summary ladder's bands, grown into whatever height it has been given.
+ * The summary ladder's bands, fitted into whatever height it has been given.
  *
- * `SUMMARY_BANDS` is the floor, not the answer: a summary that has room should
+ * `SUMMARY_BANDS` is the unmeasured fallback, not the answer: a summary that has room should
  * look like the live screen, which reaches `BAR_MAX` on a real phone, rather
  * than staying frozen at the soft caps and reading thinner once the brew is
- * over than it did while it ran.
+ * over than it did while it ran. A compact story card also gets a real height,
+ * and there the same function may shrink the ladder to the live floors rather
+ * than letting the PNG clip.
  *
- * Growth only, in the same order `allocateBands` uses — bars before gaps. A
- * ladder with no room keeps today's bands and scrolls, which is what it
- * already does; nothing here can make a summary thinner than it is today.
+ * Fit in the same order `allocateBands` uses: bars before gaps.
  *
  * @param ladderHeight the height left for the rungs after everything above
  *                     them, or 0 when nothing has been measured yet
@@ -83,8 +83,22 @@ export function summaryBands(
 ): {barHeight: number; rungGap: number} {
     if (stages <= 0 || ladderHeight <= 0) return {...SUMMARY_BANDS};
 
+    const floor = stages * (BAR_FLOOR + GAP_FLOOR);
+    if (ladderHeight <= floor) {
+        return {barHeight: BAR_FLOOR, rungGap: GAP_FLOOR};
+    }
+
+    if (ladderHeight < stages * (BAR_CAP + GAP_CAP)) {
+        let slack = ladderHeight - floor;
+        const barMore = Math.min(BAR_CAP - BAR_FLOOR, Math.floor(slack / stages));
+        slack -= barMore * stages;
+
+        const gapMore = Math.min(GAP_CAP - GAP_FLOOR, Math.floor(slack / stages));
+
+        return {barHeight: BAR_FLOOR + barMore, rungGap: GAP_FLOOR + gapMore};
+    }
+
     let slack = ladderHeight - stages * (BAR_CAP + GAP_CAP);
-    if (slack <= 0) return {...SUMMARY_BANDS};
 
     const barMore = Math.min(BAR_MAX - BAR_CAP, Math.floor(slack / stages));
     slack -= barMore * stages;

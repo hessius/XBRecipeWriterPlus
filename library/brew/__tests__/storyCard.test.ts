@@ -1,6 +1,6 @@
 import {
     STORY_ASPECT, STORY_SAFE_BOTTOM, STORY_SAFE_TOP,
-    storyCoffeeLine, storyFrame
+    storyCoffeeLine, storyFrame, storySummaryBudget
 } from "../storyCard";
 import type {BrewRecord} from "../BrewRecord";
 
@@ -37,6 +37,23 @@ describe("the frame", () => {
         // The reply field and the action row both live down there.
         const frame = storyFrame(1080);
         expect(frame.safeBottom).toBeGreaterThan(frame.safeTop);
+    });
+
+    it("keeps a two stage story card inside the readable band", () => {
+        const budget = storySummaryBudget({
+            width: 360,
+            stages: 2,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tagCount: 4
+        });
+
+        expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+        expect(budget.summaryAvailableHeight).toBeGreaterThanOrEqual(
+            budget.minimumSummaryHeight
+        );
+        expect(budget.rateLabelRowHeight).toBe(21);
     });
 });
 

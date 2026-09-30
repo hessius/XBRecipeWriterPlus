@@ -1,6 +1,6 @@
 import React from "react";
 import {View} from "react-native";
-import Svg, {G, Path, Text as SvgText} from "react-native-svg";
+import Svg, {G, Path, Rect, Text as SvgText} from "react-native-svg";
 
 import {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
@@ -20,7 +20,7 @@ export const RATE_HEIGHT = 84;
 /** Never scale a nearly flat brew up into a mountain range. */
 const MIN_AXIS = 4;
 const RATE_LABEL_SIZE = 9;
-const RATE_LABEL_ROW = Math.ceil(drawnFontSize(RATE_LABEL_SIZE) * 1.35);
+const RATE_LABEL_LINE_HEIGHT = 1.35;
 
 /**
  * The recorder samples at about 10 Hz, and every stream fixture that models
@@ -46,6 +46,7 @@ type Props = {
     /** The same real-seconds horizontal extent used by the BrewTrace above it. */
     maxT: number;
     maxRate?: number;
+    height?: number;
 };
 
 function contiguousRuns(series: FlowPoint[]): FlowPoint[][] {
@@ -85,15 +86,19 @@ function channelPath(runs: FlowPoint[][], of: "cup" | "water", box: Box): string
  * point cannot draw a line, and a frame with no line would look like a brew
  * where the bed never flowed rather than a chart the stream cannot support.
  */
-export default function BrewRateChart({series, accent, width, maxT, maxRate}: Props) {
+export default function BrewRateChart({
+    series, accent, width, maxT, maxRate, height = RATE_HEIGHT
+}: Props) {
     if (series.length < 2) return null;
 
     const waterStyle = channelStyle("water", {accent});
     const cupStyle = channelStyle("cup", {accent});
     const verticalInset = Math.max(waterStyle.strokeWidth, cupStyle.strokeWidth) / 2;
+    const labelSize = drawnFontSize(RATE_LABEL_SIZE);
+    const labelRow = Math.ceil(labelSize * RATE_LABEL_LINE_HEIGHT);
     const box: Box = {
         width,
-        height: Math.max(RATE_HEIGHT - RATE_LABEL_ROW - verticalInset * 2, 0),
+        height: Math.max(height - labelRow - verticalInset * 2, 0),
         maxT,
         maxV: Math.max(MIN_AXIS, maxRate ?? maxRateOf(series))
     };
@@ -108,7 +113,7 @@ export default function BrewRateChart({series, accent, width, maxT, maxRate}: Pr
         <View testID="rate-chart" pointerEvents="none">
             <Svg
                 width={width}
-                height={RATE_HEIGHT}
+                height={height}
                 style={{overflow: "visible"}}
                 accessibilityRole="image"
                 accessibilityLabel="Brew rate chart"
@@ -116,13 +121,21 @@ export default function BrewRateChart({series, accent, width, maxT, maxRate}: Pr
                 <SvgText
                     testID="rate-chart-label"
                     x={0}
-                    y={drawnFontSize(RATE_LABEL_SIZE)}
+                    y={labelSize}
                     fill={palette.dim}
                     {...dotMatrixSvgProps({fontSize: RATE_LABEL_SIZE, letterSpacing: 1.2})}
                 >
                     FLOW RATE
                 </SvgText>
-                <G y={RATE_LABEL_ROW + verticalInset}>
+                <Rect
+                    testID="rate-chart-plot-origin"
+                    x={0}
+                    y={labelRow + verticalInset}
+                    width={0}
+                    height={0}
+                    fill="none"
+                />
+                <G y={labelRow + verticalInset}>
                     {waterPath !== "" && (
                         <Path
                             testID="rate-chart-water"

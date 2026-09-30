@@ -402,7 +402,7 @@ describe("brew route", () => {
         expect(getByLabelText("Export the data")).toBeTruthy();
         // The old flow pushed /brewRecord, a second drawing of the same brew.
         expect(mockPush).not.toHaveBeenCalled();
-        // A finished brew is not a failed one — retry would invite a second brew
+        // A finished brew is not a failed one. Retry would invite a second brew
         // into a full cup, and there is nothing left to cancel.
         expect(queryByLabelText("Try again")).toBeNull();
     });
@@ -478,6 +478,30 @@ describe("brew route", () => {
         await renderWithProviders(<Brew />);
         expect(summaryProps.width)
             .toBe(Dimensions.get("window").width - SCREEN_PADDING * 2);
+    });
+
+    it("gives the finished summary its rate chart and drawdown rate", async () => {
+        mockSamples = Array.from({length: 51}, (_, i) => {
+            const at = i * 100;
+            const seconds = at / 1000;
+            return {
+                at,
+                water: Math.min(seconds * 3, 9),
+                cup: seconds * 2,
+                pour: 1
+            };
+        });
+        mockElapsed = 5;
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+
+        await renderWithProviders(<Brew />);
+
+        expect(summaryProps.rateSeries).toEqual(expect.arrayContaining([
+            expect.objectContaining({cup: expect.any(Number), water: expect.any(Number)})
+        ]));
+        expect(summaryProps.drawdown).toBeCloseTo(2);
+        expect(summaryProps.drawdownRate).toBeCloseTo(2);
     });
 
     it("captures and shares the brew in place, without pushing /brewRecord", async () => {

@@ -89,7 +89,7 @@ export default function BrewRecord({recipeLookup}: Props) {
 
     // Read the record once at mount (not on every render). `open` runs two
     // synchronous SELECTs and JSON.parse on the stream, potentially hundreds
-    // of kilobytes — doing it in render causes re-parsing on every rotation.
+    // of kilobytes. Doing it in render causes re-parsing on every rotation.
     // When `latest=1` is set (navigated from the brew screen) use the most
     // recent brew in the history.
     const [opened] = useState(() => {
@@ -109,7 +109,7 @@ export default function BrewRecord({recipeLookup}: Props) {
         return store.getRecipe(opened.record.recipeUuid);
     });
 
-    // Export mechanics — the ViewShot ref and both shares — live in the hook,
+    // Export mechanics, the ViewShot ref and both shares, live in the hook,
     // shared with the live brew modal so the two export identically. The
     // record and its samples are already in memory here.
     // The stage whose detail is open, or null for none.
@@ -172,7 +172,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     const handoff = useBrewRecordHandoff(opened, recipe, judgement);
 
     // No "All brews" control. The list is the only way in here, so it sat
-    // beside a back chevron that already went to exactly the same screen —
+    // beside a back chevron that already went to exactly the same screen,
     // two affordances for one destination, one of them pushing a *second*
     // copy of the list onto the stack rather than returning to the first.
 
@@ -199,15 +199,15 @@ export default function BrewRecord({recipeLookup}: Props) {
     // means revisiting this selection rather than assuming it appears here.
     const [handoffTarget] = HANDOFF_TARGETS;
     const showHandoff = handoffEnabled && canHandOff(record.outcome);
-    // `?? ""` because a record opened before the frame log existed — and any
-    // stand-in for the store — simply has no log, which is a brew with nothing
+    // `?? ""` because a record opened before the frame log existed, and any
+    // stand-in for the store, simply has no log, which is a brew with nothing
     // to copy rather than an error.
     const frames = opened.frames ?? "";
     const accent = record.accent;
 
     // Measured from the first drop, because that is where the sample stream is
     // zeroed. From `startedAt` the axis would also carry waking and grinding,
-    // against which the trace — which knows nothing of them — would be drawn
+    // against which the trace, which knows nothing of them, would be drawn
     // short. Older rows have no `pouringAt` and fall back to the old meaning.
     const zero = (record.pouringAt ?? 0) > 0 ? record.pouringAt! : record.startedAt;
     const durationSeconds = (record.endedAt - zero) / 1000;
@@ -320,7 +320,7 @@ export default function BrewRecord({recipeLookup}: Props) {
             {/* Titled "Brew", not with the recipe's name: `BrewSummary` draws
                 that name immediately below, and it has to, because the capture
                 needs it. A header repeating it would say the same word twice in
-                two fonts. The date says the thing the name cannot — which brew
+                two fonts. The date says the thing the name cannot: which brew
                 of that recipe this is. */}
             <ScreenHeader
                 title="Brew"
@@ -469,7 +469,7 @@ export default function BrewRecord({recipeLookup}: Props) {
             {/* Only when there is one to copy, and only for someone who has
                 found the machine console. A brew recorded before this existed,
                 or one whose log the retention sweep has taken, would otherwise
-                offer a copy that yields an empty clipboard — which reads as the
+                offer a copy that yields an empty clipboard, which reads as the
                 app having lost it rather than never having had it. And a raw
                 frame log means nothing to anyone who is not debugging the
                 machine, so it rides the same seven-tap gate as the rest of the
@@ -520,18 +520,24 @@ export default function BrewRecord({recipeLookup}: Props) {
                         rating={judgement.rating}
                         coffee={storyCoffeeLine(record)}
                         tags={record.tags ?? []}
-                        summary={
+                        stageCount={stages.length}
+                        summary={(budget) => (
                             <BrewSummary
                                 {...summary}
                                 width={cardWidth}
                                 testID="story-capture"
+                                availableHeight={budget.summaryAvailableHeight}
+                                traceHeight={budget.traceHeight}
+                                rateHeight={budget.rateHeight}
+                                capturePadding={budget.capturePadding}
+                                ladderTopGap={budget.ladderTopGap}
                                 // Always still: a capture taken mid-travel
                                 // freezes the name half-scrolled, and unlike
                                 // the screen's own summary there is no moment
                                 // here when the card is not about to be shot.
                                 nameStill
                             />
-                        }
+                        )}
                     />
                 )}
             </BrewStorySheet>

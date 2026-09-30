@@ -1,4 +1,5 @@
 import type {BrewRecord} from "./BrewRecord";
+import {BAR_FLOOR, GAP_FLOOR} from "./bands";
 import {resolvedOrigin, resolvedProcess} from "./beanTags";
 
 /**
@@ -45,6 +46,79 @@ export function storyFrame(width: number): StoryFrame {
         height,
         safeTop:    Math.round(height * STORY_SAFE_TOP),
         safeBottom: Math.round(height * STORY_SAFE_BOTTOM)
+    };
+}
+
+export type StorySummaryBudgetInput = {
+    width: number;
+    stages: number;
+    hasRateChart: boolean;
+    hasCoffee: boolean;
+    hasRating: boolean;
+    tagCount: number;
+};
+
+export type StorySummaryBudget = {
+    contentHeight: number;
+    surroundingHeight: number;
+    summaryAvailableHeight: number;
+    minimumSummaryHeight: number;
+    requiredHeight: number;
+    traceHeight: number;
+    rateHeight: number;
+    capturePadding: number;
+    ladderTopGap: number;
+    rateLabelRowHeight: number;
+};
+
+const STORY_CAPTURE_PADDING = 7;
+const STORY_TRACE_HEIGHT = 90;
+const STORY_RATE_HEIGHT = 84;
+const STORY_RATE_LABEL_ROW_MAX = 21;
+const STORY_NAME_ROW = 31;
+const STORY_FIGURES_BLOCK = 60;
+const STORY_LADDER_TOP_GAP = 8;
+const STORY_GAP = 8;
+const STORY_HEADER_ROW = 31;
+const STORY_COFFEE_ROW = 24;
+const STORY_RATING_ROW = 16;
+const STORY_TAG_ROW = 30;
+
+export function storySummaryBudget(
+    {
+        width, stages, hasRateChart, hasCoffee, hasRating, tagCount
+    }: StorySummaryBudgetInput
+): StorySummaryBudget {
+    const frame = storyFrame(width);
+    const contentHeight = frame.height - frame.safeTop - frame.safeBottom;
+    const optionalRows = [
+        hasCoffee ? STORY_COFFEE_ROW : 0,
+        hasRating ? STORY_RATING_ROW : 0,
+        tagCount > 0 ? STORY_TAG_ROW : 0
+    ].filter((row) => row > 0);
+    const surroundingRows = [STORY_HEADER_ROW, ...optionalRows];
+    const surroundingHeight = surroundingRows.reduce((sum, row) => sum + row, 0)
+        + STORY_GAP * surroundingRows.length;
+    const minimumSummaryHeight = STORY_CAPTURE_PADDING
+        + STORY_CAPTURE_PADDING
+        + STORY_NAME_ROW
+        + STORY_TRACE_HEIGHT
+        + (hasRateChart ? Math.max(STORY_RATE_HEIGHT, STORY_RATE_LABEL_ROW_MAX) : 0)
+        + STORY_FIGURES_BLOCK
+        + STORY_LADDER_TOP_GAP
+        + stages * (BAR_FLOOR + GAP_FLOOR);
+
+    return {
+        contentHeight,
+        surroundingHeight,
+        summaryAvailableHeight: Math.max(0, contentHeight - surroundingHeight),
+        minimumSummaryHeight,
+        requiredHeight: surroundingHeight + minimumSummaryHeight,
+        traceHeight: STORY_TRACE_HEIGHT,
+        rateHeight: STORY_RATE_HEIGHT,
+        capturePadding: STORY_CAPTURE_PADDING,
+        ladderTopGap: STORY_LADDER_TOP_GAP,
+        rateLabelRowHeight: STORY_RATE_LABEL_ROW_MAX
     };
 }
 

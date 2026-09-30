@@ -156,7 +156,7 @@ describe("allocateBands", () => {
 describe("SUMMARY_BANDS", () => {
     // The unbounded band set BrewSummary uses. It has no measured height to
     // divide (it renders inside a ViewShot with fill={false}), so it cannot
-    // call allocateBands; it takes the soft caps instead — the thickness and
+    // call allocateBands; it takes the soft caps instead, the thickness and
     // spacing a well-filled ladder settles at on the live screen.
 
     it("uses the thick soft-cap bar, not the pre-#88 literal", () => {
@@ -188,8 +188,8 @@ describe("summaryBands", () => {
         expect(summaryBands(4 * (BAR_CAP + GAP_CAP), 4)).toEqual(SUMMARY_BANDS);
     });
 
-    it("never shrinks below today's bands, however little room there is", () => {
-        expect(summaryBands(10, 9)).toEqual(SUMMARY_BANDS);
+    it("shrinks to the live floors when measured room is tight", () => {
+        expect(summaryBands(10, 9)).toEqual({barHeight: BAR_FLOOR, rungGap: GAP_FLOOR});
     });
 
     it("thickens the bars before it spreads the rungs", () => {

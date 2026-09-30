@@ -3,7 +3,7 @@ import {StyleSheet, View} from "react-native";
 import {Text, YStack} from "tamagui";
 
 import BrewFigures from "@/components/BrewFigures";
-import BrewRateChart from "@/components/BrewRateChart";
+import BrewRateChart, {RATE_HEIGHT} from "@/components/BrewRateChart";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
 import MarqueeText from "@/components/MarqueeText";
@@ -18,13 +18,13 @@ import type {FlowPoint} from "@/library/brew/flowRate";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
-const TRACE_HEIGHT = 150;
+export const TRACE_HEIGHT = 150;
 
 /**
  * The margin around the captured content, in points.
  *
  * A ViewShot renders only what is inside it, so the exported PNG had no
- * breathing room at all — the figures sat hard against the edge. This is added
+ * breathing room at all. The figures sat hard against the edge. This is added
  * to the screen padding so the image has a border of its own.
  */
 export const CAPTURE_MARGIN = 12;
@@ -57,7 +57,7 @@ type Props = {
     /** The stage whose detail is open. */
     selectedIndex?: number | null;
     /**
-     * Absent leaves the figure inert — which is what the export wants, since a
+     * Absent leaves the figure inert, which is what the export wants, since a
      * captured PNG cannot be tapped and a shaded band in it would only puzzle.
      */
     onSelectStage?: (index: number) => void;
@@ -96,18 +96,23 @@ type Props = {
     /**
      * The height the summary may draw in, from the screen's scroll viewport.
      *
-     * Absent — or zero — keeps the frozen bands, which is what a caller that
-     * has measured nothing gets. The ladder never grows past the ceilings the
-     * live screen obeys, and never shrinks below the bands it has today.
+     * Absent or zero keeps the frozen bands, which is what a caller that
+     * has measured nothing gets. A measured summary uses the same floors and
+     * ceilings the live screen obeys, so the story card can shrink the ladder
+     * rather than clipping the PNG.
      */
     availableHeight?: number;
+    traceHeight?: number;
+    rateHeight?: number;
+    capturePadding?: number;
+    ladderTopGap?: number;
 };
 
 /**
  * The shared brew summary: recipe name, trace, figures and stage ladder.
  *
  * This is the single source of truth for how a finished brew looks, both on
- * the record screen and — captured to a PNG — in the export. Everything worth
+ * the record screen and, captured to a PNG, in the export. Everything worth
  * sharing lives inside here, including its own background and padding, because
  * a capture inherits neither margin nor background from its ancestors: outside
  * it, the PNG came out edge-to-edge on white, which made the dot-matrix
@@ -118,10 +123,12 @@ export default function BrewSummary({
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
     drawdown = null, rateSeries, drawdownRate = null, dial = null, availableHeight = 0,
+    traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT,
+    capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
     testID = "brew-capture"
 }: Props) {
     // The drawable width inside the capture's own padding.
-    const traceWidth = width - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
+    const traceWidth = width - capturePadding * 2;
     const traceTimes = traceTimeParts(plannedSeconds, samples, bypass);
 
     // Measured from an onLayout event, never an effect. Everything above the
@@ -130,18 +137,18 @@ export default function BrewSummary({
     const [chromeHeight, setChromeHeight] = useState(0);
     const ladderHeight = availableHeight === 0 || chromeHeight === 0
         ? 0
-        : availableHeight - chromeHeight - (SCREEN_PADDING + CAPTURE_MARGIN) * 2;
+        : availableHeight - chromeHeight - capturePadding * 2;
     const bands = summaryBands(ladderHeight, stages.length);
 
     return (
-        <View testID={testID} style={styles.capture}>
+        <View testID={testID} style={[styles.capture, {padding: capturePadding}]}>
             <View
                 testID="summary-chrome"
                 onLayout={(e) => setChromeHeight(e.nativeEvent.layout.height)}
             >
             {/* A truncated name is a name the user cannot read, and there is
                 nowhere here to put a second line. The line rests, travels to
-                its end, rests again and comes back — and does nothing at all
+                its end, rests again and comes back, and does nothing at all
                 when it already fits. */}
             <MarqueeText testID="brew-summary-name" paused={nameStill}>
                 <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.4}
@@ -157,7 +164,7 @@ export default function BrewSummary({
                     samples={samples}
                     accent={accent}
                     width={traceWidth}
-                    height={TRACE_HEIGHT}
+                    height={traceHeight}
                     plannedSeconds={plannedSeconds}
                     planOpacity={0}
                     planColor={palette.muted}
@@ -168,7 +175,7 @@ export default function BrewSummary({
                     bypass={bypass}
                 />
             ) : (
-                <YStack height={TRACE_HEIGHT} alignItems="center"
+                <YStack height={traceHeight} alignItems="center"
                         justifyContent="center">
                     <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.6}
                                    color={palette.muted}>
@@ -187,6 +194,7 @@ export default function BrewSummary({
                     accent={accent}
                     width={traceWidth}
                     maxT={traceTimes.maxT}
+                    height={rateHeight}
                 />
             )}
 
@@ -211,7 +219,7 @@ export default function BrewSummary({
             </View>
             {/* Spaced by hand: the capture has no gap, so the trace and the
                 figures stay flush the way they were on screen. */}
-            <YStack marginTop="$3">
+            <YStack marginTop={ladderTopGap}>
             {stagesUnavailable ? (
                 <DotMatrixText fontSize={11} letterSpacing={1.2} color={palette.muted}>
                     Recipe deleted. Stages not available.
@@ -225,7 +233,7 @@ export default function BrewSummary({
                     // ladder from a measured flex height, but a summary renders
                     // inside a ViewShot with fill={false} and has none. The
                     // soft-cap band set is now the floor rather than the whole
-                    // answer — a summary with a measured height grows its rungs
+                    // answer: a summary with a measured height grows its rungs
                     // up to the same ceilings the live ladder obeys.
                     barHeight={bands.barHeight}
                     rungGap={bands.rungGap}
@@ -256,7 +264,6 @@ const styles = StyleSheet.create({
      * out is simply not in the PNG. The extra margin gives the image a border.
      */
     capture: {
-        backgroundColor: palette.base,
-        padding:         SCREEN_PADDING + CAPTURE_MARGIN
+        backgroundColor: palette.base
     }
 });

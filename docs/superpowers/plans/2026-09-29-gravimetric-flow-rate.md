@@ -1580,8 +1580,20 @@ git commit -m "Chart the rate beside the volumes"
 
 **Files:**
 - Modify: `components/BrewSummary.tsx`
+- Modify: `components/BrewStoryCard.tsx`
 - Modify: `app/brewRecord.tsx` (~line 300, where `drawdown` is passed)
+- Modify: `app/brew.tsx`
+- Modify: `library/brew/storyCard.ts`
 - Test: `app/__tests__/brewRecord.test.tsx`
+- Test: `app/__tests__/brew.test.tsx`
+- Test: `library/brew/__tests__/storyCard.test.ts`
+
+Amendment, 2026-09-30: the finished brew modal is part of this task. It passes
+`rateSeries`, `drawdown` and `drawdownRate` to `BrewSummary`, using the same
+sample stream and stage count that the record later reads. The story card also
+gets a real height budget from `storySummaryBudget`, a pure function of the
+story frame, surrounding rows and stage count, so the compact card summary uses
+the available height instead of silently clipping under `overflow: hidden`.
 
 - [ ] **Step 1: Write the failing tests**
 

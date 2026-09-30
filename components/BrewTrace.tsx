@@ -40,6 +40,8 @@ type Props = {
      * its tail with nothing on screen to say it had. And it is for `compact`
      * lanes: the temperature band is not part of the axis, so two full-size
      * lanes would still put the same temperature at different heights.
+     * Do not pass it from BrewSummary: the rate chart below it shares the
+     * traceTimeParts axis, so overriding this one would break their alignment.
      */
     axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */
@@ -53,13 +55,13 @@ type Props = {
     planDashed?: boolean;
     /** 0 to 1: how far the lit head has travelled. 1 means no head. */
     planHeadAt?: number;
-    /** When true, render only the SVG at exactly width × height — no stage counter, no overrun label. */
+    /** When true, render only the SVG at exactly width by height, no stage counter, no overrun label. */
     compact?: boolean;
     /**
      * The stages a tap resolves against. Defaults to `pours`.
      *
      * A summary hides the plan line by passing `pours={[]}`, which leaves the
-     * chart with no stages to name — so it must say separately which stages
+     * chart with no stages to name, so it must say separately which stages
      * the run actually had.
      */
     stages?: Pour[];

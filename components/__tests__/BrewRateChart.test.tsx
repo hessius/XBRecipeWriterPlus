@@ -1,4 +1,5 @@
 import React from "react";
+import {PixelRatio} from "react-native";
 
 import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
@@ -44,6 +45,10 @@ function svgText(node: {props: {children?: unknown}}): string | undefined {
         return child.props.children;
     }
     return undefined;
+}
+
+function svgScalar(value: number | number[] | string): number {
+    return Number(Array.isArray(value) ? value[0] : value);
 }
 
 function sample(at: number, water: number, cup: number, pour: number): BrewSample {
@@ -176,5 +181,22 @@ describe("BrewRateChart", () => {
         const shortPath = shortAxis.getByTestId("rate-chart-cup").props.d as string;
         const tallPath = tallAxis.getByTestId("rate-chart-cup").props.d as string;
         expect(Math.min(...yValues(tallPath))).toBeGreaterThan(Math.min(...yValues(shortPath)));
+    });
+
+    it("reserves the label row from the current font scale", async () => {
+        const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1.4);
+        const {getByTestId} = await renderWithProviders(
+            <BrewRateChart series={series} accent={ACCENT} width={WIDTH} maxT={5} />
+        );
+
+        const labelY = svgScalar(
+            getByTestId("rate-chart-label").props.y as number | number[] | string
+        );
+        const plotY = svgScalar(
+            getByTestId("rate-chart-plot-origin").props.y as number | number[] | string
+        );
+        expect(plotY - labelY).toBeGreaterThanOrEqual(labelY * 0.35);
+
+        scaleSpy.mockRestore();
     });
 });

@@ -29,6 +29,23 @@ describe("the story card", () => {
         expect(screen.getByTestId("summary-stub")).toBeTruthy();
     });
 
+    it("hands a story height budget to a summary render function", async () => {
+        const renderSummary = jest.fn(() => summary);
+        await show({
+            summary: renderSummary,
+            stageCount: 2,
+            coffee: "Huila · Washed",
+            rating: 4,
+            tags: ["a", "b", "c", "d"]
+        });
+
+        expect(renderSummary).toHaveBeenCalledWith(expect.objectContaining({
+            contentHeight: 461,
+            summaryAvailableHeight: 328,
+            requiredHeight: 444
+        }));
+    });
+
     it("stands the frame up at nine by sixteen", async () => {
         await show({width: 360});
         const frame = storyFrame(360);

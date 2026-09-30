@@ -628,8 +628,8 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 | `brew.figures.flow.a11y` | `components/BrewFigures.tsx:134` (a11y) | (a11y) The grouped flow row's spoken label. Grouping the row replaces its children's spoken text, so both rates and both units have to be in the label. Not a live region: on the brew screen the figures change continuously, and the user's focus should not be interrupted. | `Flow, 2.4 grams per second, pouring 3.1 millilitres per second` |
 | `brew.figures.drawdown` | `components/BrewFigures.tsx:128` | Doto drawdown line. The rate term is present only when a finished record can say it. `${...}` are the drawdown clock and g/s to one decimal place. | `DRAWDOWN ${clock(drawdown)} · ${rate} G/S` |
 | `brew.trace.a11y` | `components/BrewTrace.tsx:111,152` (a11y) | (a11y) The brew trace graph. | `Brew trace` |
-| `brew.rateChart.a11y` | `components/BrewRateChart.tsx:116` (a11y) | (a11y) The retained stream's flow rate chart on a finished brew record and shared image. | `Brew rate chart` |
-| `brew.rateChart.label` | `components/BrewRateChart.tsx:119` | Doto label above the retained stream's rate chart. Names what the second chart measures without pretending the unlabelled y axis is calibrated for reading exact values. | `FLOW RATE` |
+| `brew.rateChart.a11y` | `components/BrewRateChart.tsx:119` (a11y) | (a11y) The retained stream's flow rate chart on a finished brew record and shared image. | `Brew rate chart` |
+| `brew.rateChart.label` | `components/BrewRateChart.tsx:128` | Doto label above the retained stream's rate chart. Names what the second chart measures without pretending the unlabelled y axis is calibrated for reading exact values. | `FLOW RATE` |
 | `brew.trace.legend.water` | `components/BrewTrace.tsx:218` | Doto legend item. | `WATER` |
 | `brew.trace.legend.cup` | `components/BrewTrace.tsx:219` | Doto legend item. | `CUP` |
 | `brew.trace.legend.plan` | `components/BrewTrace.tsx:221` | Doto legend item. | `PLAN` |

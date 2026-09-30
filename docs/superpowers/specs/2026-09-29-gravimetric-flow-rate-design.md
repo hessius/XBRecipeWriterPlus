@@ -275,6 +275,14 @@ A `BrewRateChart` section inside `BrewSummary`, below the trace and **inside the
 image all carry it. The share is not yet released, so there is no established
 card to uphold and the chart can simply be part of it.
 
+Amendment, 2026-09-30: the finished brew modal passes the same retained stream
+through `flowSeries` and passes the final drawdown clock plus average drawdown
+rate. A brew shared immediately from the modal and the same brew shared later
+from the record therefore carry the same chart and figure. The story card keeps
+the chart too, but uses a pure height budget from `storyCard.ts` so the compact
+card summary shrinks the ladder and fixed chart bands into the 9:16 readable
+band instead of clipping under the platform-safe top and bottom bands.
+
 - Both channels on one rate axis, on the same real-seconds time axis the trace
   uses, so the two charts line up vertically and a feature in one can be found
   in the other.

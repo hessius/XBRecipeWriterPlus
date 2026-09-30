@@ -7,7 +7,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import Wordmark from "@/components/Wordmark";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {storyFrame} from "@/library/brew/storyCard";
+import {storyFrame, storySummaryBudget, type StorySummaryBudget} from "@/library/brew/storyCard";
 
 /** How many tags fit on the card before the rest are counted instead. */
 const MAX_SHOWN_TAGS = 4;
@@ -25,7 +25,8 @@ type Props = {
      * the frontier; the card is the frame around that answer, not a second
      * one.
      */
-    summary: React.ReactNode;
+    summary: React.ReactNode | ((budget: StorySummaryBudget) => React.ReactNode);
+     stageCount?: number;
     /** When the brew happened, already formatted. */
     when: string;
     accent: string;
@@ -54,11 +55,20 @@ type Props = {
  * is a mark that damages the data.
  */
 export default function BrewStoryCard({
-    width, summary, when, accent, rating, coffee, tags
+    width, summary, stageCount = 2, when, accent, rating, coffee, tags
 }: Props) {
     const frame = storyFrame(width);
     const shown = tags.slice(0, MAX_SHOWN_TAGS);
     const extra = tags.length - shown.length;
+    const budget = storySummaryBudget({
+        width,
+        stages: stageCount,
+        hasRateChart: true,
+        hasCoffee: coffee !== null,
+        hasRating: rating > 0,
+        tagCount: tags.length
+    });
+    const summaryNode = typeof summary === "function" ? summary(budget) : summary;
 
     return (
         <View
@@ -77,7 +87,7 @@ export default function BrewStoryCard({
                     </DotMatrixText>
                 </XStack>
 
-                {summary}
+                {summaryNode}
 
                 {/* Left out entirely when there is nothing to say. A card that
                     reserves a row for a coffee nobody named, or for stars
@@ -140,7 +150,7 @@ const styles = StyleSheet.create({
     /**
      * The card supplies its own background for the same reason `BrewSummary`
      * does: a capture inherits nothing from its ancestors. `overflow: hidden`
-     * holds the ratio — content that outgrew the frame would otherwise be
+     * holds the ratio. Content that outgrew the frame would otherwise be
      * photographed spilling past the 9:16 the platforms are about to crop to.
      */
     frame: {
