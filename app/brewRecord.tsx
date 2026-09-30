@@ -1,8 +1,7 @@
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
-import React, {useRef, useState} from "react";
+import React, {useState} from "react";
 import {Pressable, ScrollView, useWindowDimensions} from "react-native";
-import ViewShot from "react-native-view-shot";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
@@ -12,10 +11,8 @@ import BrewSummary from "@/components/BrewSummary";
 import CompareWithSheet from "@/components/CompareWithSheet";
 import StageDetail from "@/components/StageDetail";
 import DotMatrixText from "@/components/DotMatrixText";
-import * as Clipboard from "expo-clipboard";
 
 import ExportButton from "@/components/ExportButton";
-import {notify} from "@/components/XbrwToast";
 import ScreenHeader from "@/components/ScreenHeader";
 import {palette} from "@/constants/colors";
 import {useBrewExport} from "@/hooks/useBrewExport";
@@ -48,19 +45,68 @@ import {HANDOFF_ALREADY_SENT, ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy"
 export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
 
 let sharedLookup: RecipeLookup | undefined;
-/**
- * Put the machine's own account of this brew on the clipboard.
- *
- * Raw frames rather than a summary: the whole point of keeping them is that
- * nobody knew in advance which byte would matter, and a report of a machine
- * that behaved impossibly is only worth anything if it carries what the
- * machine actually said.
- */
-function copyFrames(frames: string): void {
-    void Clipboard.setStringAsync(frames).then(() => notify({
-        tone:    "success",
-        message: "Frame log copied"
-    }));
+
+const RECORD_ACTION_GAP = 13;
+const JUDGEMENT_ACTION_GAP = "$4";
+
+type RecordAction = {
+    key: "handoff" | "export" | "compare" | "story";
+    label: string;
+    busy: boolean;
+    accessibilityLabel?: string;
+    wide?: boolean;
+    onPress: () => void;
+};
+
+type RecordActionPair = readonly [RecordAction | null, RecordAction | null];
+
+function RecordActionRows(
+    {pairs, halfWidth, fullWidth}: {
+        pairs: readonly RecordActionPair[];
+        halfWidth: number;
+        fullWidth: number;
+    }
+) {
+    const rows: React.ReactNode[] = [];
+    for (const pair of pairs) {
+        const actions = pair.filter((action): action is RecordAction => action !== null);
+        if (actions.length === 0) continue;
+
+        for (const action of actions.filter((item) => item.wide)) {
+            rows.push(
+                <XStack key={`${action.key}-wide`} testID="record-action-row">
+                    <YStack testID={`record-action-${action.key}`} width={fullWidth}>
+                        <ExportButton
+                            label={action.label}
+                            busy={action.busy}
+                            accessibilityLabel={action.accessibilityLabel}
+                            onPress={action.onPress}
+                        />
+                    </YStack>
+                </XStack>
+            );
+        }
+
+        const regular = actions.filter((item) => !item.wide);
+        if (regular.length === 0) continue;
+        rows.push(
+            <XStack key={regular.map((action) => action.key).join("-")}
+                    testID="record-action-row" gap={RECORD_ACTION_GAP}>
+                {regular.map((action) => (
+                    <YStack key={action.key} testID={`record-action-${action.key}`}
+                            width={halfWidth}>
+                        <ExportButton
+                            label={action.label}
+                            busy={action.busy}
+                            accessibilityLabel={action.accessibilityLabel}
+                            onPress={action.onPress}
+                        />
+                    </YStack>
+                ))}
+            </XStack>
+        );
+    }
+    return <>{rows}</>;
 }
 
 function getSharedLookup(): RecipeLookup {
@@ -110,34 +156,17 @@ export default function BrewRecord({recipeLookup}: Props) {
         return store.getRecipe(opened.record.recipeUuid);
     });
 
-    // Export mechanics, the ViewShot ref and both shares, live in the hook,
-    // shared with the live brew modal so the two export identically. The
-    // record and its samples are already in memory here.
+    // Export mechanics live in the hook shared with the live brew modal. The
+    // record screen only uses the data export now; the image path remains for
+    // the live modal and the story card.
     // The stage whose detail is open, or null for none.
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [recordHeight, setRecordHeight] = useState(0);
-    const scroller = useRef<ScrollView>(null);
 
-    // The same seven-tap gate the machine console and the card diagnostics
-    // ride on. Read here rather than beside the button because it is a hook
-    // and the "brew not found" return below is earlier.
-    const [consoleFound] = useSetting("machineConsoleAcknowledged");
     const [handoffEnabled] = useSetting("beanconquerorHandoff");
     const {ratingNoteOpen} = useLiveBrew();
 
-    // Cleared before the PNG is taken. A shaded band and a tinted rung are
-    // answers to a tap, and a picture cannot be tapped: baked in they would
-    // read as the brew itself having done something odd at that stage.
-    const {shotRef, shareImage, shareData, busy} = useBrewExport(
-        () => opened,
-        async () => {
-            setSelectedIndex(null);
-            // Back to the top as well: with the panel gone the summary fits
-            // again, and capturing it while scrolled part-way off the screen is
-            // how a capture comes out clipped.
-            scroller.current?.scrollTo({y: 0, animated: false});
-        }
-    );
+    const {shareData, busy} = useBrewExport(() => opened);
     // The machine knows what a pod was and never what a hopper held, so the
     // coffee is only ever a question for a brew that came from beans. Asked
     // here and not in the batch path: once is a courtesy, once per brew across
@@ -146,8 +175,8 @@ export default function BrewRecord({recipeLookup}: Props) {
     const [storyOpen, setStoryOpen] = useState(false);
     // A second export, not a second mechanism. The story card is a different
     // composition at a different ratio and so needs a capture target of its
-    // own, but it shares the guard, the filename and the share sheet with the
-    // in-place export by joining the same hook.
+    // own, but it shares the guard, the filename and the share sheet by
+    // joining the same hook.
     const story = useBrewExport(() => opened);
     const [comparisonCandidates, setComparisonCandidates] = useState<StoredBrew[]>([]);
 
@@ -200,10 +229,6 @@ export default function BrewRecord({recipeLookup}: Props) {
     // means revisiting this selection rather than assuming it appears here.
     const [handoffTarget] = HANDOFF_TARGETS;
     const showHandoff = handoffEnabled && canHandOff(record.outcome);
-    // `?? ""` because a record opened before the frame log existed, and any
-    // stand-in for the store, simply has no log, which is a brew with nothing
-    // to copy rather than an error.
-    const frames = opened.frames ?? "";
     const accent = record.accent;
 
     // Measured from the first drop, because that is where the sample stream is
@@ -312,6 +337,45 @@ export default function BrewRecord({recipeLookup}: Props) {
         ),
         grind:             dialNote(record)
     };
+    const actionFullWidth = Math.max(0, width - SCREEN_PADDING * 2);
+    const actionHalfWidth = Math.max(0, (actionFullWidth - RECORD_ACTION_GAP) / 2);
+    // Doto Bold at 11 pt and the bounded 1.4 font scale measures SEND TO
+    // BEANCONQUEROR at 226.04 pt. On a 320 pt screen the two-up slot is
+    // 135.5 pt, so this button keeps its own row instead of pairing.
+    const handoffAction: RecordAction | null = showHandoff ? {
+        key:   "handoff",
+        label: handoffTarget.buttonLabel,
+        busy:  handoff.busy,
+        wide:  true,
+        onPress: handoff.requestSend
+    } : null;
+    const actionPairs: RecordActionPair[] = [
+        [
+            handoffAction,
+            {
+                key:   "export",
+                label: "Export the data",
+                busy,
+                onPress: () => void shareData()
+            }
+        ],
+        [
+            hasComparisonCandidate ? {
+                key:                "compare",
+                label:              "Compare",
+                busy:               false,
+                accessibilityLabel: "Compare with another brew",
+                onPress:            openComparisonPicker
+            } : null,
+            {
+                key:                "story",
+                label:              "Share story",
+                busy:               story.busy,
+                accessibilityLabel: "Share this brew as a story card",
+                onPress:            () => setStoryOpen(true)
+            }
+        ]
+    ];
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -333,14 +397,13 @@ export default function BrewRecord({recipeLookup}: Props) {
                 meta={`${formatBrewDate(record.startedAt)} · ${formatBrewTime(record.startedAt)}`}
                 onBack={() => router.back()}
             />
-            {/* Everything worth sharing sits inside the ViewShot: the recipe
-                name, the trace, the figures and the stage ladder. BrewSummary
-                owns its own background and padding, because a capture inherits
-                neither margin nor background from its ancestors. */}
+            {/* BrewSummary owns its own background and padding because the
+                story card still captures the same subtree at a different
+                ratio. */}
             {/* The screen scrolls, because an open stage detail is taller than
                 what is left below the figures and there was otherwise no way to
                 read the end of it. */}
-            <ScrollView ref={scroller} testID="record-scroll"
+            <ScrollView testID="record-scroll"
                         onLayout={(e) => setRecordHeight(e.nativeEvent.layout.height)}
                         // The note field is low in this scroller, so iOS grows
                         // the bottom inset by the keyboard's height and scrolls
@@ -354,20 +417,14 @@ export default function BrewRecord({recipeLookup}: Props) {
                         keyboardShouldPersistTaps="handled"
                         contentContainerStyle={{paddingBottom: 24, gap: 8}}>
             {watched ? (
-                <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
-                    <BrewSummary
-                        {...summary}
-                        width={width}
-                        // `busy` is set synchronously at the press, before the
-                        // paint the export waits for, so the name is already
-                        // parked at its start by the time the shutter falls.
-                        nameStill={busy}
-                        selectedIndex={selectedIndex}
-                        onSelectStage={(index) =>
-                            setSelectedIndex((was) => (was === index ? null : index))}
-                        availableHeight={recordHeight}
-                    />
-                </ViewShot>
+                <BrewSummary
+                    {...summary}
+                    width={width}
+                    selectedIndex={selectedIndex}
+                    onSelectStage={(index) =>
+                        setSelectedIndex((was) => (was === index ? null : index))}
+                    availableHeight={recordHeight}
+                />
             ) : (
                 <YStack paddingHorizontal={SCREEN_PADDING} gap="$2">
                     <DotMatrixText fontSize={20} weight="bold" letterSpacing={1.4}
@@ -399,10 +456,10 @@ export default function BrewRecord({recipeLookup}: Props) {
                 />
             )}
 
-            {/* Outside the ViewShot, like its twin on the live screen: the
-                capture is a picture of what the machine did, and a control
-                inside it would be in every PNG anybody shares. */}
-            <YStack paddingHorizontal={SCREEN_PADDING} gap="$2">
+            {/* Outside the summary: a judgement is about the finished cup, not
+                part of the machine trace or figures. */}
+            <YStack paddingHorizontal={SCREEN_PADDING} gap="$2"
+                    marginBottom={JUDGEMENT_ACTION_GAP}>
                 <BrewJudgement rating={judgement.rating} note={judgement.note}
                                onRate={handoff.rateBrew}
                                onNote={handoff.annotateBrew}
@@ -415,7 +472,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                     <XStack alignItems="center" justifyContent="space-between">
                         <DotMatrixText testID="record-pinned" fontSize={11}
                                        letterSpacing={1.4} color={palette.dim}>
-                            KEPT THROUGH THE SWEEP
+                            TRACE KEPT
                         </DotMatrixText>
                         <Pressable testID="record-release"
                                    accessibilityRole="button"
@@ -424,45 +481,21 @@ export default function BrewRecord({recipeLookup}: Props) {
                                    onPress={() => judgement.setPinned(false)}>
                             <DotMatrixText fontSize={11} letterSpacing={1.4}
                                            color={palette.muted}>
-                                RELEASE
+                                LET IT EXPIRE
                             </DotMatrixText>
                         </Pressable>
                     </XStack>
                 )}
             </YStack>
 
-            {/* Nothing to picture and no stream to hand over: both exports
-                would return an empty file for a brew the app never watched. */}
+            {/* No stream to export or share as a story for a brew the app never
+                watched. */}
             {watched && (
-                <YStack gap="$2" paddingHorizontal={SCREEN_PADDING}>
-                    <XStack gap="$3">
-                        <ExportButton label="Save as image" busy={busy}
-                                      onPress={() => void shareImage()} />
-                        <ExportButton label="Export the data" busy={busy}
-                                      onPress={() => void shareData()} />
-                    </XStack>
-                    <XStack>
-                        <ExportButton label="Make a story card" busy={story.busy}
-                                      accessibilityLabel="Make a story card to share"
-                                      onPress={() => setStoryOpen(true)} />
-                    </XStack>
-                    {hasComparisonCandidate && (
-                        <XStack>
-                            <ExportButton label="Compare" busy={false}
-                                          accessibilityLabel="Compare with another brew"
-                                          onPress={openComparisonPicker} />
-                        </XStack>
-                    )}
-                    {showHandoff && (
-                        // At Doto's maximum 1.4x accessibility scale, the
-                        // Beanconqueror label cannot share a three-way split
-                        // with the two exports; a full row gives it width.
-                        <XStack>
-                            <ExportButton label={handoffTarget.buttonLabel}
-                                          busy={handoff.busy}
-                                          onPress={handoff.requestSend} />
-                        </XStack>
-                    )}
+                <YStack paddingHorizontal={SCREEN_PADDING}>
+                    <YStack testID="record-actions" width={actionFullWidth} gap="$2">
+                    <RecordActionRows pairs={actionPairs}
+                                      halfWidth={actionHalfWidth}
+                                      fullWidth={actionFullWidth} />
                     {handoff.sentAt > 0 && (
                         <Text fontSize={12} color={palette.dim}>
                             {HANDOFF_ALREADY_SENT(
@@ -470,21 +503,8 @@ export default function BrewRecord({recipeLookup}: Props) {
                             )}
                         </Text>
                     )}
+                    </YStack>
                 </YStack>
-            )}
-            {/* Only when there is one to copy, and only for someone who has
-                found the machine console. A brew recorded before this existed,
-                or one whose log the retention sweep has taken, would otherwise
-                offer a copy that yields an empty clipboard, which reads as the
-                app having lost it rather than never having had it. And a raw
-                frame log means nothing to anyone who is not debugging the
-                machine, so it rides the same seven-tap gate as the rest of the
-                diagnostics rather than sitting in everyone's way. */}
-            {frames.length > 0 && consoleFound && (
-                <XStack paddingHorizontal={SCREEN_PADDING}>
-                    <ExportButton label="Copy the frame log" busy={false}
-                                  onPress={() => copyFrames(frames)} />
-                </XStack>
             )}
             </ScrollView>
             </YStack>
