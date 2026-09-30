@@ -110,7 +110,7 @@ describe("BrewRateChart", () => {
 
         const d = getByTestId("rate-chart-cup").props.d as string;
         expect(d.match(/M/g)).toHaveLength(1);
-        expect(d.match(/L/g)).toHaveLength(2);
+        expect(d.match(/C/g)).toHaveLength(2);
     });
 
     it("keeps the old 150 ms split for a dense stream with one missing rate point", async () => {

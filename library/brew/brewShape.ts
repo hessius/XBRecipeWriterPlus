@@ -275,3 +275,75 @@ export function toPath(points: Point[], box: Box): string {
         })
         .join(" L");
 }
+
+type DrawnPoint = {x: number; y: number};
+
+function drawnPoints(points: Point[], box: Box): DrawnPoint[] {
+    const spanT = box.maxT > 0 ? box.maxT : 1;
+    const spanV = box.maxV > 0 ? box.maxV : 1;
+    const round = (n: number) => Math.round(n * 10) / 10;
+    return points.map(({t, v}) => ({
+        x: round((t / spanT) * box.width),
+        y: round(box.height - (v / spanV) * box.height)
+    }));
+}
+
+/**
+ * Points to an SVG path whose cubic spans preserve each local value range.
+ *
+ * Fritsch and Carlson tangents make each interval monotone when the points on
+ * either side are monotone, so the rate chart can look smooth without drawing
+ * a rate that was never fitted. Runs that cannot support a cubic fall back to
+ * the same straight path as `toPath`.
+ */
+export function toMonotonePath(points: Point[], box: Box): string {
+    if (points.length < 3) return toPath(points, box);
+
+    const drawn = drawnPoints(points, box);
+    const segments = drawn.length - 1;
+    const deltas: number[] = [];
+    for (let i = 0; i < segments; i += 1) {
+        const dx = drawn[i + 1].x - drawn[i].x;
+        if (dx <= 0) return toPath(points, box);
+        deltas.push((drawn[i + 1].y - drawn[i].y) / dx);
+    }
+
+    const slopes = Array<number>(drawn.length);
+    slopes[0] = deltas[0];
+    slopes[drawn.length - 1] = deltas[deltas.length - 1];
+    for (let i = 1; i < drawn.length - 1; i += 1) {
+        slopes[i] = deltas[i - 1] * deltas[i] <= 0
+            ? 0
+            : (deltas[i - 1] + deltas[i]) / 2;
+    }
+
+    for (let i = 0; i < segments; i += 1) {
+        if (deltas[i] === 0) {
+            slopes[i] = 0;
+            slopes[i + 1] = 0;
+            continue;
+        }
+        const alpha = slopes[i] / deltas[i];
+        const beta = slopes[i + 1] / deltas[i];
+        const magnitude = Math.hypot(alpha, beta);
+        if (magnitude > 3) {
+            const shrink = 3 / magnitude;
+            slopes[i] = shrink * alpha * deltas[i];
+            slopes[i + 1] = shrink * beta * deltas[i];
+        }
+    }
+
+    const round = (n: number) => Math.round(n * 10) / 10;
+    const parts = [`M${drawn[0].x} ${drawn[0].y}`];
+    for (let i = 0; i < segments; i += 1) {
+        const start = drawn[i];
+        const end = drawn[i + 1];
+        const dx = end.x - start.x;
+        parts.push(
+            `C${round(start.x + dx / 3)} ${round(start.y + slopes[i] * dx / 3)} `
+            + `${round(end.x - dx / 3)} ${round(end.y - slopes[i + 1] * dx / 3)} `
+            + `${end.x} ${end.y}`
+        );
+    }
+    return parts.join(" ");
+}

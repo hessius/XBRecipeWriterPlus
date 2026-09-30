@@ -4,7 +4,7 @@ import Svg, {G, Path, Text as SvgText} from "react-native-svg";
 
 import {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
-import {type Box, type Point, toPath} from "@/library/brew/brewShape";
+import {type Box, type Point, toMonotonePath} from "@/library/brew/brewShape";
 import {maxRateOf, type FlowPoint} from "@/library/brew/flowRate";
 import {
     contiguousRateRuns,
@@ -47,7 +47,7 @@ function channelPoints(run: FlowPoint[], of: "cup" | "water"): Point[] {
 
 function channelPath(runs: FlowPoint[][], of: "cup" | "water", box: Box): string {
     return runs
-        .map((run) => toPath(channelPoints(run, of), box))
+        .map((run) => toMonotonePath(channelPoints(run, of), box))
         .filter((path) => path !== "")
         .join(" ");
 }
