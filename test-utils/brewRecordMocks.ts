@@ -2,7 +2,7 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 
 export type BrewRecordOpenResult =
-    {record: StoredBrew; samples: BrewSample[]; frames?: string} | null;
+    {record: StoredBrew; samples: BrewSample[]} | null;
 
 export const brewRecordFixture: StoredBrew = {
     id: "brew-1", recipeUuid: "uuid-1", recipeName: "Ethiopia Guji",

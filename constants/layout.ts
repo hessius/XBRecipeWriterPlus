@@ -14,3 +14,12 @@
  * disagree, and a test can say so once instead of every call site casting.
  */
 export const SCREEN_PADDING = 18;
+
+/**
+ * The gap between paired finished-record action buttons.
+ *
+ * Equal to Tamagui's `$3` space token. `app/brewRecord.tsx` subtracts the same
+ * value it writes as the row gap when it calculates each half-width button. If
+ * those drift, two paired actions overflow their row by the difference.
+ */
+export const RECORD_ACTION_GAP = 13;

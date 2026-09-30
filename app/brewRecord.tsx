@@ -37,7 +37,7 @@ import {storyCoffeeLine} from "@/library/brew/storyCard";
 import {plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
-import {SCREEN_PADDING} from "@/constants/layout";
+import {RECORD_ACTION_GAP, SCREEN_PADDING} from "@/constants/layout";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import {HANDOFF_ALREADY_SENT, ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
 
@@ -46,7 +46,6 @@ export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
 
 let sharedLookup: RecipeLookup | undefined;
 
-const RECORD_ACTION_GAP = 13;
 const JUDGEMENT_ACTION_GAP = "$4";
 
 type RecordAction = {
@@ -339,6 +338,9 @@ export default function BrewRecord({recipeLookup}: Props) {
     };
     const actionFullWidth = Math.max(0, width - SCREEN_PADDING * 2);
     const actionHalfWidth = Math.max(0, (actionFullWidth - RECORD_ACTION_GAP) / 2);
+    // This pair can never render as [handoff, export]: the handoff label is
+    // wider than a half slot at every font scale, so EXPORT THE DATA sits alone
+    // under the full-width handoff by design.
     // Doto Bold at 11 pt and the bounded 1.4 font scale measures SEND TO
     // BEANCONQUEROR at 226.04 pt. On a 320 pt screen the two-up slot is
     // 135.5 pt, so this button keeps its own row instead of pairing.

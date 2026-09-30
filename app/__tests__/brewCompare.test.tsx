@@ -89,8 +89,8 @@ function pair(over: Parameters<typeof makeBrewRecordFixture>[0] = {}) {
     const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
     const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan, ...over});
     setRecords({
-        a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-        b: {record: b, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+        a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+        b: {record: b, samples: makeBrewRecordSamples(comparisonSamples)}
     });
     setParams({a: "a", b: "b"});
     return {a, b};
@@ -152,8 +152,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
         const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(rateSamples(5)), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2))},
+            b: {record: b, samples: makeBrewRecordSamples(rateSamples(5))}
         });
         setParams({a: "a", b: "b"});
         const {getByTestId, getByLabelText} =
@@ -177,8 +177,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
         const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(shortRateSamples(5)), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2))},
+            b: {record: b, samples: makeBrewRecordSamples(shortRateSamples(5))}
         });
         setParams({a: "a", b: "b"});
         const {getByLabelText, getByTestId, queryByTestId} =
@@ -200,8 +200,8 @@ describe("the comparison screen", () => {
             startedAt: 3_600_000
         });
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(isolatedRateSamples(2)), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(rateSamples(5)), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(isolatedRateSamples(2))},
+            b: {record: b, samples: makeBrewRecordSamples(rateSamples(5))}
         });
         setParams({a: "a", b: "b"});
         const {getByLabelText, getByTestId, queryByTestId} =
@@ -266,8 +266,8 @@ describe("the comparison screen", () => {
             waterTotal: 400
         });
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(rateSamples(3)), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2))},
+            b: {record: b, samples: makeBrewRecordSamples(rateSamples(3))}
         });
         setParams({a: "a", b: "b"});
 
@@ -302,8 +302,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a"});
         const b = makeBrewRecordFixture({id: "b", hasStream: false});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: [], frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+            b: {record: b, samples: []}
         });
         setParams({a: "a", b: "b"});
         const {getByText, getByTestId, queryByTestId} =
@@ -317,8 +317,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a"});
         const b = makeBrewRecordFixture({id: "b", hasStream: false});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
-            b: {record: b, samples: [], frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2))},
+            b: {record: b, samples: []}
         });
         setParams({a: "a", b: "b"});
         const {getByLabelText, getByTestId, queryByTestId} =
@@ -336,8 +336,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a", hasStream: false});
         const b = makeBrewRecordFixture({id: "b"});
         setRecords({
-            a: {record: a, samples: [], frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+            a: {record: a, samples: []},
+            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples)}
         });
         setParams({a: "a", b: "b"});
         const {getByText, getByTestId, queryByTestId} =
@@ -354,8 +354,8 @@ describe("the comparison screen", () => {
         const b = makeBrewRecordFixture({id: "b", hasStream: false});
         setJudgementStore({setPinned});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: [], frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+            b: {record: b, samples: []}
         });
         setParams({a: "a", b: "b"});
         const {getByLabelText} = await renderWithProviders(<BrewCompareScreen />);
@@ -368,8 +368,8 @@ describe("the comparison screen", () => {
         const b = makeBrewRecordFixture({id: "b", hasStream: false});
         setJudgementStore({});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: [], frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+            b: {record: b, samples: []}
         });
         setParams({a: "a", b: "b"});
         const {getByLabelText, queryByLabelText} =
@@ -382,8 +382,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a", pinned: true});
         const b = makeBrewRecordFixture({id: "b", hasStream: false});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: [], frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+            b: {record: b, samples: []}
         });
         setParams({a: "a", b: "b"});
         const {getByText, queryByLabelText} =
@@ -396,8 +396,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a", hasStream: false});
         const b = makeBrewRecordFixture({id: "b", hasStream: false});
         setRecords({
-            a: {record: a, samples: [], frames: ""},
-            b: {record: b, samples: [], frames: ""}
+            a: {record: a, samples: []},
+            b: {record: b, samples: []}
         });
         setParams({a: "a", b: "b"});
         const {getByText, getByTestId, queryByTestId} =
@@ -411,8 +411,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a", hasStream: false});
         const b = makeBrewRecordFixture({id: "b", hasStream: false});
         setRecords({
-            a: {record: a, samples: [], frames: ""},
-            b: {record: b, samples: [], frames: ""}
+            a: {record: a, samples: []},
+            b: {record: b, samples: []}
         });
         setParams({a: "a", b: "b"});
 
@@ -429,8 +429,7 @@ describe("the comparison screen", () => {
         setRecords({
             a: {
                 record: makeBrewRecordFixture({id: "a"}),
-                samples: makeBrewRecordSamples(),
-                frames: ""
+                samples: makeBrewRecordSamples()
             }
         });
         setParams({a: "a", b: "gone"});
@@ -445,8 +444,8 @@ describe("the comparison screen", () => {
             plan: comparisonPlan.map((stage) => ({...stage, volume: stage.volume + 40}))
         });
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples()},
+            b: {record: b, samples: makeBrewRecordSamples()}
         });
         setParams({a: "a", b: "b"});
         const {getByTestId} = await renderWithProviders(<BrewCompareScreen />);
@@ -457,8 +456,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a"});
         const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples)}
         });
         setParams({a: "a", b: "b"});
         const {getByTestId, queryByTestId, queryByText} =
@@ -478,8 +477,8 @@ describe("the comparison screen", () => {
             ]
         });
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples)}
         });
         setParams({a: "a", b: "b"});
         const {getByText, queryByText} = await renderWithProviders(<BrewCompareScreen />);
@@ -491,7 +490,7 @@ describe("the comparison screen", () => {
     it("refuses to compare a brew with itself", async () => {
         const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)}
         });
         setParams({a: "a", b: "a"});
         const {getByTestId, getByText} = await renderWithProviders(<BrewCompareScreen />);
@@ -504,8 +503,8 @@ describe("the comparison screen", () => {
         const a = makeBrewRecordFixture({id: "a", recipeUuid: "recipe-a", plan: comparisonPlan});
         const b = makeBrewRecordFixture({id: "b", recipeUuid: "recipe-b", plan: comparisonPlan});
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples)}
         });
         setParams({a: "a", b: "b"});
         const {getByTestId, getByText} = await renderWithProviders(<BrewCompareScreen />);

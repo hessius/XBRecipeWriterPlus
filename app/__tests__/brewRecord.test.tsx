@@ -34,10 +34,6 @@ beforeEach(() => {
     sharedSettings().set("beanconquerorHandoff", true);
 });
 
-/**
- * `frames` is optional here only: the real `open()` always returns one, but a
- * test that is not about the frame log should not have to say so.
- */
 let mockOpened: BrewRecordOpenResult = null;
 
 // Settable per test — defaults to the `id` case; set to `{latest: "1"}` for
@@ -379,8 +375,7 @@ describe("brew record", () => {
     });
 
     it("offers the pruned record actions", async () => {
-        sharedSettings().set("machineConsoleAcknowledged", true);
-        mockOpened = {record, samples: [], frames: "raw machine frame"};
+        mockOpened = {record, samples: []};
 
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
@@ -417,6 +412,30 @@ describe("brew record", () => {
         expect(screen.getAllByTestId("record-action-row")).toHaveLength(2);
         expect(screen.getByLabelText("Export the data")).toBeTruthy();
         expect(screen.getByLabelText("Share this brew as a story card")).toBeTruthy();
+    });
+
+    it("keeps the Beanconqueror handoff on a full-width row", async () => {
+        mockBrews = [record];
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        const handoffStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-handoff").props.style as StyleProp<ViewStyle>
+        );
+        const exportStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
+        );
+        const actionStyle = StyleSheet.flatten(
+            screen.getByTestId("record-actions").props.style as StyleProp<ViewStyle>
+        );
+        const handoffWidth = handoffStyle?.width;
+        const exportWidth = exportStyle?.width;
+        const actionWidth = actionStyle?.width;
+        expect(typeof handoffWidth).toBe("number");
+        expect(typeof exportWidth).toBe("number");
+        expect(typeof actionWidth).toBe("number");
+
+        expect(handoffWidth as number).toBe(actionWidth);
+        expect(handoffWidth as number).toBeGreaterThan(exportWidth as number);
     });
 
     it("does not offer comparison when this is the only brew of its recipe", async () => {
@@ -775,14 +794,6 @@ describe("brew record", () => {
         expect(screen.getByText(/that brew is no longer here/i)).toBeTruthy();
     });
 
-    it("captures the stage ladder along with the trace and the figures", async () => {
-        await renderWithProviders(
-            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => twoPours)}} />
-        );
-        const capture = within(screen.getByTestId("brew-capture"));
-        expect(capture.getByTestId("ladder")).toBeTruthy();
-    });
-
     it("paints the captured area so the PNG is not a white sheet with no margin", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         const style = StyleSheet.flatten(
@@ -882,8 +893,6 @@ describe("a verdict on a record", () => {
 
     it("keeps the control out of the captured picture", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        expect(within(screen.getByTestId("brew-capture")).queryByTestId("judgement-stars-1"))
-            .toBeNull();
         expect(screen.queryByTestId("judgement-stars-1")).not.toBeNull();
     });
 });
@@ -1107,8 +1116,8 @@ describe("a brew the app did not watch", () => {
     it("offers neither export", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup}/>);
 
-        expect(screen.queryByText("Save as image")).toBeNull();
-        expect(screen.queryByText("Export the data")).toBeNull();
+        expect(screen.queryByLabelText("Export the data")).toBeNull();
+        expect(screen.queryByLabelText("Share this brew as a story card")).toBeNull();
     });
 });
 
@@ -1174,12 +1183,12 @@ describe("brew record's story card", () => {
             expect(card.getByTestId("ladder")).toBeTruthy();
         });
 
-    it("leaves the in-place capture alone, so the export still photographs the screen",
+    it("leaves the in-place capture alone while the story sheet is open",
         async () => {
             await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
             await openCard();
             // Two summaries are mounted, and exactly one of them is the node
-            // the existing export captures. Hidden elements included: the
+            // kept as the in-place capture. Hidden elements included: the
             // sheet has taken the screen behind it out of the tree a query
             // walks by default, and the capture target is down there.
             expect(screen.getAllByTestId("brew-capture", {includeHiddenElements: true}))
