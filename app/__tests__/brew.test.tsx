@@ -787,7 +787,7 @@ describe("live flow and drawdown", () => {
         expect(await screen.findByTestId("figures-flow")).toBeTruthy();
         expect(screen.getByText("FLOW")).toBeTruthy();
         expect(screen.getByText("2.0 G/S")).toBeTruthy();
-        expect(screen.getByText("POUR 3.0")).toBeTruthy();
+        expect(screen.getByText("POUR 3.0 ML/S")).toBeTruthy();
     });
 
     it("hides the flow row while the bypass is the only thing on the scale", async () => {

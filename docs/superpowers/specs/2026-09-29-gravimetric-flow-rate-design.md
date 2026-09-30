@@ -179,12 +179,14 @@ the gate described there opens:
 
 ```
 WATER 240      CUP 186      TIME 2:41
-FLOW  ▁▂▄▆▇▆▄  1.8 g/s   POUR 3.1
+FLOW  ▁▂▄▆▇▆▄  1.8 g/s   POUR 3.1 ml/s
 DRAWDOWN 0:38
 ```
 
 - A sparkline of the last 30 seconds of cup rate, then the current value, then
-  the pour rate as a smaller second figure.
+  the pour rate as a smaller second figure. Both carry their unit: the cup
+  rate is grams per second and the pour rate millilitres per second, and a
+  bare second number would be read in the first one's units.
 - The sparkline is the point. It is what stops the number being a lone instant.
 - **Absent until the brew is pouring.** `flowNow` returns zeroes on an empty
   stream, and a row reading `0.0 g/s` through waking, sending and grinding

@@ -151,7 +151,7 @@ describe("BrewFigures", () => {
         );
         expect(screen.getByText("FLOW")).toBeTruthy();
         expect(screen.getByText("2.4 G/S")).toBeTruthy();
-        expect(screen.getByText("POUR 3.1")).toBeTruthy();
+        expect(screen.getByText("POUR 3.1 ML/S")).toBeTruthy();
         expect(screen.getByLabelText(
             "Flow, 2.4 grams per second, pouring 3.1 millilitres per second"
         )).toBeTruthy();
@@ -177,7 +177,7 @@ describe("BrewFigures", () => {
             />
         );
         expect(screen.getByText("0.0 G/S")).toBeTruthy();
-        expect(screen.getByText("POUR 0.0")).toBeTruthy();
+        expect(screen.getByText("POUR 0.0 ML/S")).toBeTruthy();
     });
 
     it("reserves the flow row height when asked", async () => {

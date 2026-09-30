@@ -624,7 +624,7 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 | `brew.figures.time` | `components/BrewFigures.tsx:169` | Doto figure label. | `TIME` |
 | `brew.figures.flow` | `components/BrewFigures.tsx:182` | Doto flow row label, visible only when a cup rate can be said. | `FLOW` |
 | `brew.figures.flow.rate` | `components/BrewFigures.tsx:191` | Doto primary figure on the flow row. `${...}` is the cup rate in g/s to one decimal place. The design mockup used lowercase `g/s`, but the app renders Doto units uppercase by rule. | `${flow} G/S` |
-| `brew.figures.pour` | `components/BrewFigures.tsx:197` | Smaller second figure on the flow row. `${...}` is ml/s to one decimal place. | `POUR ${pourRate.toFixed(1)}` |
+| `brew.figures.pour` | `components/BrewFigures.tsx:197` | Smaller second figure on the flow row. `${...}` is ml/s to one decimal place. The unit is spelled out because the figure beside it is grams per second. | `POUR ${pourRate.toFixed(1)} ML/S` |
 | `brew.figures.flow.a11y` | `components/BrewFigures.tsx:178` (a11y) | (a11y) The grouped flow row's spoken label. Grouping the row replaces its children's spoken text, so both rates and both units have to be in the label. Not a live region: on the brew screen the figures change continuously, and the user's focus should not be interrupted. | `Flow, 2.4 grams per second, pouring 3.1 millilitres per second` |
 | `brew.figures.drawdown` | `components/BrewFigures.tsx:159` | Doto drawdown line. The rate term is present only when a finished record can say it. `${...}` are the drawdown clock and g/s to one decimal place. | `DRAWDOWN ${clock(drawdown)} · ${rate} G/S` |
 | `brew.trace.a11y` | `components/BrewTrace.tsx:185,186` (a11y) | (a11y) The brew trace graph. | `Brew trace` |

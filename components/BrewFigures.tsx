@@ -194,7 +194,7 @@ export default function BrewFigures(
                                     <DotMatrixText fontSize={10} weight="bold"
                                                    letterSpacing={1.6} color={palette.dim}
                                                    numberOfLines={1} style={{flexShrink: 0}}>
-                                        {`POUR ${pourRateText}`}
+                                        {`POUR ${pourRateText} ML/S`}
                                     </DotMatrixText>
                                 )}
                             </XStack>
