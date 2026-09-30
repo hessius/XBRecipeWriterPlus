@@ -9,7 +9,6 @@ import {maxRateOf, type FlowPoint} from "@/library/brew/flowRate";
 import {
     contiguousRateRuns,
     hasDrawableRateRun,
-    RATE_ADJACENT_MS,
     RATE_HEIGHT,
     RATE_LABEL_LINE_HEIGHT,
     RATE_LABEL_SIZE,
@@ -27,8 +26,6 @@ import {channelStyle, type Role} from "@/library/brew/traceStyle";
 /** Never scale a nearly flat brew up into a mountain range. */
 const MIN_AXIS = 4;
 export {RATE_HEIGHT};
-
-export {RATE_ADJACENT_MS};
 
 type Props = {
     series: FlowPoint[];
@@ -84,7 +81,6 @@ export default function BrewRateChart({
     const runs = contiguousRateRuns(series);
     const waterPath = channelPath(runs, "water", box);
     const cupPath = channelPath(runs, "cup", box);
-    if (waterPath === "" && cupPath === "") return null;
 
     return (
         <View testID="rate-chart" pointerEvents="none">
