@@ -332,6 +332,12 @@ rate chart is text, so it needs more air than the figure block below. The story
 card budget spends `RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP` for the rate
 chart and passes those same values into `BrewSummary`.
 
+Amendment, 2026-09-30: a measured on-screen `BrewSummary` reserves a 44 pt
+`SUMMARY_SCROLL_PEEK` before sizing the stage ladder. That reveals enough of
+the judgement section below the fold for `HOW WAS IT` to be recognisable on the
+record screen and finished live brew. Story-card summaries pass fixed
+`storyBands` and no viewport height, so they do not spend the peek.
+
 The rate chart does not inset horizontally. Its plot is the full `width`, just
 like `BrewTrace`, and only the vertical dimension is inset by half the widest
 rate stroke so high and low rates do not clip. Horizontal stroke caps are

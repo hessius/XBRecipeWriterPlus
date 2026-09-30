@@ -26,6 +26,8 @@ import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
 export const TRACE_HEIGHT = 150;
+/** Enough of the next scroll section to show that more than the summary exists. */
+export const SUMMARY_SCROLL_PEEK = 44;
 
 /**
  * The margin around the captured content, in points.
@@ -156,9 +158,13 @@ export default function BrewSummary({
     // ladder is one subtree, so its height is one reading; the ladder's own
     // height is excluded, which is what stops this feeding back on itself.
     const [chromeHeight, setChromeHeight] = useState(0);
+    const scrollPeek = storyBands === undefined ? SUMMARY_SCROLL_PEEK : 0;
     const ladderHeight = availableHeight === 0 || chromeHeight === 0
         ? 0
-        : Math.max(0, availableHeight - chromeHeight - capturePadding * 2 - ladderTopGap);
+        : Math.max(
+            0,
+            availableHeight - chromeHeight - capturePadding * 2 - ladderTopGap - scrollPeek
+        );
     const bands = storyBands ?? summaryBands(ladderHeight, stages.length);
 
     return (
