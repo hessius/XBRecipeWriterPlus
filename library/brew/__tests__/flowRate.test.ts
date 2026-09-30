@@ -203,7 +203,7 @@ describe("flowNow", () => {
     it("stops reporting the last brew rate as soon as bypass starts", () => {
         const samples = [
             ...ramp(10, 2),
-            {at: 10_100, water: 22, cup: 22, pour: 2}
+            {at: 10_000, water: 22, cup: 22, pour: 2}
         ];
 
         expect(flowNow(samples, 1)).toBeNull();

@@ -207,7 +207,7 @@ export function flowAt(
     for (const sample of samples) {
         if (
             sample.at <= at &&
-            (latest === undefined || sample.at > latest.at)
+            (latest === undefined || sample.at >= latest.at)
         ) {
             latest = sample;
         }
