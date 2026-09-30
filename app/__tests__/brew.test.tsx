@@ -58,6 +58,7 @@ let mockCanOfferPro = false;
 let mockFirstBrewDone = true;
 let mockError: string | null = null;
 let mockBypass: BypassView | undefined = undefined;
+let mockRecord: StoredBrew | undefined = undefined;
 let mockBandAllocationArgs: [number, number][] = [];
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
@@ -128,6 +129,7 @@ jest.mock("@/hooks/useLiveBrew", () => {
             holding: mockHolding,
             heldSeconds: 0,
             bypass: mockBypass,
+            record: mockRecord,
         },
         start: mockStart,
         startInPro: mockStartInPro,
@@ -215,6 +217,7 @@ beforeEach(() => {
     mockError = null;
     traceAnimationArgs = [];
     mockBypass = undefined;
+    mockRecord = undefined;
     mockBandAllocationArgs = [];
 });
 
@@ -494,6 +497,13 @@ describe("brew route", () => {
         mockElapsed = 5;
         mockPhase = {name: "done"} as BrewPhase;
         mockActiveIndex = 1;
+        mockRecord = {
+            ...record,
+            endedAt: 5_000,
+            drawdownAt: 3_000,
+            cupAtDrawdown: 6,
+            cupTotal: 10
+        };
 
         await renderWithProviders(<Brew />);
 

@@ -278,10 +278,17 @@ card to uphold and the chart can simply be part of it.
 Amendment, 2026-09-30: the finished brew modal passes the same retained stream
 through `flowSeries` and passes the final drawdown clock plus average drawdown
 rate. A brew shared immediately from the modal and the same brew shared later
-from the record therefore carry the same chart and figure. The story card keeps
-the chart too, but uses a pure height budget from `storyCard.ts` so the compact
-card summary shrinks the ladder and fixed chart bands into the 9:16 readable
-band instead of clipping under the platform-safe top and bottom bands.
+from the record therefore carry the same chart and figure. The story card uses
+a prescriptive height budget from `storyCard.ts`, with the measured card width,
+stage count, bypass row, figure rows and bounded Doto font scale as inputs. It
+drops story-only rows in this order: tags, rating, coffee. If the card is still
+too full it drops the rate chart, then shrinks the trace to its story floor, and
+only then drops the stage ladder on very compact cards with many stages. The
+ladder floor is the same `stageLadderRungMinHeight` used by
+`BrewStageLadder`, so the budget includes the text row, the rung gap and the
+optional bypass closing rung. The recipe name does not wrap in the summary: it
+is the single-line `MarqueeText` path held still for capture. Tags may wrap, and
+the budget counts their rows before deciding whether they fit.
 
 - Both channels on one rate axis, on the same real-seconds time axis the trace
   uses, so the two charts line up vertically and a feature in one can be found

@@ -375,3 +375,9 @@ export function drawdownRate(record: BrewRecord): number | null {
     const rate = delivered / seconds;
     return Number.isFinite(rate) && rate > 0 ? rate : null;
 }
+
+export function drawdownFigures(record: BrewRecord): {seconds: number; rate: number | null} | null {
+    const seconds = drawdownSeconds(record);
+    if (seconds === null) return null;
+    return {seconds, rate: drawdownRate(record)};
+}

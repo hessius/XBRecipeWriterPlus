@@ -1,8 +1,10 @@
 import {
     STORY_ASPECT, STORY_SAFE_BOTTOM, STORY_SAFE_TOP,
+    STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
     storyCoffeeLine, storyFrame, storySummaryBudget
 } from "../storyCard";
 import type {BrewRecord} from "../BrewRecord";
+import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
 
 const brew = (over: Partial<BrewRecord> = {}) =>
     ({id: "a", ...over}) as BrewRecord;
@@ -46,14 +48,57 @@ describe("the frame", () => {
             hasRateChart: true,
             hasCoffee: true,
             hasRating: true,
-            tagCount: 4
+            tags: ["a", "b", "c", "d"],
+            fontScale: 1
         });
 
         expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
         expect(budget.summaryAvailableHeight).toBeGreaterThanOrEqual(
             budget.minimumSummaryHeight
         );
-        expect(budget.rateLabelRowHeight).toBe(21);
+        expect(budget.rateLabelRowHeight).toBeGreaterThan(0);
+    });
+
+    it("fits every story sheet width, card stage count and bounded font scale", () => {
+        let worst = {margin: Number.POSITIVE_INFINITY, width: 0, stages: 0, fontScale: 0};
+
+        for (const width of STORY_TEST_WIDTHS) {
+            for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+                for (const fontScale of STORY_TEST_FONT_SCALES) {
+                    const budget = storySummaryBudget({
+                        width,
+                        stages,
+                        hasRateChart: true,
+                        hasCoffee: true,
+                        hasRating: true,
+                        tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
+                        fontScale,
+                        hasBypass: true,
+                        figureExtraRows: 2
+                    });
+                    const margin = budget.contentHeight - budget.requiredHeight;
+                    if (margin < worst.margin) worst = {margin, width, stages, fontScale};
+
+                    expect({
+                        width,
+                        stages,
+                        fontScale,
+                        requiredHeight: budget.requiredHeight,
+                        contentHeight: budget.contentHeight,
+                        budget
+                    }).toEqual(expect.objectContaining({
+                        requiredHeight: expect.any(Number),
+                        contentHeight: expect.any(Number)
+                    }));
+                    expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+                    expect(budget.summaryAvailableHeight).toBeGreaterThanOrEqual(
+                        budget.minimumSummaryHeight
+                    );
+                }
+            }
+        }
+
+        expect(worst.margin).toBeGreaterThanOrEqual(0);
     });
 });
 

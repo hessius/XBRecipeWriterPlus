@@ -106,6 +106,9 @@ type Props = {
     rateHeight?: number;
     capturePadding?: number;
     ladderTopGap?: number;
+    storyBands?: {barHeight: number; rungGap: number};
+    showRateChart?: boolean;
+    showStages?: boolean;
 };
 
 /**
@@ -125,6 +128,7 @@ export default function BrewSummary({
     drawdown = null, rateSeries, drawdownRate = null, dial = null, availableHeight = 0,
     traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT,
     capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
+    storyBands, showRateChart = true, showStages = true,
     testID = "brew-capture"
 }: Props) {
     // The drawable width inside the capture's own padding.
@@ -137,8 +141,8 @@ export default function BrewSummary({
     const [chromeHeight, setChromeHeight] = useState(0);
     const ladderHeight = availableHeight === 0 || chromeHeight === 0
         ? 0
-        : availableHeight - chromeHeight - capturePadding * 2;
-    const bands = summaryBands(ladderHeight, stages.length);
+        : Math.max(0, availableHeight - chromeHeight - capturePadding * 2 - ladderTopGap);
+    const bands = storyBands ?? summaryBands(ladderHeight, stages.length);
 
     return (
         <View testID={testID} style={[styles.capture, {padding: capturePadding}]}>
@@ -188,7 +192,7 @@ export default function BrewSummary({
                 </YStack>
             )}
 
-            {hasStream && (
+            {hasStream && showRateChart && (
                 <BrewRateChart
                     series={rateSeries ?? []}
                     accent={accent}
@@ -219,6 +223,7 @@ export default function BrewSummary({
             </View>
             {/* Spaced by hand: the capture has no gap, so the trace and the
                 figures stay flush the way they were on screen. */}
+            {showStages && (
             <YStack marginTop={ladderTopGap}>
             {stagesUnavailable ? (
                 <DotMatrixText fontSize={11} letterSpacing={1.2} color={palette.muted}>
@@ -253,6 +258,7 @@ export default function BrewSummary({
                 />
             )}
             </YStack>
+            )}
         </View>
     );
 }

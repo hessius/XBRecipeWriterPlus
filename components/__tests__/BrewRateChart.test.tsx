@@ -4,6 +4,7 @@ import {PixelRatio} from "react-native";
 import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
 import {palette} from "@/constants/colors";
+import {rateChartPlotTop} from "@/library/brew/rateChartGeometry";
 import {traceTimeExtent} from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {flowSeries, type FlowPoint} from "@/library/brew/flowRate";
@@ -185,16 +186,16 @@ describe("BrewRateChart", () => {
 
     it("reserves the label row from the current font scale", async () => {
         const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1.4);
-        const {getByTestId} = await renderWithProviders(
+        const {getByTestId, queryByTestId} = await renderWithProviders(
             <BrewRateChart series={series} accent={ACCENT} width={WIDTH} maxT={5} />
         );
 
         const labelY = svgScalar(
             getByTestId("rate-chart-label").props.y as number | number[] | string
         );
-        const plotY = svgScalar(
-            getByTestId("rate-chart-plot-origin").props.y as number | number[] | string
-        );
+        expect(queryByTestId("rate-chart-plot-origin", {includeHiddenElements: true}))
+            .toBeNull();
+        const plotY = rateChartPlotTop(1.4);
         expect(plotY - labelY).toBeGreaterThanOrEqual(labelY * 0.35);
 
         scaleSpy.mockRestore();

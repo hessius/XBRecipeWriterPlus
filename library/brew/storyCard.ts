@@ -1,6 +1,9 @@
 import type {BrewRecord} from "./BrewRecord";
 import {BAR_FLOOR, GAP_FLOOR} from "./bands";
 import {resolvedOrigin, resolvedProcess} from "./beanTags";
+import {RATE_HEIGHT, rateChartLabelRowHeight} from "./rateChartGeometry";
+import {stageLadderRungMinHeight} from "./stageLadderGeometry";
+import {dotoRowHeight, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
 
 /**
  * The shape of a story frame, as a ratio of width to height.
@@ -55,7 +58,11 @@ export type StorySummaryBudgetInput = {
     hasRateChart: boolean;
     hasCoffee: boolean;
     hasRating: boolean;
-    tagCount: number;
+    tags?: string[];
+    tagCount?: number;
+    hasBypass?: boolean;
+    figureExtraRows?: number;
+    fontScale?: number;
 };
 
 export type StorySummaryBudget = {
@@ -69,56 +76,208 @@ export type StorySummaryBudget = {
     capturePadding: number;
     ladderTopGap: number;
     rateLabelRowHeight: number;
+    barHeight: number;
+    rungGap: number;
+    showRateChart: boolean;
+    showCoffee: boolean;
+    showRating: boolean;
+    shownTagCount: number;
+    tagRows: number;
+    showStages: boolean;
+    margin: number;
 };
 
-const STORY_CAPTURE_PADDING = 7;
-const STORY_TRACE_HEIGHT = 90;
-const STORY_RATE_HEIGHT = 84;
-const STORY_RATE_LABEL_ROW_MAX = 21;
-const STORY_NAME_ROW = 31;
-const STORY_FIGURES_BLOCK = 60;
-const STORY_LADDER_TOP_GAP = 8;
-const STORY_GAP = 8;
-const STORY_HEADER_ROW = 31;
-const STORY_COFFEE_ROW = 24;
-const STORY_RATING_ROW = 16;
-const STORY_TAG_ROW = 30;
+export const STORY_CAPTURE_PADDING = 7;
+export const STORY_TRACE_HEIGHT = 90;
+export const STORY_TRACE_MIN_HEIGHT = 44;
+export const STORY_LADDER_TOP_GAP = 8;
+export const STORY_GAP = 8;
+export const STORY_TEST_WIDTHS = [270, 281, 300, 320, 343, 360, 375, 393, 430];
+export const STORY_TEST_FONT_SCALES = [1, 1.2, DOTO_MAX_FONT_SCALE];
+
+const STORY_HEADER_MARK = 16;
+const STORY_HEADER_DATE = 11;
+const STORY_NAME_SIZE = 13;
+const STORY_NAME_MARGIN = 12;
+const STORY_COFFEE_SIZE = 12;
+const STORY_RATING_SIZE = 16;
+const STORY_TAG_SIZE = 10;
+const STORY_TAG_PAD_X = 8;
+const STORY_TAG_PAD_Y = 4;
+const STORY_TAG_GAP = 8;
+const STORY_TAG_MORE_CHARS = 3;
+const STORY_FIGURE_LABEL_SIZE = 10;
+const STORY_FIGURE_VALUE_SIZE = 28;
+const STORY_FIGURE_GAP = 4;
+
+type StoryRows = {
+    header: number;
+    name: number;
+    figures: number;
+    coffee: number;
+    rating: number;
+    tag: number;
+    rateLabel: number;
+};
+
+function storyRows(fontScale: number): StoryRows {
+    return {
+        header: Math.max(
+            dotoRowHeight(STORY_HEADER_MARK, fontScale),
+            dotoRowHeight(STORY_HEADER_DATE, fontScale)
+        ),
+        name: dotoRowHeight(STORY_NAME_SIZE, fontScale) + STORY_NAME_MARGIN,
+        figures: dotoRowHeight(STORY_FIGURE_LABEL_SIZE, fontScale)
+            + STORY_FIGURE_GAP
+            + dotoRowHeight(STORY_FIGURE_VALUE_SIZE, fontScale),
+        coffee: dotoRowHeight(STORY_COFFEE_SIZE, fontScale),
+        rating: Math.ceil(Math.max(STORY_RATING_SIZE, dotoRowHeight(11, fontScale))),
+        tag: dotoRowHeight(STORY_TAG_SIZE, fontScale) + STORY_TAG_PAD_Y * 2,
+        rateLabel: rateChartLabelRowHeight(fontScale)
+    };
+}
+
+function tagWidth(tag: string, fontScale: number): number {
+    const size = Math.max(11, STORY_TAG_SIZE) * Math.min(fontScale, DOTO_MAX_FONT_SCALE);
+    const glyphs = tag.length * size * 0.75;
+    const tracking = Math.max(0, tag.length - 1) * 1.2;
+    return Math.ceil(glyphs + tracking + STORY_TAG_PAD_X * 2);
+}
+
+function tagRows(tags: string[], width: number, fontScale: number): number {
+    if (tags.length === 0) return 0;
+    const innerWidth = Math.max(0, width - 32);
+    let rows = 1;
+    let used = 0;
+    const widths = tags.map((tag) => tagWidth(tag, fontScale));
+    for (const next of widths) {
+        const spend = used === 0 ? next : next + STORY_TAG_GAP;
+        if (used > 0 && used + spend > innerWidth) {
+            rows += 1;
+            used = next;
+        } else {
+            used += spend;
+        }
+    }
+    return rows;
+}
+
+function surroundingHeight(rows: number[]): number {
+    return rows.reduce((sum, row) => sum + row, 0) + STORY_GAP * rows.length;
+}
 
 export function storySummaryBudget(
     {
-        width, stages, hasRateChart, hasCoffee, hasRating, tagCount
+        width, stages, hasRateChart, hasCoffee, hasRating, tags = [],
+        tagCount = tags.length, hasBypass = false, figureExtraRows = 0,
+        fontScale = 1
     }: StorySummaryBudgetInput
 ): StorySummaryBudget {
     const frame = storyFrame(width);
     const contentHeight = frame.height - frame.safeTop - frame.safeBottom;
-    const optionalRows = [
-        hasCoffee ? STORY_COFFEE_ROW : 0,
-        hasRating ? STORY_RATING_ROW : 0,
-        tagCount > 0 ? STORY_TAG_ROW : 0
-    ].filter((row) => row > 0);
-    const surroundingRows = [STORY_HEADER_ROW, ...optionalRows];
-    const surroundingHeight = surroundingRows.reduce((sum, row) => sum + row, 0)
-        + STORY_GAP * surroundingRows.length;
-    const minimumSummaryHeight = STORY_CAPTURE_PADDING
-        + STORY_CAPTURE_PADDING
-        + STORY_NAME_ROW
-        + STORY_TRACE_HEIGHT
-        + (hasRateChart ? Math.max(STORY_RATE_HEIGHT, STORY_RATE_LABEL_ROW_MAX) : 0)
-        + STORY_FIGURES_BLOCK
-        + STORY_LADDER_TOP_GAP
-        + stages * (BAR_FLOOR + GAP_FLOOR);
+    const rows = storyRows(fontScale);
+    const shownTags = tags.slice(0, Math.min(tagCount, 4));
+    const moreTags = Math.max(0, tagCount - shownTags.length);
+    const tagsForWidth = moreTags > 0
+        ? [...shownTags, "+".repeat(STORY_TAG_MORE_CHARS)]
+        : shownTags;
+    const ladderRows = stages + (hasBypass ? 1 : 0);
+
+    const build = (
+        showCoffee: boolean,
+        showRating: boolean,
+        showTags: boolean,
+        showRate: boolean,
+        traceHeight: number,
+        showStages: boolean
+    ) => {
+        const tagLineCount = showTags ? tagRows(tagsForWidth, width, fontScale) : 0;
+        const optionalRows = [
+            showCoffee ? rows.coffee : 0,
+            showRating ? rows.rating : 0,
+            showTags ? rows.tag * tagLineCount : 0
+        ].filter((row) => row > 0);
+        const around = surroundingHeight([rows.header, ...optionalRows]);
+        const ladder = showStages
+            ? STORY_LADDER_TOP_GAP
+                + ladderRows * stageLadderRungMinHeight(fontScale, BAR_FLOOR, GAP_FLOOR)
+            : 0;
+        const figureBlock = rows.figures
+            + Math.max(0, figureExtraRows) * (dotoRowHeight(10, fontScale) + STORY_GAP);
+        const summary = STORY_CAPTURE_PADDING * 2
+            + rows.name
+            + traceHeight
+            + (showRate ? RATE_HEIGHT : 0)
+            + figureBlock
+            + ladder;
+        return {
+            around,
+            summary,
+            required: around + summary,
+            tagLineCount
+        };
+    };
+
+    const attempts: {
+        coffee: boolean;
+        rating: boolean;
+        tags: boolean;
+        rate: boolean;
+        trace: number;
+        stages: boolean;
+    }[] = [
+        {coffee: hasCoffee, rating: hasRating, tags: tagCount > 0, rate: hasRateChart,
+         trace: STORY_TRACE_HEIGHT, stages: true},
+        {coffee: hasCoffee, rating: hasRating, tags: false, rate: hasRateChart,
+         trace: STORY_TRACE_HEIGHT, stages: true},
+        {coffee: hasCoffee, rating: false, tags: false, rate: hasRateChart,
+         trace: STORY_TRACE_HEIGHT, stages: true},
+        {coffee: false, rating: false, tags: false, rate: hasRateChart,
+         trace: STORY_TRACE_HEIGHT, stages: true},
+        {coffee: false, rating: false, tags: false, rate: false,
+         trace: STORY_TRACE_HEIGHT, stages: true},
+        {coffee: false, rating: false, tags: false, rate: false,
+         trace: STORY_TRACE_MIN_HEIGHT, stages: true},
+        {coffee: false, rating: false, tags: false, rate: false,
+         trace: STORY_TRACE_MIN_HEIGHT, stages: false}
+    ];
+
+    let chosen = attempts[attempts.length - 1];
+    let measured = build(
+        chosen.coffee, chosen.rating, chosen.tags, chosen.rate, chosen.trace, chosen.stages
+    );
+    for (const attempt of attempts) {
+        const next = build(
+            attempt.coffee, attempt.rating, attempt.tags, attempt.rate,
+            attempt.trace, attempt.stages
+        );
+        if (next.required <= contentHeight) {
+            chosen = attempt;
+            measured = next;
+            break;
+        }
+    }
 
     return {
         contentHeight,
-        surroundingHeight,
-        summaryAvailableHeight: Math.max(0, contentHeight - surroundingHeight),
-        minimumSummaryHeight,
-        requiredHeight: surroundingHeight + minimumSummaryHeight,
-        traceHeight: STORY_TRACE_HEIGHT,
-        rateHeight: STORY_RATE_HEIGHT,
+        surroundingHeight: measured.around,
+        summaryAvailableHeight: Math.max(0, contentHeight - measured.around),
+        minimumSummaryHeight: measured.summary,
+        requiredHeight: measured.required,
+        traceHeight: chosen.trace,
+        rateHeight: chosen.rate ? RATE_HEIGHT : 0,
         capturePadding: STORY_CAPTURE_PADDING,
-        ladderTopGap: STORY_LADDER_TOP_GAP,
-        rateLabelRowHeight: STORY_RATE_LABEL_ROW_MAX
+        ladderTopGap: chosen.stages ? STORY_LADDER_TOP_GAP : 0,
+        rateLabelRowHeight: rows.rateLabel,
+        barHeight: BAR_FLOOR,
+        rungGap: GAP_FLOOR,
+        showRateChart: chosen.rate,
+        showCoffee: chosen.coffee,
+        showRating: chosen.rating,
+        shownTagCount: chosen.tags ? shownTags.length : 0,
+        tagRows: measured.tagLineCount,
+        showStages: chosen.stages,
+        margin: contentHeight - measured.required
     };
 }
 

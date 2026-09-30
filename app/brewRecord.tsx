@@ -30,9 +30,9 @@ import {useSetting} from "@/hooks/useSetting";
 import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {brewFigures} from "@/library/brew/brewFigures";
-import {drawdownSeconds, poursFromPlan} from "@/library/brew/BrewRecord";
+import {poursFromPlan} from "@/library/brew/BrewRecord";
 import {dialNote} from "@/library/brew/dialAfterBrew";
-import {drawdownRate, flowSeries} from "@/library/brew/flowRate";
+import {drawdownFigures, flowSeries} from "@/library/brew/flowRate";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
 import {storyCoffeeLine} from "@/library/brew/storyCard";
@@ -247,7 +247,7 @@ export default function BrewRecord({recipeLookup}: Props) {
         (brew) => brew.recipeUuid === record.recipeUuid && brew.id !== record.id
     );
     const figures = brewFigures(record);
-    const rate = drawdownRate(record);
+    const drawdown = drawdownFigures(record);
 
     function openComparisonPicker(): void {
         const candidates = sharedBrewDatabase()
@@ -299,8 +299,8 @@ export default function BrewRecord({recipeLookup}: Props) {
             ? ENDED_ON_MACHINE_NOTE : undefined,
         stagesUnavailable: snapshot.length === 0 && recipe === null,
         bypass,
-        drawdown:          drawdownSeconds(record),
-        drawdownRate:      rate,
+        drawdown:          drawdown?.seconds ?? null,
+        drawdownRate:      drawdown?.rate ?? null,
         rateSeries:        record.hasStream && samples.length > 0
             ? flowSeries(samples, record.pours)
             : [],
@@ -521,6 +521,11 @@ export default function BrewRecord({recipeLookup}: Props) {
                         coffee={storyCoffeeLine(record)}
                         tags={record.tags ?? []}
                         stageCount={stages.length}
+                        hasBypass={summary.bypass !== undefined}
+                        figureExtraRows={[
+                            summary.drawdown !== null,
+                            summary.dial !== null
+                        ].filter(Boolean).length}
                         summary={(budget) => (
                             <BrewSummary
                                 {...summary}
@@ -531,6 +536,12 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 rateHeight={budget.rateHeight}
                                 capturePadding={budget.capturePadding}
                                 ladderTopGap={budget.ladderTopGap}
+                                storyBands={{
+                                    barHeight: budget.barHeight,
+                                    rungGap: budget.rungGap
+                                }}
+                                showRateChart={budget.showRateChart}
+                                showStages={budget.showStages}
                                 // Always still: a capture taken mid-travel
                                 // freezes the name half-scrolled, and unlike
                                 // the screen's own summary there is no moment

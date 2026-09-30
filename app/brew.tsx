@@ -33,8 +33,8 @@ import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
-import {drawdownFrom, finalOutcome} from "@/library/brew/BrewRecord";
-import {cupAtDrawdownFrom, flowNow, flowSeries, flowTail} from "@/library/brew/flowRate";
+import {finalOutcome} from "@/library/brew/BrewRecord";
+import {drawdownFigures, flowNow, flowSeries, flowTail} from "@/library/brew/flowRate";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
@@ -173,20 +173,9 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
         running,
         finalStageTargetMl,
     });
-    const doneDrawdownAt = phase.name === "done" ? drawdownFrom(samples, stages) : 0;
-    const doneDrawdown = doneDrawdownAt > 0
-        ? Math.max(0, elapsed - doneDrawdownAt / 1000)
-        : null;
-    const doneCupAtDrawdown = cupAtDrawdownFrom(samples, stages, doneDrawdownAt);
-    const doneDrawdownRate = doneDrawdown === null
-        || doneDrawdown <= 0
-        || doneCupAtDrawdown === null
-        ? null
-        : (() => {
-            const delivered = (last?.cup ?? 0) - (bypass?.delivered ?? 0) - doneCupAtDrawdown;
-            const rate = delivered / doneDrawdown;
-            return Number.isFinite(rate) && rate > 0 ? rate : null;
-        })();
+    const doneDrawdownFigures = run?.record === undefined ? null : drawdownFigures(run.record);
+    const doneDrawdown = phase.name === "done" ? doneDrawdownFigures?.seconds ?? null : null;
+    const doneDrawdownRate = phase.name === "done" ? doneDrawdownFigures?.rate ?? null : null;
     const doneRateSeries = phase.name === "done" && samples.length > 0
         ? flowSeries(samples, stages)
         : [];

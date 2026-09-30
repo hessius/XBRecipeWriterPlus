@@ -188,8 +188,8 @@ describe("summaryBands", () => {
         expect(summaryBands(4 * (BAR_CAP + GAP_CAP), 4)).toEqual(SUMMARY_BANDS);
     });
 
-    it("shrinks to the live floors when measured room is tight", () => {
-        expect(summaryBands(10, 9)).toEqual({barHeight: BAR_FLOOR, rungGap: GAP_FLOOR});
+    it("never shrinks below today's bands, however little room there is", () => {
+        expect(summaryBands(10, 9)).toEqual(SUMMARY_BANDS);
     });
 
     it("thickens the bars before it spreads the rungs", () => {

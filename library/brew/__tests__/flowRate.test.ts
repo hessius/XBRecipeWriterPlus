@@ -3,6 +3,7 @@ import {
     FLOW_MIN_WINDOW_MS,
     FLOW_WINDOW_MS,
     cupAtDrawdownFrom,
+    drawdownFigures,
     drawdownRate,
     formatFlowRate,
     flowAt,
@@ -397,6 +398,10 @@ describe("cupAtDrawdownFrom", () => {
 });
 
 describe("drawdownRate", () => {
+    it("returns the record clock and rate as one definition", () => {
+        expect(drawdownFigures(record())).toEqual({seconds: 40, rate: 2});
+    });
+
     it("averages the cup over the drawdown", () => {
         // 200 in the cup at the end, 120 at the boundary, 40 seconds between.
         expect(drawdownRate(record())).toBeCloseTo(2, 6);

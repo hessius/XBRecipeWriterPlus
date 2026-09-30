@@ -1,11 +1,17 @@
 import React from "react";
-import {View} from "react-native";
-import Svg, {G, Path, Rect, Text as SvgText} from "react-native-svg";
+import {PixelRatio, View} from "react-native";
+import Svg, {G, Path, Text as SvgText} from "react-native-svg";
 
 import {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {type Box, type Point, toPath} from "@/library/brew/brewShape";
 import {maxRateOf, type FlowPoint} from "@/library/brew/flowRate";
+import {
+    RATE_HEIGHT,
+    RATE_LABEL_LINE_HEIGHT,
+    RATE_LABEL_SIZE,
+    rateChartPlotTop
+} from "@/library/brew/rateChartGeometry";
 import {channelStyle} from "@/library/brew/traceStyle";
 
 /**
@@ -15,12 +21,9 @@ import {channelStyle} from "@/library/brew/traceStyle";
  * is millilitres and this one is grams or millilitres per second, so sharing an
  * axis would force one picture onto units it does not own.
  */
-export const RATE_HEIGHT = 84;
-
 /** Never scale a nearly flat brew up into a mountain range. */
 const MIN_AXIS = 4;
-const RATE_LABEL_SIZE = 9;
-const RATE_LABEL_LINE_HEIGHT = 1.35;
+export {RATE_HEIGHT};
 
 /**
  * The recorder samples at about 10 Hz, and every stream fixture that models
@@ -96,6 +99,7 @@ export default function BrewRateChart({
     const verticalInset = Math.max(waterStyle.strokeWidth, cupStyle.strokeWidth) / 2;
     const labelSize = drawnFontSize(RATE_LABEL_SIZE);
     const labelRow = Math.ceil(labelSize * RATE_LABEL_LINE_HEIGHT);
+    const plotTop = rateChartPlotTop(PixelRatio.getFontScale(), verticalInset);
     const box: Box = {
         width,
         height: Math.max(height - labelRow - verticalInset * 2, 0),
@@ -127,15 +131,7 @@ export default function BrewRateChart({
                 >
                     FLOW RATE
                 </SvgText>
-                <Rect
-                    testID="rate-chart-plot-origin"
-                    x={0}
-                    y={labelRow + verticalInset}
-                    width={0}
-                    height={0}
-                    fill="none"
-                />
-                <G y={labelRow + verticalInset}>
+                <G y={plotTop}>
                     {waterPath !== "" && (
                         <Path
                             testID="rate-chart-water"

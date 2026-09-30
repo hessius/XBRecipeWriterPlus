@@ -1213,14 +1213,14 @@ describe("brew record's story card", () => {
     });
 
     /** Give the sheet a stage to draw in; nothing is drawn until it has one. */
-    async function openCard(): Promise<void> {
+    async function openCard(width = 360): Promise<void> {
         // Pressed once, not in a retry loop: the sheet hides the screen behind
         // it from a screen reader, so the button this press found is gone by
         // the time a second attempt would look for it.
         fireEvent.press(screen.getByLabelText("Make a story card to share"));
         await waitFor(() => expect(screen.getByTestId("story-stage")).toBeTruthy());
         fireEvent(screen.getByTestId("story-stage"), "layout", {
-            nativeEvent: {layout: {width: 360, height: 700, x: 0, y: 0}}
+            nativeEvent: {layout: {width, height: Math.ceil(width * 16 / 9) + 100, x: 0, y: 0}}
         });
         await waitFor(() => expect(screen.getByTestId("brew-story-card")).toBeTruthy());
     }
@@ -1241,7 +1241,7 @@ describe("brew record's story card", () => {
 
     it("shows the card before it is shared", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-        await openCard();
+        await openCard(600);
         expect(screen.getByTestId("brew-story-card")).toBeTruthy();
     });
 
@@ -1268,7 +1268,7 @@ describe("brew record's story card", () => {
 
     it("carries the coffee, the rating and the tags", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-        await openCard();
+        await openCard(600);
         const card = within(screen.getByTestId("brew-story-card"));
         expect(card.getByTestId("story-coffee")).toHaveTextContent(/Huila/);
         expect(card.getByTestId("story-rating")).toBeTruthy();
@@ -1297,6 +1297,37 @@ describe("brew record's story card", () => {
             screen.getByTestId("brew-story-card").props.style as StyleProp<ViewStyle>
         );
         expect(style?.overflow).toBe("hidden");
+    });
+
+    it("passes the story budget through to the summary", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating: 4,
+                origin: "Huila",
+                roast:  "Medium",
+                tags:   ["filter", "washed"],
+                plan:   planFromPours(twoPours.pours)
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+
+        expect(summaryProps).toEqual(expect.objectContaining({
+            testID: "story-capture",
+            availableHeight: expect.any(Number),
+            traceHeight: expect.any(Number),
+            rateHeight: expect.any(Number),
+            capturePadding: expect.any(Number),
+            ladderTopGap: expect.any(Number),
+            storyBands: expect.objectContaining({
+                barHeight: expect.any(Number),
+                rungGap: expect.any(Number)
+            }),
+            showRateChart: expect.any(Boolean),
+            showStages: expect.any(Boolean)
+        }));
     });
 
     it("hides the screen from a screen reader while the card is up", async () => {

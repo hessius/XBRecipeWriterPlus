@@ -3,7 +3,7 @@ import React, {createContext, useContext, useRef, useState} from "react";
 import {OVER} from "@/constants/brewCopy";
 import {useBrewRun} from "@/hooks/useBrewRun";
 import type {BrewStore} from "@/hooks/useBrewRun";
-import type {BrewSample} from "@/library/brew/BrewRecord";
+import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {Stall} from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {BypassView} from "@/library/brew/bypassState";
@@ -27,6 +27,8 @@ export type LiveBrewSnapshot = {
     pauseElapsed: number;
     /** The bypass this brew has, if any. */
     bypass?: BypassView;
+    /** The row the recorder wrote for a finished brew. */
+    record?: BrewRecord;
 };
 
 type LiveBrew = {

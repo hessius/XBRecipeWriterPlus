@@ -3,7 +3,7 @@ import {Text} from "react-native";
 import {screen} from "@testing-library/react-native";
 
 import BrewStoryCard from "@/components/BrewStoryCard";
-import {storyFrame} from "@/library/brew/storyCard";
+import {storyFrame, type StorySummaryBudget} from "@/library/brew/storyCard";
 import {renderWithProviders} from "@/test-utils/render";
 
 const summary = <Text testID="summary-stub">the brew</Text>;
@@ -41,9 +41,17 @@ describe("the story card", () => {
 
         expect(renderSummary).toHaveBeenCalledWith(expect.objectContaining({
             contentHeight: 461,
-            summaryAvailableHeight: 328,
-            requiredHeight: 444
+            showRateChart: true,
+            showStages: true,
+            traceHeight: expect.any(Number),
+            rateHeight: expect.any(Number)
         }));
+        const calls = renderSummary.mock.calls as unknown as [[StorySummaryBudget]];
+        const budget = calls[0][0];
+        expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+        expect(budget.summaryAvailableHeight).toBeGreaterThanOrEqual(
+            budget.minimumSummaryHeight
+        );
     });
 
     it("stands the frame up at nine by sixteen", async () => {

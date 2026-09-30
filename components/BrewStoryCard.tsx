@@ -1,5 +1,5 @@
 import React from "react";
-import {StyleSheet, View} from "react-native";
+import {PixelRatio, StyleSheet, View} from "react-native";
 import {XStack, YStack} from "tamagui";
 
 import BrewStars from "@/components/BrewStars";
@@ -36,6 +36,8 @@ type Props = {
     coffee: string | null;
     /** The brew's tags, in the order they were given. */
     tags: string[];
+    hasBypass?: boolean;
+    figureExtraRows?: number;
 };
 
 /**
@@ -55,19 +57,23 @@ type Props = {
  * is a mark that damages the data.
  */
 export default function BrewStoryCard({
-    width, summary, stageCount = 2, when, accent, rating, coffee, tags
+    width, summary, stageCount = 2, when, accent, rating, coffee, tags,
+    hasBypass = false, figureExtraRows = 0
 }: Props) {
     const frame = storyFrame(width);
-    const shown = tags.slice(0, MAX_SHOWN_TAGS);
-    const extra = tags.length - shown.length;
     const budget = storySummaryBudget({
         width,
         stages: stageCount,
         hasRateChart: true,
         hasCoffee: coffee !== null,
         hasRating: rating > 0,
-        tagCount: tags.length
+        tags,
+        fontScale: PixelRatio.getFontScale(),
+        hasBypass,
+        figureExtraRows
     });
+    const shown = tags.slice(0, Math.min(MAX_SHOWN_TAGS, budget.shownTagCount));
+    const extra = tags.length - shown.length;
     const summaryNode = typeof summary === "function" ? summary(budget) : summary;
 
     return (
@@ -92,7 +98,7 @@ export default function BrewStoryCard({
                 {/* Left out entirely when there is nothing to say. A card that
                     reserves a row for a coffee nobody named, or for stars
                     nobody gave, reads as a card that failed to load them. */}
-                {coffee !== null && (
+                {coffee !== null && budget.showCoffee && (
                     <XStack paddingHorizontal={SCREEN_PADDING}>
                         <DotMatrixText testID="story-coffee" fontSize={12}
                                        weight="bold" letterSpacing={1.4}
@@ -106,7 +112,7 @@ export default function BrewStoryCard({
                     nothing for an unrated brew: the row itself still has
                     padding, and an empty padded row is the gap a card for an
                     unrated brew would otherwise carry. */}
-                {rating > 0 && (
+                {rating > 0 && budget.showRating && (
                     <XStack testID="story-rating-row" paddingHorizontal={SCREEN_PADDING}>
                         {/* A reading, not a control: no `onRate`, so only the
                             stars that were given are drawn. */}
@@ -114,7 +120,7 @@ export default function BrewStoryCard({
                     </XStack>
                 )}
 
-                {shown.length > 0 && (
+                {shown.length > 0 && budget.shownTagCount > 0 && (
                     <XStack paddingHorizontal={SCREEN_PADDING} gap="$2"
                             flexWrap="wrap" testID="story-tags">
                         {shown.map((tag) => (

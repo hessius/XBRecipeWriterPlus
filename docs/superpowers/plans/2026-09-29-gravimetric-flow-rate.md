@@ -1592,8 +1592,17 @@ Amendment, 2026-09-30: the finished brew modal is part of this task. It passes
 `rateSeries`, `drawdown` and `drawdownRate` to `BrewSummary`, using the same
 sample stream and stage count that the record later reads. The story card also
 gets a real height budget from `storySummaryBudget`, a pure function of the
-story frame, surrounding rows and stage count, so the compact card summary uses
-the available height instead of silently clipping under `overflow: hidden`.
+story frame, surrounding rows, stage count, bypass row, figure rows and bounded
+Doto font scale, so the compact card summary uses the available height instead
+of silently clipping under `overflow: hidden`. The budget is prescriptive:
+story-only rows go first in the order tags, rating, coffee, then the rate chart
+is dropped, then the trace shrinks to its story floor, and the stage ladder is
+omitted only as the last compact-width fallback. The ladder floor comes from
+`stageLadderRungMinHeight`, the same helper `BrewStageLadder` uses for its row
+minimum, and includes text height, rung gap and the optional bypass closing row.
+Name wrapping is not modelled because the summary name is a single-line
+`MarqueeText`; tag wrapping is modelled by estimating the chips and counting
+rows before the tag row is allowed.
 
 - [ ] **Step 1: Write the failing tests**
 
