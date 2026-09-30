@@ -11,7 +11,7 @@ import {
 } from "@/library/brew/rateChartGeometry";
 import {traceTimeExtent} from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {flowSeries, type FlowPoint} from "@/library/brew/flowRate";
+import {retrospectiveFlowSeries, type FlowPoint} from "@/library/brew/flowRate";
 import Pour from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -145,13 +145,13 @@ describe("BrewRateChart", () => {
         expect(queryByTestId("rate-chart")).toBeNull();
     });
 
-    it("breaks a real flowSeries line across a bypass-shaped omission", async () => {
+    it("breaks a real retrospective line across a bypass-shaped omission", async () => {
         const samples = [
             ...ramp(0, 3_000, 1, 0, 0),
             ...ramp(3_100, 5_000, 2, 6.2, 4.34),
             ...ramp(5_100, 8_000, 1, 10, 6)
         ];
-        const rate = flowSeries(samples, 1);
+        const rate = retrospectiveFlowSeries(samples, 1);
 
         const {getByTestId} = await renderWithProviders(
             <BrewRateChart series={rate} accent={ACCENT} width={WIDTH} maxT={8} />

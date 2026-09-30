@@ -32,7 +32,7 @@ import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {brewFigures} from "@/library/brew/brewFigures";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
 import {dialNote} from "@/library/brew/dialAfterBrew";
-import {drawdownFigures, flowSeries} from "@/library/brew/flowRate";
+import {drawdownFigures, retrospectiveFlowSeries} from "@/library/brew/flowRate";
 import {hasDrawableRateRun} from "@/library/brew/rateChartGeometry";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
@@ -303,7 +303,7 @@ export default function BrewRecord({recipeLookup}: Props) {
         drawdown:          drawdown?.seconds ?? null,
         drawdownRate:      drawdown?.rate ?? null,
         rateSeries:        record.hasStream && samples.length > 0
-            ? flowSeries(samples, record.pours)
+            ? retrospectiveFlowSeries(samples, record.pours)
             : [],
         delay:             pourEndDelaySeconds(
             durationSeconds,

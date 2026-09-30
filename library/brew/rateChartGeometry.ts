@@ -22,7 +22,7 @@ export const RATE_ADJACENT_MS = 150;
 const RATE_ADJACENT_MULTIPLE = 3;
 const RATE_MAX_ADJACENT_MS = 5_000;
 
-function medianGap(series: FlowPoint[]): number {
+export function medianRateGap<T extends FlowPoint>(series: T[]): number {
     const gaps: number[] = [];
     for (let i = 1; i < series.length; i += 1) {
         const gap = series[i].at - series[i - 1].at;
@@ -37,15 +37,15 @@ function medianGap(series: FlowPoint[]): number {
         : (gaps[middle - 1] + gaps[middle]) / 2;
 }
 
-function rateAdjacentAllowance(series: FlowPoint[]): number {
-    const cadence = medianGap(series);
+export function rateAdjacentAllowance<T extends FlowPoint>(series: T[]): number {
+    const cadence = medianRateGap(series);
     if (cadence <= RATE_ADJACENT_MS) return RATE_ADJACENT_MS;
     return Math.min(cadence * RATE_ADJACENT_MULTIPLE, RATE_MAX_ADJACENT_MS);
 }
 
-export function contiguousRateRuns(series: FlowPoint[]): FlowPoint[][] {
-    const runs: FlowPoint[][] = [];
-    let current: FlowPoint[] = [];
+export function contiguousRateRuns<T extends FlowPoint>(series: T[]): T[][] {
+    const runs: T[][] = [];
+    let current: T[] = [];
     const adjacentMs = rateAdjacentAllowance(series);
 
     for (const point of series) {

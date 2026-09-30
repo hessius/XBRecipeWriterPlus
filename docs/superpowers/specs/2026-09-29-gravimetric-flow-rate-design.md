@@ -40,7 +40,7 @@ version of this complaint about the figures it draws today: *"Rounded to whole
 units because the scale reports tenths and they flicker; a figure this size
 that changes every 100 ms cannot be read at all."*
 
-So the rate is fitted, not differenced:
+So the live rate is fitted, not differenced:
 
 - A **two second window**, `FLOW_WINDOW_MS = 2000`.
 - A **least-squares slope across every sample in the window**, not a secant
@@ -57,13 +57,23 @@ That silence is intentional. The alternative was the opening tick of every brew
 reporting 6.25 g/s against a true 2 g/s, then donating that artefact to
 `maxRateOf` and setting the chart axis from it.
 
-Two seconds and not three: the window is also a lag, and the figure trails
+Two seconds and not three: the window is also a lag, and the live figure trails
 reality by half of it. A second of lag is the most a live readout can carry
 before it stops describing what is in front of you.
 
 And a single instant of a rate says very little in any case. `1.8 g/s` is not
 actionable; `it was 2.4 and is now 1.8` is. So wherever the live figure is
 drawn it is drawn with a short history beside it.
+
+Amendment, 2026-09-30: the retained chart does not share the live estimator.
+The live readout remains causal on `FLOW_WINDOW_MS`, but a finished record has
+the whole stream available. Its chart uses `retrospectiveFlowSeries`, a
+degree-two Savitzky-Golay smoother over a centred six second window. The window
+is measured in time, not as a sample count, and sparse streams widen it from
+their own median cadence so the fit is made from real neighbouring points. Each
+centred window shrinks at the ends instead of padding. The smoothing is applied
+inside the contiguous rate runs the path builder already draws, so it cannot
+turn a gap nobody measured into a line.
 
 ## 3. The bypass, which would otherwise corrupt everything
 
@@ -112,6 +122,9 @@ export type FlowPoint = {at: number; cup: number; water: number};
 
 /** Both channels across the whole stream, for the chart. */
 export function flowSeries(samples: BrewSample[], stages: number): FlowPoint[];
+
+/** Both channels across a retained stream, smoothed for stored charts. */
+export function retrospectiveFlowSeries(samples: BrewSample[], stages: number): FlowPoint[];
 
 /** The latest windowed pair, for the live row. Zeroes on an empty stream. */
 export function flowNow(samples: BrewSample[], stages: number): FlowPoint;
@@ -288,9 +301,10 @@ image all carry it. The share is not yet released, so there is no established
 card to uphold and the chart can simply be part of it.
 
 Amendment, 2026-09-30: the finished brew modal passes the same retained stream
-through `flowSeries` and passes the final drawdown clock plus average drawdown
-rate. A brew shared immediately from the modal and the same brew shared later
-from the record therefore carry the same chart and figure. The story card uses
+through `retrospectiveFlowSeries` and passes the final drawdown clock plus
+average drawdown rate. A brew shared immediately from the modal and the same
+brew shared later from the record therefore carry the same chart and figure.
+The story card uses
 a prescriptive height budget from `storyCard.ts`, with the measured card width,
 stage count, bypass row, figure rows and bounded Doto font scale as inputs. It
 drops story-only rows in this order: tags, rating, coffee. If the card is still
@@ -343,13 +357,12 @@ like `BrewTrace`, and only the vertical dimension is inset by half the widest
 rate stroke so high and low rates do not clip. Horizontal stroke caps are
 allowed to draw with visible overflow rather than moving the time axis.
 
-Every missing rate point breaks the line. `flowSeries` emits at the sample
-cadence when it can fit a window and emits no point when it cannot, so adjacent
-array entries are connected only if their timestamps are adjacent at the live
-scale cadence. The recorder samples about 10 Hz and the fixtures that model the
-live stream use 100 ms frames; the chart allows 150 ms for timer jitter. A
-single omitted frame at normal cadence is therefore a 200 ms gap and starts a
-new subpath.
+Every missing rate point breaks the line. `retrospectiveFlowSeries` emits at
+the sample cadence when it can smooth a retained run and emits no point when it
+cannot, so adjacent array entries are connected only if their timestamps are
+adjacent at the stream's own cadence. A dense stream keeps the original 150 ms
+floor, while slower streams derive the allowance from their median gap. A real
+pause still starts a new subpath.
 
 The y axis keeps the 4 g/s floor and does not label it. The chart is a compact
 shape companion to the trace, not a calibrated readout; labelling that floor
@@ -431,10 +444,10 @@ itself, because two lanes are not a comparison unless the same second is at the
 same x and the same millilitre at the same y. A rate lane needs a third bound
 negotiated the same way, `maxRate`, taken across both brews.
 
-Two compact rate lanes sit under the two volume lanes. If **either** brew has no
-stream, the rate lanes are omitted for **both**: half a comparison invites
-reading a present lane against an absent one, which is worse than showing
-neither.
+Two compact rate lanes sit under the two volume lanes. They use the same
+retrospective smoothing as the record chart. If **either** brew has no stream,
+the rate lanes are omitted for **both**: half a comparison invites reading a
+present lane against an absent one, which is worse than showing neither.
 
 ## 9. Beanconqueror: nothing to do
 

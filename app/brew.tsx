@@ -34,7 +34,12 @@ import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
 import {finalOutcome} from "@/library/brew/BrewRecord";
-import {drawdownFigures, flowNow, flowSeries, flowTail} from "@/library/brew/flowRate";
+import {
+    drawdownFigures,
+    flowNow,
+    flowTail,
+    retrospectiveFlowSeries
+} from "@/library/brew/flowRate";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
@@ -186,7 +191,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
         plannedSecs
     );
     const doneRateSeries = phase.name === "done" && samples.length > 0
-        ? flowSeries(samples, stages)
+        ? retrospectiveFlowSeries(samples, stages)
         : [];
 
     // Only a refusal for water gets the water copy. `block` names which of the

@@ -10,7 +10,8 @@ import {
     flowNow,
     flowSeries,
     flowTail,
-    maxRateOf
+    maxRateOf,
+    retrospectiveFlowSeries
 }
     from "@/library/brew/flowRate";
 
@@ -68,6 +69,89 @@ function directFlowAt(samples: BrewSample[], stages: number, at: number) {
     const cup = directSlope(window, "cup");
     const water = directSlope(window, "water");
     return cup === null || water === null ? null : {at, cup, water};
+}
+
+function bucketTailFromSeries(
+    series: {at: number; cup: number}[], lastAt: number, seconds: number, buckets: number
+): number[] {
+    const from = lastAt - seconds * 1000;
+    const recent = series.filter((point) => point.at >= from);
+    if (recent.length === 0) return [];
+
+    const span = Math.max(1, lastAt - from);
+    const sums = new Array<number>(buckets).fill(0);
+    const counts = new Array<number>(buckets).fill(0);
+    for (const point of recent) {
+        const slot = Math.min(
+            buckets - 1,
+            Math.floor(((point.at - from) / span) * buckets)
+        );
+        sums[slot] += point.cup;
+        counts[slot] += 1;
+    }
+
+    const out: number[] = [];
+    let carried = recent[0].cup;
+    for (let i = 0; i < buckets; i += 1) {
+        if (counts[i] > 0) carried = sums[i] / counts[i];
+        out.push(carried);
+    }
+    return out;
+}
+
+function noisySquareWave(): BrewSample[] {
+    let water = 0;
+    let cup = 0;
+    const out: BrewSample[] = [];
+    for (let i = 0; i <= 320; i += 1) {
+        const at = i * 100;
+        const rate = at < 10_000 ? 0 : at < 22_000 ? 4 : 0;
+        if (i > 0) {
+            water += rate * 0.1;
+            cup += rate * 0.1;
+        }
+        const noise = i % 4 === 0 ? 0.18 : i % 4 === 2 ? -0.18 : 0;
+        out.push({
+            at,
+            water: water + noise,
+            cup: cup - noise / 2,
+            pour: 1
+        });
+    }
+    return out;
+}
+
+function populationSpread(values: number[]): number {
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    return Math.sqrt(
+        values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length
+    );
+}
+
+function movingAverage(points: {at: number; water: number}[], windowMs: number) {
+    return points.map((point) => {
+        const from = point.at - windowMs / 2;
+        const to = point.at + windowMs / 2;
+        const window = points.filter((candidate) => candidate.at >= from && candidate.at <= to);
+        return {
+            at: point.at,
+            water: window.reduce((sum, candidate) => sum + candidate.water, 0) / window.length
+        };
+    });
+}
+
+function consecutiveRates(samples: BrewSample[]) {
+    const out: {at: number; water: number}[] = [];
+    for (let i = 1; i < samples.length; i += 1) {
+        const seconds = (samples[i].at - samples[i - 1].at) / 1000;
+        if (seconds > 0) {
+            out.push({
+                at: samples[i].at,
+                water: (samples[i].water - samples[i - 1].water) / seconds
+            });
+        }
+    }
+    return out;
 }
 
 /** A finished record with only the fields the rate arithmetic reads. */
@@ -299,6 +383,68 @@ describe("flowSeries", () => {
         expect(afterPoison!.water).toBeCloseTo(direct!.water, 8);
         expect(series.length).toBeGreaterThan(samples.length - 60);
         expect(series[series.length - 1].at).toBe(30_000);
+    });
+});
+
+describe("retrospectiveFlowSeries", () => {
+    it("flattens noisy square-wave plateaus while keeping the real edges sharp", () => {
+        const samples = noisySquareWave();
+        const smoothed = retrospectiveFlowSeries(samples, 1);
+        const raw = consecutiveRates(samples);
+
+        const highPlateau = smoothed
+            .filter((point) => point.at >= 14_000 && point.at <= 18_000)
+            .map((point) => point.water);
+        const rawHighPlateau = raw
+            .filter((point) => point.at >= 14_000 && point.at <= 18_000)
+            .map((point) => point.water);
+        const beforeEdge = smoothed.find((point) => point.at === 8_900);
+        const afterEdge = smoothed.find((point) => point.at === 11_100);
+        const beforeStop = smoothed.find((point) => point.at === 20_900);
+        const afterStop = smoothed.find((point) => point.at === 23_100);
+        const moving = movingAverage(smoothed, 6000);
+        const movingAfterEdge = moving.find((point) => point.at === 10_100);
+        const movingAfterStop = moving.find((point) => point.at === 22_100);
+
+        expect(highPlateau).toHaveLength(41);
+        expect(populationSpread(highPlateau))
+            .toBeLessThan(populationSpread(rawHighPlateau) * 0.65);
+        expect(Math.min(...highPlateau)).toBeGreaterThan(3.6);
+        expect(Math.max(...highPlateau)).toBeLessThan(4.4);
+        expect(beforeEdge!.water).toBeLessThan(1);
+        expect(afterEdge!.water).toBeGreaterThan(3);
+        expect(beforeStop!.water).toBeGreaterThan(3);
+        expect(afterStop!.water).toBeLessThan(1);
+        expect(movingAfterEdge!.water).toBeLessThan(2.5);
+        expect(movingAfterStop!.water).toBeGreaterThan(1.5);
+    });
+
+    it("does not smooth across a gap between drawable runs", () => {
+        const first = ramp(8, 5);
+        const second = ramp(8, 1, first[first.length - 1].water, 10_000);
+        const smoothed = retrospectiveFlowSeries([...first, ...second], 1);
+        const afterGap = smoothed.find((point) => point.at === 10_100);
+
+        expect(afterGap).toBeDefined();
+        expect(afterGap!.water).toBeCloseTo(1, 6);
+        expect(afterGap!.cup).toBeCloseTo(1, 6);
+    });
+
+    it("keeps the live tail on the causal estimator", () => {
+        const samples = noisySquareWave();
+        const tail = flowTail(samples, 1, 18, 12);
+        const last = samples[samples.length - 1];
+        const causalTail = bucketTailFromSeries(flowSeries(samples, 1), last.at, 18, 12);
+        const retrospectiveTail = bucketTailFromSeries(
+            retrospectiveFlowSeries(samples, 1),
+            last.at,
+            18,
+            12
+        );
+
+        expect(tail).toEqual(causalTail);
+        expect(retrospectiveTail.some((value, i) => Math.abs(value - tail[i]) > 0.2))
+            .toBe(true);
     });
 });
 

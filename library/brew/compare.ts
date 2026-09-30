@@ -14,7 +14,7 @@ import {
     type Point
 } from "./brewShape";
 import {NOISE_FLOOR_ML} from "./stalls";
-import {flowSeries, maxRateOf, type FlowPoint} from "./flowRate";
+import {maxRateOf, retrospectiveFlowSeries, type FlowPoint} from "./flowRate";
 
 /**
  * Two brews of one recipe, held against each other.
@@ -249,7 +249,7 @@ export type CompareAxis = {
 
 function rateSeriesFor({record, samples}: BrewUnderComparison): FlowPoint[] {
     if (!record.hasStream || samples.length === 0) return [];
-    return flowSeries(samples, record.pours);
+    return retrospectiveFlowSeries(samples, record.pours);
 }
 
 /**

@@ -327,8 +327,8 @@ describe("compareAxis", () => {
         );
 
         expect(axis.maxRate).toBeCloseTo(5, 6);
-        expect(axis.subjectRate).toHaveLength(11);
-        expect(axis.referenceRate).toHaveLength(11);
+        expect(axis.subjectRate).toHaveLength(20);
+        expect(axis.referenceRate).toHaveLength(20);
     });
 
     it("excludes bypass samples with the brew's stage count", () => {

@@ -1,4 +1,5 @@
 import {drawdownSeconds, type BrewRecord, type BrewSample} from "./BrewRecord";
+import {contiguousRateRuns, medianRateGap, rateAdjacentAllowance} from "./rateChartGeometry";
 
 /**
  * How much of the stream one reading of the rate is fitted over.
@@ -26,6 +27,19 @@ export const FLOW_WINDOW_MS = 2000;
  * to move the line.
  */
 export const FLOW_SPARKLINE_MIN_SPAN = 0.5;
+
+/**
+ * The retrospective chart smooths with a wider, centred window.
+ *
+ * Six seconds is long enough to flatten the high frequency derivative noise
+ * that still shows after the live two second fit, but short enough that a pour
+ * start or stop occupies a small part of a normal record chart. Sparse streams
+ * may widen this from their own cadence so the degree-two fit is still made
+ * from real neighbouring points rather than padded guesses.
+ */
+export const RETROSPECTIVE_FLOW_WINDOW_MS = 6000;
+const RETROSPECTIVE_FLOW_MIN_SAMPLES = 3;
+const RETROSPECTIVE_FLOW_MIN_GAPS = 4;
 
 /**
  * One decimal place for a displayed rate, or null when there is no number.
@@ -68,6 +82,7 @@ export const FLOW_MIN_WINDOW_MS = 1000;
  * g/s leaving the bed, `water` is ml/s the machine is dispensing.
  */
 export type FlowPoint = {at: number; cup: number; water: number};
+type RawFlowPoint = FlowPoint & {fromAt: number};
 
 /**
  * The samples a rate may be read from: brew water only.
@@ -264,6 +279,7 @@ export function flowSeries(samples: BrewSample[], stages: number): FlowPoint[] {
         } else {
             badReadings++;
         }
+
         const from = sample.at - FLOW_WINDOW_MS;
         while (left < brew.length && brew[left].at < from) {
             if (hasFiniteReadings(brew[left])) {
@@ -280,6 +296,166 @@ export function flowSeries(samples: BrewSample[], stages: number): FlowPoint[] {
         if (point !== null) out.push(point);
     }
     return out;
+}
+
+function rawRateSeries(samples: BrewSample[], stages: number): RawFlowPoint[] {
+    const brew = brewOnly(samples, stages);
+    const out: RawFlowPoint[] = [];
+    let previous: BrewSample | undefined;
+
+    for (const sample of brew) {
+        if (!hasFiniteReadings(sample)) {
+            previous = undefined;
+            continue;
+        }
+        if (previous !== undefined) {
+            const seconds = (sample.at - previous.at) / 1000;
+            if (seconds > 0) {
+                out.push({
+                    at:    sample.at,
+                    fromAt: previous.at,
+                    cup:   (sample.cup - previous.cup) / seconds,
+                    water: (sample.water - previous.water) / seconds
+                });
+            }
+        }
+        previous = sample;
+    }
+
+    return out;
+}
+
+function retrospectiveWindowMs(run: FlowPoint[]): number {
+    return Math.max(
+        RETROSPECTIVE_FLOW_WINDOW_MS,
+        medianRateGap(run) * RETROSPECTIVE_FLOW_MIN_GAPS
+    );
+}
+
+function solve3(
+    matrix: [[number, number, number], [number, number, number], [number, number, number]],
+    values: [number, number, number]
+): [number, number, number] | null {
+    const rows = matrix.map((row, i) => [...row, values[i]]);
+
+    for (let column = 0; column < 3; column += 1) {
+        let pivot = column;
+        for (let row = column + 1; row < 3; row += 1) {
+            if (Math.abs(rows[row][column]) > Math.abs(rows[pivot][column])) {
+                pivot = row;
+            }
+        }
+        if (Math.abs(rows[pivot][column]) < 1e-12) return null;
+        if (pivot !== column) {
+            const swap = rows[column];
+            rows[column] = rows[pivot];
+            rows[pivot] = swap;
+        }
+
+        const divisor = rows[column][column];
+        for (let col = column; col < 4; col += 1) rows[column][col] /= divisor;
+        for (let row = 0; row < 3; row += 1) {
+            if (row === column) continue;
+            const factor = rows[row][column];
+            for (let col = column; col < 4; col += 1) {
+                rows[row][col] -= factor * rows[column][col];
+            }
+        }
+    }
+
+    return [rows[0][3], rows[1][3], rows[2][3]];
+}
+
+function clampToWindow(value: number, window: FlowPoint[], of: "cup" | "water"): number {
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (const point of window) {
+        min = Math.min(min, point[of]);
+        max = Math.max(max, point[of]);
+    }
+    return Math.min(max, Math.max(min, value));
+}
+
+function savitzkyGolayAt(
+    window: FlowPoint[], centreAt: number, of: "cup" | "water"
+): number | null {
+    if (window.length < RETROSPECTIVE_FLOW_MIN_SAMPLES) return null;
+
+    let s0 = 0;
+    let s1 = 0;
+    let s2 = 0;
+    let s3 = 0;
+    let s4 = 0;
+    let y0 = 0;
+    let y1 = 0;
+    let y2 = 0;
+
+    for (const point of window) {
+        const x = (point.at - centreAt) / 1000;
+        const x2 = x * x;
+        const value = point[of];
+        s0 += 1;
+        s1 += x;
+        s2 += x2;
+        s3 += x2 * x;
+        s4 += x2 * x2;
+        y0 += value;
+        y1 += x * value;
+        y2 += x2 * value;
+    }
+
+    const coefficients = solve3(
+        [[s0, s1, s2], [s1, s2, s3], [s2, s3, s4]],
+        [y0, y1, y2]
+    );
+    if (coefficients === null || !Number.isFinite(coefficients[0])) return null;
+    return clampToWindow(coefficients[0], window, of);
+}
+
+function smoothRetrospectiveRun(run: FlowPoint[]): FlowPoint[] {
+    const first = run[0];
+    const last = run[run.length - 1];
+    if (first === undefined || last === undefined) return [];
+
+    const halfWindow = retrospectiveWindowMs(run) / 2;
+    return run.map((point) => {
+        const radius = Math.min(halfWindow, point.at - first.at, last.at - point.at);
+        const window = run.filter((candidate) => Math.abs(candidate.at - point.at) <= radius);
+        const cup = savitzkyGolayAt(window, point.at, "cup");
+        const water = savitzkyGolayAt(window, point.at, "water");
+        return {
+            at:    point.at,
+            cup:   cup ?? point.cup,
+            water: water ?? point.water
+        };
+    });
+}
+
+/**
+ * Both channels across the retained stream, for retrospective charts.
+ *
+ * This is deliberately separate from `flowNow`, `flowAt`, `flowSeries` and
+ * `flowTail`, which are live and causal. A finished record already has every
+ * sample, so its chart smooths the noisy derivative with a degree-two
+ * Savitzky-Golay fit over a centred window. The fit is confined to the same
+ * contiguous runs the path builder will draw: no sample on one side of a gap
+ * can affect a point on the other side.
+ */
+export function retrospectiveFlowSeries(
+    samples: BrewSample[], stages: number
+): FlowPoint[] {
+    return contiguousRateRuns(rawRateSeries(samples, stages))
+        .map((run) => {
+            const adjacentMs = rateAdjacentAllowance(run);
+            return run.filter((point) => point.at - point.fromAt <= adjacentMs);
+        })
+        .filter((run) => {
+            const first = run[0];
+            const last = run[run.length - 1];
+            return first !== undefined && last !== undefined &&
+                last.at - first.at >= FLOW_MIN_WINDOW_MS;
+        })
+        .flatMap(smoothRetrospectiveRun);
 }
 
 /**
