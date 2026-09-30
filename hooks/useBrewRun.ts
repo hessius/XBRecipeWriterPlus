@@ -65,9 +65,11 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     const [published, setPublished] = useState<
         {runId: number; samples: BrewSample[]; elapsed: number}
     >({runId, samples: NO_SAMPLES, elapsed: 0});
+    const [recorded, setRecorded] = useState<{runId: number; record: BrewRecord} | null>(null);
     const current = published.runId === runId;
     const samples = current ? published.samples : NO_SAMPLES;
     const elapsed = current ? published.elapsed : 0;
+    const record = recorded?.runId === runId ? recorded.record : undefined;
     // Track phase locally so React re-renders when it changes. The machine it
     // was heard from is remembered alongside it: a reconnect hands us a new
     // machine with a new recorder, and the phase the old one was left in
@@ -123,6 +125,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
             machine,
             recipe: started,
             onRecord: (record, taken, frames) => {
+                setRecorded({runId, record});
                 database.current?.insert(record, taken, frames);
                 // After the insert, and not awaited. The reading is a BLE
                 // round trip that beeps, and the brew is over: holding the
@@ -155,6 +158,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     }, [machine, runId]);
 
     const pouring = phase.name === "pouring";
+    const bypassing = phase.name === "bypass";
     // Water is done but coffee is still draining onto the scale. The cup line
     // is still moving, so the live trace has to keep publishing through it —
     // this is the part of the brew that BREWER_STOP used to throw away.
@@ -162,7 +166,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     const over = OVER.has(phase.name);
 
     useEffect(() => {
-        if (!pouring && !settling) return;
+        if (!pouring && !bypassing && !settling) return;
         const tick = setInterval(() => {
             const taken = recorder.current?.samples ?? [];
             setPublished({
@@ -172,7 +176,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
             });
         }, PUBLISH_MS);
         return () => clearInterval(tick);
-    }, [pouring, settling, runId]);
+    }, [pouring, bypassing, settling, runId]);
 
     // One last copy on the way out, so the finished chart is the whole brew and
     // not whatever the last tick happened to catch.
@@ -271,7 +275,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
         // `phase` after the spread on purpose: the sanitised local reading, not
         // the brewer's raw one, is what callers should see.
         ...brewer, phase, samples, elapsed, stageElapsed, activeIndex, holding,
-        heldSeconds, stalls, stageWater, pauseElapsed, bypass
+        heldSeconds, stalls, stageWater, pauseElapsed, bypass, record
     };
 }
 

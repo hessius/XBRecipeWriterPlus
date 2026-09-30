@@ -156,7 +156,7 @@ describe("allocateBands", () => {
 describe("SUMMARY_BANDS", () => {
     // The unbounded band set BrewSummary uses. It has no measured height to
     // divide (it renders inside a ViewShot with fill={false}), so it cannot
-    // call allocateBands; it takes the soft caps instead — the thickness and
+    // call allocateBands; it takes the soft caps instead, the thickness and
     // spacing a well-filled ladder settles at on the live screen.
 
     it("uses the thick soft-cap bar, not the pre-#88 literal", () => {

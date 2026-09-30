@@ -137,6 +137,22 @@ const twoPours = {
     ]
 } as unknown as Recipe;
 
+function samplesForRate() {
+    return Array.from({length: 31}, (_, i) => {
+        const at = i * 100;
+        return {at, water: (at / 1000) * 3, cup: (at / 1000) * 2, pour: 1};
+    });
+}
+
+function recordWithDrawdownRate(over: Partial<StoredBrew> = {}) {
+    return {
+        ...record,
+        drawdownAt: 210_000,
+        cupAtDrawdown: 200,
+        ...over
+    };
+}
+
 async function pressOnSheet(
     target: () => Parameters<typeof fireEvent.press>[0],
     landed?: () => boolean
@@ -191,9 +207,10 @@ describe("brew record", () => {
         expect(screen.getByText("244")).toBeTruthy();
     });
 
-    it("names the time it held", async () => {
+    it("does not call normal drawdown time a delay", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        expect(screen.getByText(/\+14 S/)).toBeTruthy();
+        expect(screen.queryByText(/\+14 S/)).toBeNull();
+        expect(screen.queryByTestId("figures-delay")).toBeNull();
     });
 
     it("takes the planned length from the stored plan, not from the clock", async () => {
@@ -204,14 +221,13 @@ describe("brew record", () => {
         const stages = planFromPours(twoPours.pours);
         // Two 40 ml pours at 4 ml/s with 10 s pauses: 2 x (10 + 10) = 40 s.
         mockOpened = {
-            record: {...record, plan: stages},
+            record: {...record, plan: stages, drawdownAt: 210_000},
             samples: [{at: 0, water: 0, cup: 0, pour: 1},
                       {at: 228_000, water: 250, cup: 244, pour: 2}]
         };
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        // 228 s run against a 40 s plan, not the +14 S the clock arithmetic
-        // would have produced from the same record.
-        expect(screen.getByText(/\+188 S/)).toBeTruthy();
+        // 210 s to pour end against a 40 s plan, not the 228 s brew end.
+        expect(screen.getByText("+170")).toBeTruthy();
     });
 
     it("offers one way back, not two that go to the same place", async () => {
@@ -1070,20 +1086,29 @@ describe("the drawdown on the record screen", () => {
         // machine announced, never from the brew's total, which would report
         // the whole 3:48.
         await renderRecord({...record, drawdownAt: 210_000});
-        expect(screen.getByText("DRAWDOWN 0:18")).toBeTruthy();
+        expect(screen.getByText("DRAWDOWN")).toBeTruthy();
+        expect(screen.getByText("0:18")).toBeTruthy();
     });
 
-    it("reports the machine's dial as an observation of the dial", async () => {
-        await renderRecord({...record, dialBefore: 52, dialAfter: 47});
-        expect(screen.getByTestId("figures-dial"))
-            .toHaveTextContent("MACHINE DIAL 47, MOVED FROM 52");
+    it("reports the machine's dial as the grind figure", async () => {
+        await renderRecord({...record, grinderUsed: true, grindSize: 52, dialAfter: 47});
+        expect(screen.getByText("47")).toBeTruthy();
+        expect(screen.getByText("RECIPE 52")).toBeTruthy();
+    });
+
+    it("reports off when the grinder did not run", async () => {
+        await renderRecord({...record, grinderUsed: false, grindSize: 52, dialAfter: 47});
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByText("OFF")).toBeTruthy();
+        expect(screen.queryByTestId("figures-grind-recipe")).toBeNull();
+        expect(screen.getByLabelText("Grind, the grinder was off")).toBeTruthy();
     });
 
     it("says nothing about a dial the machine never confirmed", async () => {
         // Only the pre-brew reading, which is the setting that was about to
         // be overridden and proves nothing on its own.
         await renderRecord({...record, dialBefore: 52});
-        expect(screen.queryByTestId("figures-dial")).toBeNull();
+        expect(screen.queryByTestId("figures-grind")).toBeNull();
     });
 
     it("says nothing for a brew that never drew down", async () => {
@@ -1091,6 +1116,33 @@ describe("the drawdown on the record screen", () => {
         // cancelled, both store 0. Neither is a drawdown of no seconds.
         await renderRecord({...record, drawdownAt: 0});
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
+    });
+
+    it("charts the rate and names it on the drawdown line", async () => {
+        mockOpened = {record: recordWithDrawdownRate(), samples: samplesForRate()};
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(await screen.findByTestId("rate-chart")).toBeTruthy();
+        expect(screen.getByTestId("figures-drawdown-rate")).toBeTruthy();
+    });
+
+    it("still names the rate when the stream has been swept", async () => {
+        mockOpened = {
+            record: recordWithDrawdownRate({hasStream: false}),
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
+        expect(screen.getByTestId("figures-drawdown-rate")).toBeTruthy();
+    });
+
+    it("keeps the rate chart inside the shared capture", async () => {
+        mockOpened = {record: recordWithDrawdownRate(), samples: samplesForRate()};
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        const capture = screen.getByTestId("brew-capture");
+        expect(within(capture).getByTestId("rate-chart")).toBeTruthy();
     });
 });
 
@@ -1166,14 +1218,14 @@ describe("brew record's story card", () => {
     });
 
     /** Give the sheet a stage to draw in; nothing is drawn until it has one. */
-    async function openCard(): Promise<void> {
+    async function openCard(width = 360): Promise<void> {
         // Pressed once, not in a retry loop: the sheet hides the screen behind
         // it from a screen reader, so the button this press found is gone by
         // the time a second attempt would look for it.
         fireEvent.press(screen.getByLabelText("Make a story card to share"));
         await waitFor(() => expect(screen.getByTestId("story-stage")).toBeTruthy());
         fireEvent(screen.getByTestId("story-stage"), "layout", {
-            nativeEvent: {layout: {width: 360, height: 700, x: 0, y: 0}}
+            nativeEvent: {layout: {width, height: Math.ceil(width * 16 / 9) + 100, x: 0, y: 0}}
         });
         await waitFor(() => expect(screen.getByTestId("brew-story-card")).toBeTruthy());
     }
@@ -1194,14 +1246,14 @@ describe("brew record's story card", () => {
 
     it("shows the card before it is shared", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-        await openCard();
+        await openCard(600);
         expect(screen.getByTestId("brew-story-card")).toBeTruthy();
     });
 
     it("builds the card from the shared summary rather than a second drawing",
         async () => {
             await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-            await openCard();
+            await openCard(600);
             const card = within(screen.getByTestId("brew-story-card"));
             expect(card.getByTestId("story-capture")).toBeTruthy();
             expect(card.getByTestId("ladder")).toBeTruthy();
@@ -1221,11 +1273,85 @@ describe("brew record's story card", () => {
 
     it("carries the coffee, the rating and the tags", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-        await openCard();
+        await openCard(600);
         const card = within(screen.getByTestId("brew-story-card"));
         expect(card.getByTestId("story-coffee")).toHaveTextContent(/Huila/);
         expect(card.getByTestId("story-rating")).toBeTruthy();
         expect(card.getByTestId("story-tags")).toHaveTextContent(/filter/);
+    });
+
+    it("drops the story rate chart when the fixed frame needs the room", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating: 4,
+                origin: "Huila",
+                roast:  "Medium",
+                tags:   ["filter", "washed"],
+                plan:   planFromPours(twoPours.pours)
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+
+        expect(summaryProps.showRateChart).toBe(false);
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
+        const style = StyleSheet.flatten(
+            screen.getByTestId("brew-story-card").props.style as StyleProp<ViewStyle>
+        );
+        expect(style?.overflow).toBe("hidden");
+    });
+
+    it("does not budget a story rate chart after the sample stream was swept", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating:    4,
+                origin:    "Huila",
+                roast:     "Medium",
+                tags:      ["filter", "washed"],
+                plan:      planFromPours(twoPours.pours),
+                hasStream: false
+            }),
+            samples: []
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+
+        expect(summaryProps.showRateChart).toBe(false);
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
+    });
+
+    it("passes the story budget through to the summary", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating: 4,
+                origin: "Huila",
+                roast:  "Medium",
+                tags:   ["filter", "washed"],
+                plan:   planFromPours(twoPours.pours)
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard();
+        expect(summaryProps).toEqual(expect.objectContaining({
+            testID: "story-capture",
+            traceHeight: expect.any(Number),
+            rateHeight: expect.any(Number),
+            rateTopGap: expect.any(Number),
+            rateBottomGap: expect.any(Number),
+            capturePadding: expect.any(Number),
+            ladderTopGap: expect.any(Number),
+            storyBands: expect.objectContaining({
+                barHeight: expect.any(Number),
+                rungGap: expect.any(Number)
+            }),
+            showRateChart: expect.any(Boolean),
+            showStages: expect.any(Boolean)
+        }));
     });
 
     it("hides the screen from a screen reader while the card is up", async () => {

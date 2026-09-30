@@ -1,7 +1,7 @@
 import Pour from "@/library/Pour";
 import {
-    bypassSeconds, livePoints, pathLength, planPoints, plannedSeconds, pourSeconds, stageSpans,
-    toPath
+    bypassSeconds, livePoints, pathLength, planPoints, plannedSeconds, pourEndDelaySeconds,
+    pourSeconds, stageSpans, toMonotonePath, toPath
 } from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 
@@ -25,6 +25,27 @@ describe("pourSeconds", () => {
 describe("plannedSeconds", () => {
     it("adds every pour and every pause", () => {
         expect(plannedSeconds([bloom(), main()])).toBe(10 + 20 + 40);
+    });
+
+    describe("pourEndDelaySeconds", () => {
+        it("subtracts drawdown before measuring delay against the plan", () => {
+            // A 132 second brew with 32 seconds of drawdown was only five seconds
+            // late against a 95 second pour plan. Measuring to the brew end would
+            // report 37 seconds and count normal drawdown as lateness.
+            expect(pourEndDelaySeconds(132, 32, 95)).toBe(5);
+        });
+
+        it("says nothing when drawdown is unknown", () => {
+            expect(pourEndDelaySeconds(132, null, 95)).toBeNull();
+        });
+
+        it("suppresses delays below the reporting floor", () => {
+            expect(pourEndDelaySeconds(128, 32, 95)).toBeNull();
+        });
+
+        it("says nothing when there is no plan to compare with", () => {
+            expect(pourEndDelaySeconds(132, 32, 0)).toBeNull();
+        });
     });
 
     it("is zero for a recipe with no pours", () => {
@@ -89,6 +110,90 @@ describe("toPath", () => {
         // maxT is elapsed time, which is 0 on the first frame of every brew.
         expect(toPath([{t: 0, v: 0}, {t: 0, v: 0}],
                       {width: 100, height: 40, maxT: 0, maxV: 0})).toBe("M0 40 L0 40");
+    });
+});
+
+function cubicY(a: number, b: number, c: number, d: number, t: number): number {
+    const mt = 1 - t;
+    return mt * mt * mt * a
+        + 3 * mt * mt * t * b
+        + 3 * mt * t * t * c
+        + t * t * t * d;
+}
+
+function cubicSegments(path: string): {
+    startY: number;
+    c1Y: number;
+    c2Y: number;
+    endY: number;
+}[] {
+    const parts = path.match(
+        /M[-\d.]+ ([-\d.]+)|C[-\d.]+ ([-\d.]+) [-\d.]+ ([-\d.]+) [-\d.]+ ([-\d.]+)/g
+    ) ?? [];
+    let startY = 0;
+    const segments: ReturnType<typeof cubicSegments> = [];
+    for (const part of parts) {
+        const move = part.match(/^M[-\d.]+ ([-\d.]+)$/);
+        if (move !== null) {
+            startY = Number(move[1]);
+            continue;
+        }
+        const curve = part.match(
+            /^C[-\d.]+ ([-\d.]+) [-\d.]+ ([-\d.]+) [-\d.]+ ([-\d.]+)$/
+        );
+        if (curve !== null) {
+            const c1Y = Number(curve[1]);
+            const c2Y = Number(curve[2]);
+            const endY = Number(curve[3]);
+            segments.push({startY, c1Y, c2Y, endY});
+            startY = endY;
+        }
+    }
+    return segments;
+}
+
+describe("toMonotonePath", () => {
+    const box = {width: 100, height: 40, maxT: 4, maxV: 10};
+
+    it("is empty for one point", () => {
+        expect(toMonotonePath([{t: 0, v: 0}], box)).toBe("");
+    });
+
+    it("keeps a two point run straight", () => {
+        expect(toMonotonePath([{t: 0, v: 0}, {t: 2, v: 5}], box))
+            .toBe("M0 40 L50 20");
+    });
+
+    it("draws a cubic that still passes through every measured point", () => {
+        const path = toMonotonePath([
+            {t: 0, v: 0},
+            {t: 1, v: 8},
+            {t: 2, v: 6}
+        ], box);
+
+        expect(path).toBe("M0 40 C8.3 29.3 16.7 8 25 8 C33.3 8 41.7 13.3 50 16");
+    });
+
+    it("does not overshoot the local bounds around a peak", () => {
+        const path = toMonotonePath([
+            {t: 0, v: 0},
+            {t: 1, v: 0},
+            {t: 2, v: 0},
+            {t: 3, v: 8},
+            {t: 4, v: 0}
+        ], box);
+
+        for (const segment of cubicSegments(path)) {
+            const lower = Math.min(segment.startY, segment.endY);
+            const upper = Math.max(segment.startY, segment.endY);
+            for (let i = 1; i < 20; i += 1) {
+                const y = cubicY(
+                    segment.startY, segment.c1Y, segment.c2Y, segment.endY, i / 20
+                );
+                expect(y).toBeGreaterThanOrEqual(lower - 0.05);
+                expect(y).toBeLessThanOrEqual(upper + 0.05);
+            }
+        }
     });
 });
 

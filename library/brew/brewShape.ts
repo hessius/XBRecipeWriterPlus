@@ -14,6 +14,9 @@ export type Point = {t: number; v: number};
  */
 const DEFAULT_FLOW_ML_S = 3.2;
 
+/** Below this a pour-end delay is rounding, not a hold worth naming. */
+export const DELAY_FLOOR_SECONDS = 2;
+
 /** How long a pour takes. `flowRate` is stored times ten. */
 export function pourSeconds(pour: Pour): number {
     const volume = Math.max(pour.volume, 0);
@@ -46,6 +49,25 @@ export function bypassSeconds(volume: number): number {
 /** How long the recipe says the whole brew should take. */
 export function plannedSeconds(pours: Pour[]): number {
     return pours.reduce((total, pour) => total + pourSeconds(pour) + pauseSeconds(pour), 0);
+}
+
+/**
+ * How late the pour section ended, separated from drawdown.
+ *
+ * A recipe's plan ends when the last pour ends. It has no drawdown stage, so a
+ * delay measured to the end of the brew mostly reports a normal bed drawdown.
+ * Null means nobody can separate the two, or the separated delay is too small
+ * to name.
+ */
+export function pourEndDelaySeconds(
+    seconds: number,
+    drawdown: number | null,
+    planSeconds: number
+): number | null {
+    if (drawdown === null || planSeconds <= 0) return null;
+    const pourEnd = seconds - drawdown;
+    const delay = Math.round(pourEnd - planSeconds);
+    return delay >= DELAY_FLOOR_SECONDS ? delay : null;
 }
 
 /** Where one stage begins, stops pouring, and finally ends. Seconds. */
@@ -99,6 +121,98 @@ export function planPoints(pours: Pour[]): Point[] {
  */
 export function livePoints(samples: BrewSample[], of: "water" | "cup"): Point[] {
     return samples.map((sample) => ({t: sample.at / 1000, v: sample[of]}));
+}
+
+/**
+ * The pieces a trace's horizontal axis is built from.
+ *
+ * `BrewTrace` needs the parts as well as the total: the bypass box is drawn
+ * at `bypassFrom` and is `bypassWide` seconds across. Returning them from here
+ * rather than letting the component recompute them keeps the box and the axis
+ * it is measured against from drifting apart if either is ever retuned.
+ */
+export type TraceTimeParts = {
+    ranTo: number;
+    bypassMl: number;
+    bypassWide: number;
+    bypassFrom: number;
+    maxT: number;
+};
+
+export function traceTimeParts(
+    plannedSeconds: number,
+    samples: BrewSample[],
+    bypass?: {volume: number; startedAt: number | null}
+): TraceTimeParts {
+    const ranTo = samples.length > 0 ? samples[samples.length - 1].at / 1000 : 0;
+    const bypassMl = bypass === undefined ? 0 : Math.max(bypass.volume, 0);
+    const bypassWide = bypassSeconds(bypassMl);
+    /*
+     * With no real start time the box tracks the later of the plan and now, so
+     * it visibly slides right while the machine waits for the dripper instead
+     * of sitting at a plan time that has already gone past.
+     */
+    const bypassFrom = bypass === undefined ? 0
+        : bypass.startedAt !== null ? bypass.startedAt
+        : Math.max(plannedSeconds, ranTo);
+    return {
+        ranTo,
+        bypassMl,
+        bypassWide,
+        bypassFrom,
+        maxT: Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
+    };
+}
+
+/**
+ * The real-seconds extent a trace uses on its horizontal axis.
+ *
+ * Shared by the volume trace and the finished rate chart. The rate chart sits
+ * directly under the trace, so the same second must map to the same x even
+ * when the visible rate series ends before the plan, a run overran its plan,
+ * or a bypass box extends the trace tail.
+ */
+export function traceTimeExtent(
+    plannedSeconds: number,
+    samples: BrewSample[],
+    bypass?: {volume: number; startedAt: number | null}
+): number {
+    return traceTimeParts(plannedSeconds, samples, bypass).maxT;
+}
+
+/**
+ * The whole extent a volume trace is sized to: its real seconds across, and
+ * the highest volume anything drawn in it reaches.
+ *
+ * `BrewTrace` sizes itself with this, and `BrewSummary` hands the same value
+ * down so the rate chart underneath shares the horizontal extent. Both read it
+ * from here rather than each spelling the rule out. Derived separately the two
+ * agreed only while the summary passed no plan of its own, and a plan line
+ * added to it later would have silently cost the volume trace its tail: a
+ * short axis clips at the viewport instead of rescaling, with nothing on
+ * screen to say anything is missing.
+ */
+export function traceAxisFor(
+    pours: Pour[],
+    samples: BrewSample[],
+    plannedSeconds: number,
+    bypass?: {volume: number; startedAt: number | null}
+): {maxT: number; maxV: number} {
+    const times = traceTimeParts(plannedSeconds, samples, bypass);
+    const plan = planPoints(pours);
+    // The plan's final water level: the floor the bypass box is stacked on.
+    const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
+    const water = livePoints(samples, "water");
+    return {
+        maxT: times.maxT,
+        maxV: Math.max(
+            water.length > 0 ? water[water.length - 1].v : 0,
+            // The bypass box is stacked on the plan's final level rather than
+            // drawn beside it. `bypassMl` is clamped non-negative upstream, so
+            // this covers a plan with no bypass at all.
+            planTop + times.bypassMl
+        )
+    };
 }
 
 /**
@@ -159,4 +273,76 @@ export function toPath(points: Point[], box: Box): string {
             return `${x} ${y}`;
         })
         .join(" L");
+}
+
+type DrawnPoint = {x: number; y: number};
+
+function drawnPoints(points: Point[], box: Box): DrawnPoint[] {
+    const spanT = box.maxT > 0 ? box.maxT : 1;
+    const spanV = box.maxV > 0 ? box.maxV : 1;
+    const round = (n: number) => Math.round(n * 10) / 10;
+    return points.map(({t, v}) => ({
+        x: round((t / spanT) * box.width),
+        y: round(box.height - (v / spanV) * box.height)
+    }));
+}
+
+/**
+ * Points to an SVG path whose cubic spans preserve each local value range.
+ *
+ * Fritsch and Carlson tangents make each interval monotone when the points on
+ * either side are monotone, so the rate chart can look smooth without drawing
+ * a rate that was never fitted. Runs that cannot support a cubic fall back to
+ * the same straight path as `toPath`.
+ */
+export function toMonotonePath(points: Point[], box: Box): string {
+    if (points.length < 3) return toPath(points, box);
+
+    const drawn = drawnPoints(points, box);
+    const segments = drawn.length - 1;
+    const deltas: number[] = [];
+    for (let i = 0; i < segments; i += 1) {
+        const dx = drawn[i + 1].x - drawn[i].x;
+        if (dx <= 0) return toPath(points, box);
+        deltas.push((drawn[i + 1].y - drawn[i].y) / dx);
+    }
+
+    const slopes = Array<number>(drawn.length);
+    slopes[0] = deltas[0];
+    slopes[drawn.length - 1] = deltas[deltas.length - 1];
+    for (let i = 1; i < drawn.length - 1; i += 1) {
+        slopes[i] = deltas[i - 1] * deltas[i] <= 0
+            ? 0
+            : (deltas[i - 1] + deltas[i]) / 2;
+    }
+
+    for (let i = 0; i < segments; i += 1) {
+        if (deltas[i] === 0) {
+            slopes[i] = 0;
+            slopes[i + 1] = 0;
+            continue;
+        }
+        const alpha = slopes[i] / deltas[i];
+        const beta = slopes[i + 1] / deltas[i];
+        const magnitude = Math.hypot(alpha, beta);
+        if (magnitude > 3) {
+            const shrink = 3 / magnitude;
+            slopes[i] = shrink * alpha * deltas[i];
+            slopes[i + 1] = shrink * beta * deltas[i];
+        }
+    }
+
+    const round = (n: number) => Math.round(n * 10) / 10;
+    const parts = [`M${drawn[0].x} ${drawn[0].y}`];
+    for (let i = 0; i < segments; i += 1) {
+        const start = drawn[i];
+        const end = drawn[i + 1];
+        const dx = end.x - start.x;
+        parts.push(
+            `C${round(start.x + dx / 3)} ${round(start.y + slopes[i] * dx / 3)} `
+            + `${round(end.x - dx / 3)} ${round(end.y - slopes[i + 1] * dx / 3)} `
+            + `${end.x} ${end.y}`
+        );
+    }
+    return parts.join(" ");
 }

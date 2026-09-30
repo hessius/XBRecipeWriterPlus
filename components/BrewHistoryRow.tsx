@@ -7,6 +7,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import {formatBrewDate, formatBrewDuration} from "@/library/brew/brewFormat";
+import {drawdownRate, formatFlowRate} from "@/library/brew/flowRate";
 
 type Props = {
     brew: StoredBrew;
@@ -23,7 +24,7 @@ const STOPPED_OUTCOMES: ReadonlySet<string> =
 /**
  * One past brew as a tappable row.
  *
- * The coloured mark preserves the accent at brew time — a recoloured or deleted
+ * The coloured mark preserves the accent at brew time: a recoloured or deleted
  * recipe does not rewrite its own history.
  */
 export default function BrewHistoryRow({brew, onPress, selectionMode = false, selected = false}: Props) {
@@ -45,12 +46,15 @@ export default function BrewHistoryRow({brew, onPress, selectionMode = false, se
     // machine measured nothing, which is a claim about the brew rather than
     // about the app, and a much worse one.
     const watched = brew.watched !== false;
+    const drawdown = watched ? drawdownRate(brew) : null;
+    const drawdownRateText = drawdown === null ? null : formatFlowRate(drawdown);
 
     const label = [
         brew.recipeName,
         formatBrewDate(brew.startedAt),
         ...(watched
             ? [`${Math.round(brew.cupTotal)} grams`,
+               drawdownRateText === null ? undefined : `${drawdownRateText} grams per second`,
                formatBrewDuration(brew.startedAt, brew.endedAt)]
             : ["not watched"]),
         endedEarly ? "ended early" : undefined,
@@ -122,6 +126,12 @@ export default function BrewHistoryRow({brew, onPress, selectionMode = false, se
                                                color={palette.text}>
                                     {`${Math.round(brew.cupTotal)} G`}
                                 </DotMatrixText>
+                                {drawdownRateText !== null && (
+                                    <DotMatrixText fontSize={11} letterSpacing={1}
+                                                   color={palette.text}>
+                                        {`${drawdownRateText} G/S`}
+                                    </DotMatrixText>
+                                )}
                                 <DotMatrixText fontSize={11} letterSpacing={1}
                                                color={palette.dim}>
                                     {formatBrewDuration(brew.startedAt, brew.endedAt)}

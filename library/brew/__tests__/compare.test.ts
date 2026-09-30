@@ -267,6 +267,25 @@ describe("gapBand", () => {
 });
 
 describe("compareAxis", () => {
+    function rateStream(rate: number, pour = 1): BrewSample[] {
+        return Array.from({length: 21}, (_, i) => {
+            const seconds = i / 10;
+            return {
+                at: i * 100,
+                water: rate * seconds,
+                cup: rate * seconds,
+                pour
+            };
+        });
+    }
+
+    function underRate(rate: number, over: Partial<StoredBrew> = {}) {
+        return {
+            record: brew({pours: 1, ...over}),
+            samples: rateStream(rate)
+        };
+    }
+
     it("uses one shared scale for both streams and both plans", () => {
         const axis = compareAxis(
             {
@@ -299,6 +318,60 @@ describe("compareAxis", () => {
         expect(axis.maxV).toBe(250);
         expect(axis.subjectPours).toHaveLength(2);
         expect(axis.referencePours).toHaveLength(1);
+    });
+
+    it("negotiates one rate axis across both brews", () => {
+        const axis = compareAxis(
+            underRate(2),
+            underRate(5, {id: "b"})
+        );
+
+        expect(axis.maxRate).toBeCloseTo(5, 6);
+        expect(axis.subjectRate).toHaveLength(20);
+        expect(axis.referenceRate).toHaveLength(20);
+    });
+
+    it("excludes bypass samples with the brew's stage count", () => {
+        const brewed = underRate(2);
+        const bypass = rateStream(25, 2);
+        const axis = compareAxis(
+            {
+                record: brew({pours: 1}),
+                samples: [...brewed.samples, ...bypass]
+            },
+            underRate(3, {id: "b"})
+        );
+
+        expect(axis.maxRate).toBeCloseTo(3, 6);
+        expect(axis.subjectRate.every((point) => point.cup < 3)).toBe(true);
+    });
+
+    it("has a rate axis of 0 when neither brew kept its stream", () => {
+        const axis = compareAxis(
+            underRate(2, {hasStream: false}),
+            underRate(5, {id: "b", hasStream: false})
+        );
+
+        expect(axis.maxRate).toBe(0);
+        expect(axis.subjectRate).toEqual([]);
+        expect(axis.referenceRate).toEqual([]);
+    });
+
+    it("keeps a retained short stream out of the drawable rate series", () => {
+        const axis = compareAxis(
+            underRate(2),
+            {
+                record: brew({id: "b", pours: 1}),
+                samples: [
+                    {at: 0, water: 0, cup: 0, pour: 1},
+                    {at: 100, water: 0.5, cup: 0.5, pour: 1},
+                    {at: 200, water: 1, cup: 1, pour: 1}
+                ]
+            }
+        );
+
+        expect(axis.subjectRate.length).toBeGreaterThanOrEqual(2);
+        expect(axis.referenceRate).toEqual([]);
     });
 });
 

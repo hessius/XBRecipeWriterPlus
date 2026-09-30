@@ -11,6 +11,7 @@ import {
     type BrewUnderComparison
 } from "@/library/brew/compare";
 import {type Box} from "@/library/brew/brewShape";
+import {hasDrawableRateRun} from "@/library/brew/rateChartGeometry";
 
 export type CompareMode = "overlay" | "separate";
 
@@ -29,6 +30,7 @@ type ReadyComparison = {
     referencePlan: string | undefined;
     subjectHasTrace: boolean;
     referenceHasTrace: boolean;
+    showRateLanes: boolean;
     traceCount: number;
     survivingTrace: BrewUnderComparison | null;
     hasChart: boolean;
@@ -104,6 +106,11 @@ export function useBrewComparison({
         : undefined;
     const subjectHasTrace = hasTrace(subject);
     const referenceHasTrace = hasTrace(reference);
+    // A volume trace is still a readable record of one brew on its own. A rate
+    // lane's only value is comparison, so one lane on its own scaled axis
+    // suggests a second brew that is not there.
+    const showRateLanes = hasDrawableRateRun(axis.subjectRate)
+        && hasDrawableRateRun(axis.referenceRate);
     const traceCount = (subjectHasTrace ? 1 : 0) + (referenceHasTrace ? 1 : 0);
     const survivingTrace = traceCount === 1
         ? subjectHasTrace ? subject : reference
@@ -133,6 +140,7 @@ export function useBrewComparison({
         referencePlan,
         subjectHasTrace,
         referenceHasTrace,
+        showRateLanes,
         traceCount,
         survivingTrace,
         hasChart: traceCount > 0,

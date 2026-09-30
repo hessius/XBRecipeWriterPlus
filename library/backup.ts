@@ -585,6 +585,7 @@ const BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
 const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     pouringAt:  isNumber,
     drawdownAt: isNumber,
+    cupAtDrawdown: isNumber,
     failure:    (v) => v === null || typeof v === "string",
     // A stall is `{atMl, seconds}`, not a number: one list of them per stage.
     // Checked to that shape rather than to a list of numbers, because a
@@ -696,6 +697,7 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         startedAt: record.startedAt,
         pouringAt: record.pouringAt,
         drawdownAt: record.drawdownAt,
+        cupAtDrawdown: record.cupAtDrawdown,
         endedAt: record.endedAt,
         outcome: record.outcome,
         failure: record.failure ?? null,

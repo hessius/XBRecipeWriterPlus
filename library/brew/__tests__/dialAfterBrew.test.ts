@@ -1,6 +1,7 @@
 import type {BrewRecord} from "@/library/brew/BrewRecord";
-import {dialNote, dialWasMoved, readDialAfterBrew, type DialMachine}
+import {dialNote, readDialAfterBrew, type DialMachine}
     from "@/library/brew/dialAfterBrew";
+import {GRINDER_OFF_VALUE} from "@/library/Recipe";
 
 function record(overrides: Partial<BrewRecord> = {}): BrewRecord {
     return {
@@ -107,37 +108,50 @@ describe("readDialAfterBrew", () => {
     });
 });
 
-describe("dialWasMoved", () => {
-    it("is true when the two readings differ", () => {
-        expect(dialWasMoved(record({dialBefore: 47, dialAfter: 52}))).toBe(true);
-    });
-
-    it("is false when they agree", () => {
-        expect(dialWasMoved(record({dialBefore: 47, dialAfter: 47}))).toBe(false);
-    });
-
-    it("is false when only one reading exists", () => {
-        // One reading is a position, not a movement.
-        expect(dialWasMoved(record({dialAfter: 52}))).toBe(false);
-        expect(dialWasMoved(record({dialBefore: 47}))).toBe(false);
-    });
-});
-
 describe("dialNote", () => {
-    it("reports where the dial was and stops", () => {
-        // Not "ground at 47". The dial proves the dial's position and nothing
-        // about how the coffee was ground, and somebody using a hand grinder
-        // has one sitting wherever it was last left.
-        expect(dialNote(record({dialAfter: 47}))).toBe("MACHINE DIAL 47");
+    it("reports the confirmed dial as the grind figure", () => {
+        expect(dialNote(record({grinderUsed: true, grindSize: 47, dialAfter: 47})))
+            .toEqual({kind: "dial", dial: 47, recipe: null});
     });
 
-    it("says so when the dial was moved during the brew", () => {
-        expect(dialNote(record({dialBefore: 52, dialAfter: 47})))
-            .toBe("MACHINE DIAL 47, MOVED FROM 52");
+    it("badges the recipe grind when it differed from the dial", () => {
+        expect(dialNote(record({grinderUsed: true, grindSize: 52, dialAfter: 47})))
+            .toEqual({kind: "dial", dial: 47, recipe: 52});
     });
 
-    it("says nothing about a dial that did not move", () => {
-        expect(dialNote(record({dialBefore: 47, dialAfter: 47}))).toBe("MACHINE DIAL 47");
+    it("does not badge a recipe grind matching the dial", () => {
+        expect(dialNote(record({grinderUsed: true, grindSize: 47, dialAfter: 47})))
+            .toEqual({kind: "dial", dial: 47, recipe: null});
+    });
+
+    it("reports off when the record says the grinder was off", () => {
+        expect(dialNote(record({grinderUsed: false, grindSize: 52, dialAfter: 47})))
+            .toEqual({kind: "off"});
+    });
+
+    it("reports off without needing a dial reading", () => {
+        expect(dialNote(record({grinderUsed: false, grindSize: 52})))
+            .toEqual({kind: "off"});
+    });
+
+    it("reports off when the snapshotted recipe grind means grinder off", () => {
+        expect(dialNote(record({
+            grinderUsed: undefined,
+            grindSize:   GRINDER_OFF_VALUE,
+            dialAfter:   47
+        }))).toEqual({kind: "off"});
+    });
+
+    it("reports off when the two grinder records disagree", () => {
+        expect(dialNote(record({
+            grinderUsed: true,
+            grindSize:   GRINDER_OFF_VALUE,
+            dialAfter:   47
+        }))).toEqual({kind: "off"});
+    });
+
+    it("says nothing about a legacy brew with only a dial reading", () => {
+        expect(dialNote(record({dialAfter: 47}))).toBeNull();
     });
 
     it("says nothing at all when only the pre-brew reading exists", () => {

@@ -14,7 +14,7 @@ export type Stall = {atMl: number; seconds: number};
 export const NOISE_FLOOR_ML = 0.5;
 
 /** Below this a gap is the sample rate, not a stall worth naming. */
-const MIN_STALL_SECONDS = 2;
+export const MIN_STALL_SECONDS = 2;
 
 /**
  * How close to its target a stage has to get before flat water counts as the
@@ -34,7 +34,7 @@ const MIN_STALL_SECONDS = 2;
  * Whether 1 ml is the right number is a hardware question, not an arithmetic
  * one. It wants checking against a real brew.
  */
-const TARGET_TOLERANCE_ML = 1;
+export const TARGET_TOLERANCE_ML = 1;
 
 /**
  * The brew total as it stood before `stage` began.

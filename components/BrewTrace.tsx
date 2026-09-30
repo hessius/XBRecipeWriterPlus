@@ -4,11 +4,12 @@ import Svg, {Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText}
     from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
-import DotMatrixText, {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
+import {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {bypassSeconds, livePoints, pathLength, planPoints, stageSpans, toPath,
+import {livePoints, pathLength, planPoints, stageSpans, toPath,
+        traceAxisFor, traceTimeParts,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
@@ -22,23 +23,30 @@ type Props = {
     samples: BrewSample[];
     accent: string;
     width: number;
-    /** Total rendered height of the component. In non-compact mode this includes the legend and overrun rows. */
+    /** Total rendered height of the component. In non-compact mode this includes the legend row. */
     height: number;
     plannedSeconds: number;
     /**
      * An axis imposed from outside, overriding the self-sizing below.
      *
-     * Only the comparison screen sets it. Two lanes stacked one above the
-     * other are not a comparison unless they share a scale: the same 30 second
-     * mark has to be at the same x in both, and the same 200 ml at the same y.
-     * Absent, the box is sized to whichever of the plan, the run and the
-     * bypass box reaches furthest, which is what every other caller wants.
+     * The comparison screen sets it so two stacked lanes share a scale: the
+     * same 30 second mark has to be at the same x in both, and the same 200 ml
+     * at the same y. `BrewSummary` also sets it so the trace and the rate chart
+     * below it share the same real-seconds extent. Absent, the box is sized to
+     * whichever of the plan, the run and the bypass box reaches furthest.
      *
      * Must be at least this lane's own extent in both dimensions. A smaller
      * axis clips at the viewport rather than rescaling, so the lane would lose
-     * its tail with nothing on screen to say it had. And it is for `compact`
-     * lanes: the temperature band is not part of the axis, so two full-size
-     * lanes would still put the same temperature at different heights.
+     * its tail with nothing on screen to say it had. `BrewSummary` meets that
+     * by building it with `traceAxisFor`, the same derivation this lane falls
+     * back to. The comparison screen cannot: it has to reconcile two lanes, so
+     * `compareAxis` in `library/brew/compare.ts` builds its own and owes the
+     * requirement above directly. It clears its lanes today because neither is
+     * given a bypass, and a bypass box added to one would overflow it.
+     *
+     * Sharing an axis only makes two lanes comparable when both are `compact`:
+     * the temperature band is not part of the axis, so two full size lanes
+     * would still put the same temperature at different heights.
      */
     axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */
@@ -52,13 +60,13 @@ type Props = {
     planDashed?: boolean;
     /** 0 to 1: how far the lit head has travelled. 1 means no head. */
     planHeadAt?: number;
-    /** When true, render only the SVG at exactly width × height — no stage counter, no overrun label. */
+    /** When true, render only the SVG at exactly width by height, no stage counter. */
     compact?: boolean;
     /**
      * The stages a tap resolves against. Defaults to `pours`.
      *
      * A summary hides the plan line by passing `pours={[]}`, which leaves the
-     * chart with no stages to name — so it must say separately which stages
+     * chart with no stages to name, so it must say separately which stages
      * the run actually had.
      */
     stages?: Pour[];
@@ -78,9 +86,6 @@ type Props = {
      */
     bypass?: BypassView;
 };
-/** Point size of the overrun label. */
-const OVERRUN_SIZE = 12;
-
 /** The gradient's opacity at the line and at the floor. */
 const FILL_TOP = 0.28;
 const FILL_BOTTOM = 0;
@@ -125,9 +130,6 @@ const PLOT_FLOOR = 10;
 
 /** Minimum rendered bypass box size on the volume axis, unrelated to temperature mark width. */
 const BYPASS_BOX_MIN = 2;
-
-/** Below this an overrun is rounding, not a hold worth naming. */
-const GAP_FLOOR_SECONDS = 2;
 
 /** The lit head's length, as a fraction of the curve. */
 const LIT = 0.12;
@@ -206,32 +208,22 @@ export default function BrewTrace({
     const water = livePoints(samples, "water");
     const cup = livePoints(samples, "cup");
 
-    const ranTo = water.length > 0 ? water[water.length - 1].t : 0;
+    const times = traceTimeParts(plannedSeconds, samples, bypass);
+    const {ranTo, bypassMl, bypassWide, bypassFrom} = times;
     // The plan's final water level: where the target line ends, and the floor
     // the bypass box is stacked on.
     const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
-    const bypassMl = bypass === undefined ? 0 : Math.max(bypass.volume, 0);
-    const bypassWide = bypassSeconds(bypassMl);
-    // With no real start time the box tracks the later of the plan and now, so
-    // it visibly slides right while the machine waits for the dripper instead
-    // of sitting at a plan time that has already gone past.
-    const bypassFrom = bypass === undefined ? 0
-        : bypass.startedAt !== null ? bypass.startedAt
-        : Math.max(plannedSeconds, ranTo);
+    const extent = axis ?? traceAxisFor(pours, samples, plannedSeconds, bypass);
     // In compact mode the SVG fills the full height; otherwise the legend row
-    // and the overrun row take theirs first.
+    // takes its height first.
     const svgHeight = compact
         ? height
-        : Math.max(height - rowHeight(OVERRUN_SIZE) - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
+        : Math.max(height - rowHeight(LEGEND_SIZE), PLOT_FLOOR);
     const box: Box = {
         width,
         height: svgHeight,
-        maxT: axis?.maxT ?? Math.max(plannedSeconds, ranTo, bypassFrom + bypassWide),
-        maxV: axis?.maxV ?? Math.max(
-            planTop,
-            water.length > 0 ? water[water.length - 1].v : 0,
-            planTop + bypassMl
-        )
+        maxT: extent.maxT,
+        maxV: extent.maxV
     };
 
     const planPath = toPath(plan, box);
@@ -284,9 +276,6 @@ export default function BrewTrace({
         x: (selected.start / box.maxT) * box.width,
         width: Math.max(((selected.end - selected.start) / box.maxT) * box.width, 1)
     } : undefined;
-
-    // Only meaningful when there is an actual plan; a plan of nothing cannot be overrun.
-    const overrun = plannedSeconds > 0 ? Math.round(ranTo - plannedSeconds) : 0;
 
     // Sized in the box's own units, so it moves with the axis rather than
     // needing its own scale.
@@ -576,15 +565,6 @@ export default function BrewTrace({
                 <TraceLegendItem colour={cupStyle.stroke} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (
                     <TraceLegendItem colour={planStyle.stroke} label="PLAN" dashed />
-                )}
-            </XStack>
-            <XStack testID="trace-overrun-row" justifyContent="flex-end"
-                    alignItems="center" height={rowHeight(OVERRUN_SIZE)}>
-                {overrun >= GAP_FLOOR_SECONDS && (
-                    <DotMatrixText fontSize={OVERRUN_SIZE} weight="bold" letterSpacing={1.4}
-                                   color={palette.warn}>
-                        {`+${overrun} S`}
-                    </DotMatrixText>
                 )}
             </XStack>
         </YStack>

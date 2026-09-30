@@ -4,13 +4,19 @@ import Animated, {useAnimatedStyle, type SharedValue}
     from "react-native-reanimated";
 
 import {palette} from "@/constants/colors";
+import {
+    DOTO_MAX_FONT_SCALE,
+    DOTO_MIN_FONT_SIZE,
+    dotoDrawnFontSize,
+    dotoRequestedSize
+} from "@/library/dotoMetrics";
 
 /**
  * Doto below this size stops reading as characters and starts reading as noise.
  * Established by rendering a legibility ladder at true device scale during
  * design. The component clamps rather than trusting call sites.
  */
-export const DOTO_MIN_FONT_SIZE = 11;
+export {DOTO_MAX_FONT_SCALE, DOTO_MIN_FONT_SIZE};
 
 /**
  * How far OS font scaling may enlarge dot-matrix text.
@@ -20,7 +26,6 @@ export const DOTO_MIN_FONT_SIZE = 11;
  * truncates them. Scaling is still honoured, because a user who needs larger
  * text needs it here too; it is bounded rather than refused.
  */
-export const DOTO_MAX_FONT_SCALE = 1.4;
 
 /**
  * The static Doto instances this component may request.
@@ -58,7 +63,7 @@ type DotMatrixStyle = Omit<TextStyle, "fontSize" | "fontFamily" | "fontWeight">;
  * crosses the floor.
  */
 function requestedSize(fontSize: number): number {
-    return Math.max(fontSize, DOTO_MIN_FONT_SIZE / Math.min(PixelRatio.getFontScale(), 1));
+    return dotoRequestedSize(fontSize, PixelRatio.getFontScale());
 }
 
 /**
@@ -123,7 +128,7 @@ export function dotMatrixSvgProps(
  * from the height it asked for, or accessibility text sizing crops the glyphs.
  */
 export function drawnFontSize(fontSize: number): number {
-    return requestedSize(fontSize) * Math.min(PixelRatio.getFontScale(), DOTO_MAX_FONT_SCALE);
+    return dotoDrawnFontSize(fontSize, PixelRatio.getFontScale());
 }
 
 type Props = {

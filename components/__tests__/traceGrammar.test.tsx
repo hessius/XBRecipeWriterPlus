@@ -1,20 +1,23 @@
 import React from "react";
 
+import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
 import CompareTrace from "@/components/CompareTrace";
+import FlowSparkline from "@/components/FlowSparkline";
+import type {FlowPoint} from "@/library/brew/flowRate";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
 /**
- * The two charts must agree about what a channel looks like.
+ * The charts and sparkline must agree about what a channel looks like.
  *
  * `BrewTrace` and `CompareTrace` are separate components on purpose: one draws
  * a brew and the other draws a difference, and folding the second into the
  * first would have put a second brew's worth of branching through every path
  * in a long file. The cost of that decision is drift, and this is the thing
- * that stops it. Both read `library/brew/traceStyle.ts`; this asserts that
- * they really do at the rendered SVG host path.
+ * that stops it. The drawers read `library/brew/traceStyle.ts`; this asserts
+ * that they really do at the rendered SVG host path.
  *
  * If this fails, do not fix it by copying a value from one file to the other.
  * Find the hard-coded stroke that was added and move it into `traceStyle`.
@@ -31,6 +34,11 @@ const POURS = [
     new Pour(2, 130, 92, 40, 0, 0, 0)
 ];
 const PLAN_PATH = "M0 160 L150 40 L300 0";
+const FLOW_SERIES: FlowPoint[] = [
+    {at: 1_000, cup: 1, water: 2},
+    {at: 1_100, cup: 1.2, water: 2.2},
+    {at: 1_200, cup: 1.1, water: 2.1}
+];
 
 /** The attributes that make a channel recognisable. */
 const GRAMMAR = [
@@ -100,5 +108,41 @@ describe("the two charts draw the same channels the same way", () => {
 
         expect(styleOf(separate.getByTestId(single)))
             .toEqual(styleOf(overlay.getByTestId(paired)));
+    });
+});
+
+describe("the flow sparkline draws the cup grammar", () => {
+    it("matches the rendered cup channel", async () => {
+        const trace = await renderWithProviders(
+            <BrewTrace pours={POURS} samples={SAMPLES} accent={ACCENT}
+                       width={300} height={160} plannedSeconds={30} compact />
+        );
+        const sparkline = await renderWithProviders(
+            <FlowSparkline values={[1, 2, 1.5]} accent={ACCENT} />
+        );
+
+        expect(styleOf(sparkline.getByTestId(
+            "flow-sparkline-path",
+            {includeHiddenElements: true}
+        )))
+            .toEqual(styleOf(trace.getByTestId("trace-cup")));
+    });
+});
+
+describe("the rate chart draws the shared grammar", () => {
+    it.each([
+        ["water", "trace-water", "rate-chart-water"],
+        ["cup", "trace-cup", "rate-chart-cup"]
+    ])("matches the rendered %s channel", async (_channel, traceId, rateId) => {
+        const trace = await renderWithProviders(
+            <BrewTrace pours={POURS} samples={SAMPLES} accent={ACCENT}
+                       width={300} height={160} plannedSeconds={30} compact />
+        );
+        const rate = await renderWithProviders(
+            <BrewRateChart series={FLOW_SERIES} accent={ACCENT} width={300} maxT={3} />
+        );
+
+        expect(styleOf(rate.getByTestId(rateId)))
+            .toEqual(styleOf(trace.getByTestId(traceId)));
     });
 });

@@ -3,7 +3,7 @@ import {Text} from "react-native";
 import {screen} from "@testing-library/react-native";
 
 import BrewStoryCard from "@/components/BrewStoryCard";
-import {storyFrame} from "@/library/brew/storyCard";
+import {storyFrame, type StorySummaryBudget} from "@/library/brew/storyCard";
 import {renderWithProviders} from "@/test-utils/render";
 
 const summary = <Text testID="summary-stub">the brew</Text>;
@@ -27,6 +27,30 @@ describe("the story card", () => {
     it("draws the summary it was given rather than a brew of its own", async () => {
         await show();
         expect(screen.getByTestId("summary-stub")).toBeTruthy();
+    });
+
+    it("hands a story height budget to a summary render function", async () => {
+        const renderSummary = jest.fn(() => summary);
+        await show({
+            summary: renderSummary,
+            stageCount: 2,
+            coffee: "Huila · Washed",
+            rating: 4,
+            tags: ["a", "b", "c", "d"]
+        });
+
+        expect(renderSummary).toHaveBeenCalledWith(expect.objectContaining({
+            contentHeight: 461,
+            showRateChart: true,
+            showStages: true,
+            traceHeight: expect.any(Number),
+            rateHeight: expect.any(Number),
+            rateTopGap: expect.any(Number),
+            rateBottomGap: expect.any(Number)
+        }));
+        const calls = renderSummary.mock.calls as unknown as [[StorySummaryBudget]];
+        const budget = calls[0][0];
+        expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
     });
 
     it("stands the frame up at nine by sixteen", async () => {
@@ -54,7 +78,7 @@ describe("the story card", () => {
     });
 
     it("prints the coffee when there is one", async () => {
-        await show({coffee: "Huila · Washed"});
+        await show({coffee: "Huila · Washed", hasRateChart: false});
         expect(screen.getByTestId("story-coffee")).toHaveTextContent("Huila · Washed");
     });
 
@@ -77,7 +101,7 @@ describe("the story card", () => {
     });
 
     it("prints the tags", async () => {
-        await show({tags: ["Ethiopia", "filter"]});
+        await show({tags: ["Ethiopia", "filter"], hasRateChart: false});
         expect(screen.getByTestId("story-tags")).toHaveTextContent(/Ethiopia/);
         expect(screen.getByTestId("story-tags")).toHaveTextContent(/filter/);
     });
@@ -88,7 +112,7 @@ describe("the story card", () => {
     });
 
     it("counts the tags it has no room for rather than wrapping them", async () => {
-        await show({tags: ["a", "b", "c", "d", "e", "f"]});
+        await show({tags: ["a", "b", "c", "d", "e", "f"], hasRateChart: false});
         expect(screen.getByTestId("story-tags-more")).toHaveTextContent("+2");
         expect(screen.getByTestId("story-tags")).not.toHaveTextContent(/e/);
     });

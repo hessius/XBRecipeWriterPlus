@@ -74,6 +74,11 @@ async function draw(overrides: Partial<React.ComponentProps<typeof BrewSummary>>
     );
 }
 
+function pathPoints(path: string): {x: number; y: number}[] {
+    return [...path.matchAll(/[ML]\s*([-\d.]+)\s+([-\d.]+)/g)]
+        .map((match) => ({x: Number(match[1]), y: Number(match[2])}));
+}
+
 describe("BrewSummary", () => {
     it("draws the trace when the brew kept a stream", async () => {
         const {getByLabelText} = await draw({hasStream: true});
@@ -149,6 +154,45 @@ describe("BrewSummary", () => {
         expect(ladderProps.rungGap).toBe(34);
     });
 
+    it("reserves a peek before sizing a measured viewport ladder", async () => {
+        const {getByTestId} = await draw({
+            stagesUnavailable: false,
+            availableHeight: 600
+        });
+
+        await act(async () => {
+            fireEvent(getByTestId("summary-chrome"), "layout", {
+                nativeEvent: {layout: {height: 300, width: 330, x: 0, y: 0}}
+            });
+        });
+
+        expect(ladderProps.barHeight).toBe(41);
+        expect(ladderProps.rungGap).toBe(20);
+    });
+
+    it("leaves the measured ladder slot at auto height so tall ladders can scroll", async () => {
+        const {getByTestId} = await draw({
+            stages: pours(4),
+            stageWater: [40, 40, 40, 40],
+            stalls: [[], [], [], []],
+            stagesUnavailable: false,
+            availableHeight: 700
+        });
+
+        await act(async () => {
+            fireEvent(getByTestId("summary-chrome"), "layout", {
+                nativeEvent: {layout: {height: 420, width: 330, x: 0, y: 0}}
+            });
+        });
+
+        const style = StyleSheet.flatten(
+            getByTestId("summary-ladder-slot").props.style as StyleProp<ViewStyle>
+        );
+        expect(style?.height).toBeUndefined();
+        expect(ladderProps.barHeight).toBe(28);
+        expect(ladderProps.rungGap).toBe(20);
+    });
+
     it("accents the ladder of a brew that reached its last stage", async () => {
         await draw({stagesUnavailable: false, activeIndex: 3});
 
@@ -171,6 +215,93 @@ describe("BrewSummary", () => {
         const r = await draw({});
 
         expect(r.queryByTestId("brew-summary-note")).toBeNull();
+    });
+
+    it("draws the rate chart on the same time axis as the trace", async () => {
+        await draw({
+            plannedSeconds: 50,
+            samples: [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 90_000, water: 120, cup: 90, pour: 1}
+            ],
+            bypass: {volume: 30, temperature: 85, delivered: 30,
+                     startedAt: null, state: "done"},
+            rateSeries: [
+                {at: 89_900, cup: 1.6, water: 3.2},
+                {at: 90_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        expect(screen.getByTestId("rate-chart")).toBeTruthy();
+        const traceX = pathPoints(screen.getByTestId("trace-water").props.d as string)[1].x;
+        const rateX = pathPoints(screen.getByTestId("rate-chart-water").props.d as string)[1].x;
+        expect(rateX).toBeCloseTo(traceX, 1);
+    });
+
+    it("gives a drawable rate chart the shared bottom gap", async () => {
+        await draw({
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        const style = StyleSheet.flatten(
+            screen.getByTestId("rate-chart-slot").props.style as StyleProp<ViewStyle>
+        );
+        // The chart should breathe like the trace above it, not collapse onto
+        // the figure rows below. Pinned as a literal so a zero gap fails here.
+        expect(style?.marginBottom).toBe(12);
+    });
+
+    it("gives a drawable rate chart the larger top gap", async () => {
+        await draw({
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        const style = StyleSheet.flatten(
+            screen.getByTestId("rate-chart-slot").props.style as StyleProp<ViewStyle>
+        );
+        // The trace's legend row is text, so it needs more air above the
+        // rate chart than the figures need below it.
+        expect(style?.marginTop).toBe(18);
+    });
+
+    it("passes delay and grind figures into the captured summary", async () => {
+        await draw({
+            drawdown: 32,
+            drawdownRate: 2.1,
+            delay: 5,
+            grind: {kind: "dial", dial: 53, recipe: 60}
+        });
+
+        expect(screen.getByText("0:32")).toBeTruthy();
+        expect(screen.getByText("2.1 G/S")).toBeTruthy();
+        expect(screen.getByText("+5")).toBeTruthy();
+        expect(screen.getByText("53")).toBeTruthy();
+        expect(screen.getByText("RECIPE 60")).toBeTruthy();
+    });
+
+    it("keeps the rate chart hidden for a swept record even if a caller hands over rates", async () => {
+        await draw({
+            hasStream: false,
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
+    });
+
+    it("leaves no rate chart wrapper when the chart cannot draw", async () => {
+        await draw({rateSeries: [{at: 60_000, cup: 1.7, water: 3.2}]});
+
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
+        expect(screen.queryByTestId("rate-chart-slot")).toBeNull();
     });
 });
 

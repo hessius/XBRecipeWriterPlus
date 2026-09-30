@@ -6,6 +6,7 @@ import Svg, {Line, Path} from "react-native-svg";
 import {Button, Text, XStack, YStack} from "tamagui";
 
 import BrewStars from "@/components/BrewStars";
+import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
 import CompareTable from "@/components/CompareTable";
 import CompareTrace, {compareTracePlotHeight} from "@/components/CompareTrace";
@@ -24,7 +25,8 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 import {plannedSeconds, toPath} from "@/library/brew/brewShape";
 import type {Point} from "@/library/brew/brewShape";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
-import {referenceCupColour} from "@/library/brew/traceStyle";
+import type {FlowPoint} from "@/library/brew/flowRate";
+import {referenceCupColour, type Role} from "@/library/brew/traceStyle";
 
 const CHART_HEIGHT = 220;
 const LANE_HEIGHT = 92;
@@ -168,6 +170,44 @@ function SeparateCupGap({
     );
 }
 
+function CompareRateLane({
+    testID,
+    series,
+    accent,
+    width,
+    maxT,
+    maxRate,
+    role = "subject"
+}: {
+    testID: string;
+    series: FlowPoint[];
+    accent: string;
+    width: number;
+    maxT: number;
+    maxRate: number;
+    role?: Role;
+}) {
+    return (
+        <YStack testID={testID}>
+            <BrewRateChart
+                series={series}
+                accent={accent}
+                width={width}
+                maxT={maxT}
+                maxRate={maxRate}
+                role={role}
+            />
+        </YStack>
+    );
+}
+
+function traceLaneLabel(kind: "This" | "That", drewRate: boolean, startedAt: number): string {
+    const suffix = `${formatBrewDate(startedAt)} ${formatBrewTime(startedAt)}`;
+    return drewRate
+        ? `${kind} brew trace with flow rate, ${suffix}`
+        : `${kind} brew trace, ${suffix}`;
+}
+
 /**
  * Compare two brews of one recipe.
  *
@@ -228,6 +268,7 @@ export default function BrewCompareScreen() {
         referencePlan,
         subjectHasTrace,
         referenceHasTrace,
+        showRateLanes,
         traceCount,
         survivingTrace,
         hasChart,
@@ -358,11 +399,11 @@ export default function BrewCompareScreen() {
                                         <YStack testID="compare-lane-a"
                                                 accessible accessibilityRole="image"
                                                 accessibilityLabel={
-                                                    `This brew trace, ${
-                                                        formatBrewDate(subject.record.startedAt)
-                                                    } ${
-                                                        formatBrewTime(subject.record.startedAt)
-                                                    }`
+                                                    traceLaneLabel(
+                                                        "This",
+                                                        showRateLanes,
+                                                        subject.record.startedAt
+                                                    )
                                                 }>
                                             <BrewTrace
                                                 compact
@@ -374,6 +415,16 @@ export default function BrewCompareScreen() {
                                                 plannedSeconds={plannedSeconds(axis.subjectPours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
                                             />
+                                            {showRateLanes && (
+                                                <CompareRateLane
+                                                    testID="compare-rate-subject"
+                                                    series={axis.subjectRate}
+                                                    accent={subject.record.accent}
+                                                    width={chartWidth}
+                                                    maxT={axis.maxT}
+                                                    maxRate={axis.maxRate}
+                                                />
+                                            )}
                                         </YStack>
                                     )}
                                     <SeparateCupGap
@@ -386,11 +437,11 @@ export default function BrewCompareScreen() {
                                         <YStack testID="compare-lane-b"
                                                 accessible accessibilityRole="image"
                                                 accessibilityLabel={
-                                                    `That brew trace, ${
-                                                        formatBrewDate(reference.record.startedAt)
-                                                    } ${
-                                                        formatBrewTime(reference.record.startedAt)
-                                                    }`
+                                                    traceLaneLabel(
+                                                        "That",
+                                                        showRateLanes,
+                                                        reference.record.startedAt
+                                                    )
                                                 }>
                                             <BrewTrace
                                                 compact
@@ -403,6 +454,17 @@ export default function BrewCompareScreen() {
                                                 plannedSeconds={plannedSeconds(axis.referencePours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
                                             />
+                                            {showRateLanes && (
+                                                <CompareRateLane
+                                                    testID="compare-rate-reference"
+                                                    series={axis.referenceRate}
+                                                    accent={subject.record.accent}
+                                                    width={chartWidth}
+                                                    maxT={axis.maxT}
+                                                    maxRate={axis.maxRate}
+                                                    role="reference"
+                                                />
+                                            )}
                                         </YStack>
                                     )}
                                 </YStack>

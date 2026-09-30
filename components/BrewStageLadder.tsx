@@ -1,6 +1,6 @@
 // components/BrewStageLadder.tsx
 import React, {useEffect, useRef, useState} from "react";
-import {ScrollView, View} from "react-native";
+import {PixelRatio, ScrollView, View} from "react-native";
 import {YStack} from "tamagui";
 
 import BrewBypassRung from "@/components/BrewBypassRung";
@@ -9,6 +9,7 @@ import {minimalRevealOffset} from "@/library/brew/ladderScroll";
 import BrewStageRung, {type RungState} from "@/components/BrewStageRung";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {rungSegments} from "@/library/brew/rungGeometry";
+import {stageLadderRungMinHeight} from "@/library/brew/stageLadderGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -105,6 +106,9 @@ export default function BrewStageLadder({
     // point above its container without a pixel being out of place.
     const measured = boxHeight > 0 && contentHeight > 0;
     const overflows = measured ? contentHeight > boxHeight + 1 : scrolls;
+    const rowMinHeight = stageLadderRungMinHeight(
+        PixelRatio.getFontScale(), barHeight, rungGap
+    );
 
     // One scale for every rung, or a lane says nothing about its neighbours.
     // Stalls are in it: that is what makes a stage that struggled stick out
@@ -146,7 +150,7 @@ export default function BrewStageLadder({
             <View
                 key={`row-${index}`}
                 testID={`row-${index}`}
-                style={{paddingVertical: rungGap / 2}}
+                style={{paddingVertical: rungGap / 2, minHeight: rowMinHeight}}
                 onLayout={(e) => {
                     const {height, y} = e.nativeEvent.layout;
                     const previous = rungLayouts.current[index];
@@ -181,7 +185,7 @@ export default function BrewStageLadder({
     // would mean inventing a `Pour` that does not exist.
     const closing = bypass === undefined ? null : (
         <View key="row-bypass" testID="row-bypass"
-              style={{paddingVertical: rungGap / 2}}>
+              style={{paddingVertical: rungGap / 2, minHeight: rowMinHeight}}>
             <BrewBypassRung
                 testID="rung-bypass"
                 volume={bypass.volume}

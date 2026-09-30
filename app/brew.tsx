@@ -34,16 +34,26 @@ import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
 import {finalOutcome} from "@/library/brew/BrewRecord";
+import {
+    drawdownFigures,
+    flowNow,
+    flowTail,
+    retrospectiveFlowSeries
+} from "@/library/brew/flowRate";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
-import {pauseSeconds, plannedSeconds} from "@/library/brew/brewShape";
+import {liveDrawdown} from "@/library/brew/liveDrawdown";
+import {pauseSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
 import Recipe from "@/library/Recipe";
 import {SCREEN_PADDING} from "@/constants/layout";
 
 const WORKING = new Set(["idle", "waking", "sending"]);
 export const BREW_BAND_GAP = 13;
+/** Half a minute of rate in two dozen buckets. See FlowSparkline. */
+const FLOW_TAIL_SECONDS = 30;
+const FLOW_TAIL_BUCKETS = 24;
 
 /** Where an export sources its record: the freshest brew in the store. */
 type ExportStore = Pick<HistoryStore, "all" | "samples">
@@ -73,7 +83,7 @@ function Action({label, color, onPress}: {label: string; color: string; onPress:
 
 export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) {
     const {recipeJSON, view} = useLocalSearchParams<{recipeJSON: string; view: string}>();
-    // Opened to look at a run that already exists — from the mini bar — rather
+    // Opened to look at a run that already exists, from the mini bar, rather
     // than to start one. Without this, coming back to watch the brew you just
     // made would make it again: `start` replaces a finished run, and this
     // screen would hand it a freshly deserialised recipe on every mount.
@@ -149,11 +159,40 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
 
     const bypass = run?.bypass;
     // The scale reports one running total, and the bypass goes onto the same
-    // scale — so the last reading is brew water *plus* bypass. The figure has
+    // scale, so the last reading is brew water *plus* bypass. The figure has
     // to name the brew water, with the bypass beside it, or a 240 ml recipe
     // reads as having used 245.
     const scaleTotal = last?.water ?? 0;
     const brewWater = Math.max(0, scaleTotal - (bypass?.delivered ?? 0));
+    const stages = recipe.pours.length;
+    const flow = flowNow(samples, stages);
+    const flowTailValues = flow === null
+        ? []
+        : flowTail(samples, stages, FLOW_TAIL_SECONDS, FLOW_TAIL_BUCKETS);
+    const finalStageTargetMl = Math.max(recipe.pours[stages - 1]?.volume ?? 0, 0);
+    const plannedSecs = plannedSeconds(recipe.pours);
+    const liveDrawdownFigure = liveDrawdown({
+        samples,
+        stages,
+        elapsedSeconds: elapsed,
+        phaseName: phase.name,
+        running,
+        finalStageTargetMl,
+    });
+    const doneDrawdownFigures = run?.record === undefined ? null : drawdownFigures(run.record);
+    const doneDrawdown = phase.name === "done" ? doneDrawdownFigures?.seconds ?? null : null;
+    const doneDrawdownRate = phase.name === "done" ? doneDrawdownFigures?.rate ?? null : null;
+    const doneDelay = phase.name === "done"
+        ? pourEndDelaySeconds(elapsed, doneDrawdown, plannedSecs)
+        : null;
+    const liveDelay = pourEndDelaySeconds(
+        elapsed,
+        liveDrawdownFigure.drawdown,
+        plannedSecs
+    );
+    const doneRateSeries = phase.name === "done" && samples.length > 0
+        ? retrospectiveFlowSeries(samples, stages)
+        : [];
 
     // Only a refusal for water gets the water copy. `block` names which of the
     // pre-flight checks said no, so a busy machine is no longer told to go and
@@ -180,15 +219,15 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const offerPro = failed && phase.reason === "rejected" && canOfferProMode();
     const offerRetry = blocked || (failed && !NO_RETRY.has(phase.reason));
     // Blended, not thresholded. `warmth` is how far the line has travelled
-    // between the two colours, and grinding beats between 1 and 0.15 — both of
+    // between the two colours, and grinding beats between 1 and 0.15, both of
     // which are "greater than zero", so a threshold drew the two halves of the
     // beat identically and the flicker never appeared at all.
     const planColor = mix(palette.muted, accent, motion.warmth);
     const {status, connect} = useMachine();
 
     // Export mechanics, shared with the record screen so the two look and
-    // behave identically. The record is read from the store on press — after
-    // the brew has finished and the provider has written it — never on render.
+    // behave identically. The record is read from the store on press after
+    // the brew has finished and the provider has written it, never on render.
     // The live modal has no record to read yet, so it applies the same rule to
     // the live figures. One definition, two call sites.
     const plannedWater = recipe.pours.reduce(
@@ -295,7 +334,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
 
             {phase.name === "done" ? (
                 // The finished brew is drawn once, by the shared component, and
-                // that same node is what the export captures — so what you see
+                // that same node is what the export captures, so what you see
                 // is exactly what leaves the phone. No second screen.
                 //
                 // Inside a scroller, because the summary draws its ladder at a
@@ -321,18 +360,22 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // so the width it may draw in is not the window's.
                         // Handed the window width it laid its trace out 36
                         // points too wide: it overflowed right, read as
-                        // off-centre, and clipped the trace's right-aligned
-                        // overrun label. The export is unaffected — ViewShot
+                        // off-centre, and pushed the chart past its visible
+                        // edge. The export is unaffected because ViewShot
                         // takes the capture's width from its parent, and this
                         // prop only sizes the trace inside it.
                         width={width - SCREEN_PADDING * 2}
-                        plannedSeconds={plannedSeconds(recipe.pours)}
+                        plannedSeconds={plannedSecs}
                         water={brewWater}
                         cup={last?.cup ?? 0}
                         seconds={elapsed}
                         activeIndex={activeIndex}
                         stageWater={stageWater}
                         stalls={stalls}
+                        drawdown={doneDrawdown}
+                        drawdownRate={doneDrawdownRate}
+                        delay={doneDelay}
+                        rateSeries={doneRateSeries}
                         note={finalOutcome("done", brewWater, plannedWater)
                             === "endedOnMachine" ? ENDED_ON_MACHINE_NOTE : undefined}
                         stagesUnavailable={false}
@@ -351,7 +394,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             accent={accent}
                             width={width - SCREEN_PADDING * 2}
                             height={bands.traceHeight}
-                            plannedSeconds={plannedSeconds(recipe.pours)}
+                            plannedSeconds={plannedSecs}
                             holding={holding}
                             planOpacity={motion.opacity}
                             planColor={planColor}
@@ -381,12 +424,21 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         seconds={elapsed}
                         accent={accent}
                         bypass={bypass?.delivered}
+                        reserveFlow
+                        {...(flow === null
+                            ? {}
+                            : {flow: flow.cup, pourRate: flow.water, flowTail: flowTailValues})}
+                        reserveDrawdown={liveDrawdownFigure.reserveDrawdown}
+                        {...(liveDrawdownFigure.drawdown === null
+                            ? {}
+                            : {drawdown: liveDrawdownFigure.drawdown})}
+                        {...(liveDelay === null ? {} : {delay: liveDelay})}
                     />
 
                             {/* Held for the whole run. Between the last pour and the
                         summary there is no live stage, and a card that
                         unmounts there gives its height back to the band
-                        region above — redrawing the ladder mid-brew. */}
+                        region above, redrawing the ladder mid-brew. */}
                     <BrewNowCard pour={livePour} accent={accent} resting={resting}
                                  hold={running} />
                 </>
@@ -436,7 +488,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 <YStack gap="$3">
                     {offerRetry && (
                         // The machine will not answer a question outside a
-                        // fresh session, and opening one makes it beep — so
+                        // fresh session, and opening one makes it beep, so
                         // noticing a refilled tank cannot be done quietly on a
                         // timer. A press asks again, and only when somebody is
                         // there to have done something about the reason.
@@ -507,7 +559,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         </XStack>
                     )}
                     {/* No DONE. The chevron in the nav row dismisses the modal,
-                        and a second control duplicated it — painted in
+                        and a second control duplicated it, painted in
                         `palette.line`, the hairline colour, which is why it
                         read as disabled. */}
                 </YStack>

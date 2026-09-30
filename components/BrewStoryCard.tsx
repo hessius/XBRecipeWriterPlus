@@ -1,5 +1,5 @@
 import React from "react";
-import {StyleSheet, View} from "react-native";
+import {PixelRatio, StyleSheet, View} from "react-native";
 import {XStack, YStack} from "tamagui";
 
 import BrewStars from "@/components/BrewStars";
@@ -7,7 +7,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import Wordmark from "@/components/Wordmark";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {storyFrame} from "@/library/brew/storyCard";
+import {storyFrame, storySummaryBudget, type StorySummaryBudget} from "@/library/brew/storyCard";
 
 /** How many tags fit on the card before the rest are counted instead. */
 const MAX_SHOWN_TAGS = 4;
@@ -25,7 +25,10 @@ type Props = {
      * the frontier; the card is the frame around that answer, not a second
      * one.
      */
-    summary: React.ReactNode;
+    summary: React.ReactNode | ((budget: StorySummaryBudget) => React.ReactNode);
+    stageCount?: number;
+    /** Whether the retained stream can draw a rate chart on this story. */
+    hasRateChart?: boolean;
     /** When the brew happened, already formatted. */
     when: string;
     accent: string;
@@ -35,6 +38,10 @@ type Props = {
     coffee: string | null;
     /** The brew's tags, in the order they were given. */
     tags: string[];
+    hasBypass?: boolean;
+    figureExtraRows?: number;
+    hasSummaryNote?: boolean;
+    stagesUnavailable?: boolean;
 };
 
 /**
@@ -54,11 +61,27 @@ type Props = {
  * is a mark that damages the data.
  */
 export default function BrewStoryCard({
-    width, summary, when, accent, rating, coffee, tags
+    width, summary, stageCount = 2, when, accent, rating, coffee, tags,
+    hasRateChart = true, hasBypass = false, figureExtraRows = 0,
+    hasSummaryNote = false, stagesUnavailable = false
 }: Props) {
     const frame = storyFrame(width);
-    const shown = tags.slice(0, MAX_SHOWN_TAGS);
+    const budget = storySummaryBudget({
+        width,
+        stages: stageCount,
+        hasRateChart,
+        hasCoffee: coffee !== null,
+        hasRating: rating > 0,
+        tags,
+        fontScale: PixelRatio.getFontScale(),
+        hasBypass,
+        figureExtraRows,
+        hasSummaryNote,
+        stagesUnavailable
+    });
+    const shown = tags.slice(0, Math.min(MAX_SHOWN_TAGS, budget.shownTagCount));
     const extra = tags.length - shown.length;
+    const summaryNode = typeof summary === "function" ? summary(budget) : summary;
 
     return (
         <View
@@ -77,12 +100,12 @@ export default function BrewStoryCard({
                     </DotMatrixText>
                 </XStack>
 
-                {summary}
+                {summaryNode}
 
                 {/* Left out entirely when there is nothing to say. A card that
                     reserves a row for a coffee nobody named, or for stars
                     nobody gave, reads as a card that failed to load them. */}
-                {coffee !== null && (
+                {coffee !== null && budget.showCoffee && (
                     <XStack paddingHorizontal={SCREEN_PADDING}>
                         <DotMatrixText testID="story-coffee" fontSize={12}
                                        weight="bold" letterSpacing={1.4}
@@ -96,7 +119,7 @@ export default function BrewStoryCard({
                     nothing for an unrated brew: the row itself still has
                     padding, and an empty padded row is the gap a card for an
                     unrated brew would otherwise carry. */}
-                {rating > 0 && (
+                {rating > 0 && budget.showRating && (
                     <XStack testID="story-rating-row" paddingHorizontal={SCREEN_PADDING}>
                         {/* A reading, not a control: no `onRate`, so only the
                             stars that were given are drawn. */}
@@ -104,7 +127,7 @@ export default function BrewStoryCard({
                     </XStack>
                 )}
 
-                {shown.length > 0 && (
+                {shown.length > 0 && budget.shownTagCount > 0 && (
                     <XStack paddingHorizontal={SCREEN_PADDING} gap="$2"
                             flexWrap="wrap" testID="story-tags">
                         {shown.map((tag) => (
@@ -140,7 +163,7 @@ const styles = StyleSheet.create({
     /**
      * The card supplies its own background for the same reason `BrewSummary`
      * does: a capture inherits nothing from its ancestors. `overflow: hidden`
-     * holds the ratio — content that outgrew the frame would otherwise be
+     * holds the ratio. Content that outgrew the frame would otherwise be
      * photographed spilling past the 9:16 the platforms are about to crop to.
      */
     frame: {

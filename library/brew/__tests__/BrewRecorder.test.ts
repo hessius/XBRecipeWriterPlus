@@ -199,6 +199,39 @@ describe("BrewRecorder", () => {
         expect(drawdownSeconds(records[0].record)).toBe(25);
     });
 
+    it("takes the cup reading at the same boundary the drawdown is measured from", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(40);
+        time.advance(20_000);
+        fake.cup(80);
+        fake.water(200);
+        time.advance(20_000);
+        fake.cup(190);
+        fake.phase({name: "settling"});
+        fake.event(40512);
+        time.advance(5_000);
+        fake.cup(190);
+
+        const [{record, samples}] = records;
+        const drawdownAt = record.drawdownAt;
+        if (drawdownAt === undefined) throw new Error("expected a drawdown boundary");
+        expect(drawdownAt).toBeGreaterThan(0);
+        const atBoundary = samples
+            .filter((s) =>
+                s.pour >= 1 &&
+                s.pour <= record.pours &&
+                s.at <= drawdownAt
+            )
+            .pop();
+        expect(atBoundary).toBeDefined();
+        expect(record.cupAtDrawdown).toBe(atBoundary!.cup);
+        // Named as well as derived. The scan above uses drawdownAt as its own
+        // input, so on its own it would pin consistency rather than the answer:
+        // 80 is the cup at the boundary, and 190 is the cup at the end.
+        expect(record.cupAtDrawdown).toBe(80);
+    });
+
     it("leaves the drawdown unmeasured on a brew that never poured", () => {
         // A brew refused or cancelled before a drop has no bed to finish. 0 is
         // the stored shape for that, and the figure is null rather than a
@@ -211,6 +244,17 @@ describe("BrewRecorder", () => {
         expect(records).toHaveLength(1);
         expect(records[0].record.drawdownAt).toBe(0);
         expect(drawdownSeconds(records[0].record)).toBeNull();
+    });
+
+    it("writes no cup reading for a brew that never drew down", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        time.advance(9_000);
+        fake.phase({name: "cancelled"});
+
+        const [{record}] = records;
+        expect(record.drawdownAt).toBe(0);
+        expect(record).not.toHaveProperty("cupAtDrawdown");
     });
 
     it("keeps a mid-brew pause out of the drawdown", () => {

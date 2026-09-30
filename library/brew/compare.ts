@@ -14,6 +14,7 @@ import {
     type Point
 } from "./brewShape";
 import {NOISE_FLOOR_ML} from "./stalls";
+import {maxRateOf, retrospectiveFlowSeries, type FlowPoint} from "./flowRate";
 
 /**
  * Two brews of one recipe, held against each other.
@@ -238,9 +239,18 @@ export function planTop(record: StoredBrew): number {
 export type CompareAxis = {
     maxT: number;
     maxV: number;
+    /** The larger retained peak flow rate across both brews, or 0 without streams. */
+    maxRate: number;
+    subjectRate: FlowPoint[];
+    referenceRate: FlowPoint[];
     subjectPours: ReturnType<typeof poursFromPlan>;
     referencePours: ReturnType<typeof poursFromPlan>;
 };
+
+function rateSeriesFor({record, samples}: BrewUnderComparison): FlowPoint[] {
+    if (!record.hasStream || samples.length === 0) return [];
+    return retrospectiveFlowSeries(samples, record.pours);
+}
 
 /**
  * The one axis both brews share.
@@ -255,6 +265,8 @@ export function compareAxis(
 ): CompareAxis {
     const subjectPours = poursFromPlan(subject.record.plan);
     const referencePours = poursFromPlan(reference.record.plan);
+    const subjectRate = rateSeriesFor(subject);
+    const referenceRate = rateSeriesFor(reference);
     return {
         maxT: Math.max(
             1,
@@ -270,6 +282,9 @@ export function compareAxis(
             planTop(subject.record),
             planTop(reference.record)
         ),
+        maxRate: Math.max(maxRateOf(subjectRate), maxRateOf(referenceRate)),
+        subjectRate,
+        referenceRate,
         subjectPours,
         referencePours
     };

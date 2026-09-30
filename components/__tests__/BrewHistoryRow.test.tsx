@@ -63,7 +63,7 @@ describe("BrewHistoryRow", () => {
     });
 
     it("shows the local date, not the UTC date", async () => {
-        // The fixture timestamp is 2026-09-04T03:00:00Z — Sep 4 in UTC.
+        // The fixture timestamp is 2026-09-04T03:00:00Z, Sep 4 in UTC.
         // We mock the local accessors to return Sep 3 values so the test is
         // non-vacuous: if the code calls getUTCDate() instead it bypasses the
         // spy and uses the real UTC value (4), producing "2026-09-04" instead.
@@ -89,7 +89,7 @@ describe("BrewHistoryRow", () => {
             <BrewHistoryRow brew={brew({outcome: "failed", failure: "noWater"})}
                             onPress={jest.fn()} />
         );
-        // DotMatrixText compiles colour into `style` — there is no `color` prop
+        // DotMatrixText compiles colour into `style`; there is no `color` prop
         // on the host node (see RecipeOverflowSheet.test.tsx's identical note).
         expect(getByText("STOPPED").props.style).toEqual(
             expect.arrayContaining([expect.objectContaining({color: palette.danger})])
@@ -156,6 +156,39 @@ describe("BrewHistoryRow", () => {
         expect(getByLabelText(/4 stars/)).toBeTruthy();
     });
 
+    it("names the drawdown rate", async () => {
+        await renderWithProviders(
+            <BrewHistoryRow
+                brew={brew({drawdownAt: 200_000, cupAtDrawdown: 164})}
+                onPress={jest.fn()}
+            />
+        );
+
+        expect(screen.getByText("2.0 G/S")).toBeTruthy();
+    });
+
+    it("says nothing where there is no drawdown rate", async () => {
+        await renderWithProviders(
+            <BrewHistoryRow brew={brew({drawdownAt: 0})} onPress={jest.fn()} />
+        );
+
+        expect(screen.queryByText(/g\/s/i)).toBeNull();
+        expect(screen.getByRole("button").props.accessibilityLabel)
+            .not.toMatch(/grams per second/);
+    });
+
+    it("puts the drawdown rate in the row's spoken label", async () => {
+        await renderWithProviders(
+            <BrewHistoryRow
+                brew={brew({drawdownAt: 200_000, cupAtDrawdown: 164})}
+                onPress={jest.fn()}
+            />
+        );
+
+        const label = screen.getByRole("button").props.accessibilityLabel;
+        expect(label).toContain("2.0 grams per second");
+    });
+
     it("says why an old brew still has a trace", async () => {
         const {getByTestId} = await renderWithProviders(
             <BrewHistoryRow brew={brew({pinned: true})} onPress={jest.fn()} />
@@ -211,6 +244,26 @@ describe("BrewHistoryRow", () => {
             expect(label).not.toContain("0 grams");
             // The rating is the whole point of the record, so it still speaks.
             expect(label).toContain("4");
+        });
+
+        // A restored backup row can carry watched false beside a real
+        // drawdownAt. Without the guard the row would draw NOT WATCHED and no
+        // figures while the label still read out a rate.
+        it("keeps a restored rate off a brew it did not watch", async () => {
+            await renderWithProviders(
+                <BrewHistoryRow
+                    brew={brew({
+                        watched: false, pours: 0, waterTotal: 0, cupTotal: 0,
+                        heldSeconds: 0, endedAt: Date.UTC(2026, 8, 3, 7, 42),
+                        drawdownAt: 200_000, cupAtDrawdown: 164
+                    })}
+                    onPress={jest.fn()}
+                />
+            );
+
+            expect(screen.queryByText(/g\/s/i)).toBeNull();
+            expect(screen.getByRole("button").props.accessibilityLabel)
+                .not.toMatch(/grams per second/);
         });
 
         // The date is the one machine independent fact a hand-logged brew has,

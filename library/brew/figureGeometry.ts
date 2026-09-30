@@ -1,0 +1,5 @@
+export const BREW_FIGURE_LABEL_SIZE = 10;
+export const BREW_FIGURE_VALUE_SIZE = 28;
+export const BREW_FIGURE_DETAIL_VALUE_SIZE = 20;
+export const BREW_FIGURE_INTERNAL_GAP = 2;
+export const BREW_FIGURE_ROW_GAP = 4;

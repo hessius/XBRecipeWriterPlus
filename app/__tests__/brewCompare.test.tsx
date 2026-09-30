@@ -14,6 +14,7 @@ import {
 import {renderWithProviders} from "@/test-utils/render";
 import {planFromPours} from "@/library/brew/BrewRecord";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
+import {referenceCupColour} from "@/library/brew/traceStyle";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 
 const {setParams} = createExpoRouterMock();
@@ -47,6 +48,42 @@ const comparisonSamples = [
     {at: 0, water: 0, cup: 0, pour: 1},
     {at: 228_000, water: 250, cup: 244, pour: 2}
 ];
+
+function rateSamples(rate: number) {
+    return Array.from({length: 21}, (_, i) => {
+        const seconds = i / 10;
+        return {
+            at: i * 100,
+            water: rate * seconds,
+            cup: rate * seconds,
+            pour: 1
+        };
+    });
+}
+
+function shortRateSamples(rate: number) {
+    return Array.from({length: 3}, (_, i) => {
+        const seconds = i / 10;
+        return {
+            at: i * 100,
+            water: rate * seconds,
+            cup: rate * seconds,
+            pour: 1
+        };
+    });
+}
+
+function isolatedRateSamples(rate: number) {
+    return [0, 1_000, 60_000, 61_000].map((at) => {
+        const seconds = at / 1000;
+        return {
+            at,
+            water: rate * seconds,
+            cup: rate * seconds,
+            pour: 1
+        };
+    });
+}
 
 function pair(over: Parameters<typeof makeBrewRecordFixture>[0] = {}) {
     const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
@@ -111,6 +148,79 @@ describe("the comparison screen", () => {
         expect(getByTestId("compare-cup-gap-separate")).toBeTruthy();
     });
 
+    it("draws a rate lane for each brew on one axis", async () => {
+        const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
+        const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan});
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
+            b: {record: b, samples: makeBrewRecordSamples(rateSamples(5)), frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByTestId, getByLabelText} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        const subjectCup = within(getByTestId("compare-rate-subject"))
+            .getByTestId("rate-chart-cup");
+        const referenceCup = within(getByTestId("compare-rate-reference"))
+            .getByTestId("rate-chart-cup");
+        // The subject's 2 G/S line sits 36.3 px down from the shared 5 G/S axis top.
+        expect(subjectCup.props.d).toContain(" 36.3");
+        expect(subjectCup.props.stroke)
+            .toEqual(expect.objectContaining({payload: processColor(cupLineFor(a.accent))}));
+        expect(referenceCup.props.stroke)
+            .toEqual(expect.objectContaining({payload: processColor(referenceCupColour)}));
+    });
+
+    it("draws no rate lanes when one retained stream is too short to derive rate", async () => {
+        const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
+        const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan});
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
+            b: {record: b, samples: makeBrewRecordSamples(shortRateSamples(5)), frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByLabelText, getByTestId, queryByTestId} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        expect(getByTestId("compare-lane-a")).toBeTruthy();
+        expect(getByTestId("compare-lane-b")).toBeTruthy();
+        expect(queryByTestId("compare-rate-subject")).toBeNull();
+        expect(queryByTestId("compare-rate-reference")).toBeNull();
+    });
+
+    it("draws no rate lanes when one retained rate series has no drawable run", async () => {
+        const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan, startedAt: 0});
+        const b = makeBrewRecordFixture({
+            id: "b",
+            plan: comparisonPlan,
+            startedAt: 3_600_000
+        });
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(isolatedRateSamples(2)), frames: ""},
+            b: {record: b, samples: makeBrewRecordSamples(rateSamples(5)), frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByLabelText, getByTestId, queryByTestId} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        expect(getByTestId("compare-lane-a")).toBeTruthy();
+        expect(getByTestId("compare-lane-b")).toBeTruthy();
+        expect(queryByTestId("compare-rate-subject")).toBeNull();
+        expect(queryByTestId("compare-rate-reference")).toBeNull();
+        expect(getByLabelText(
+            `This brew trace, ${formatBrewDate(0)} ${formatBrewTime(0)}`
+        )).toBeTruthy();
+        expect(getByLabelText(
+            `That brew trace, ${formatBrewDate(3_600_000)} ${formatBrewTime(3_600_000)}`
+        )).toBeTruthy();
+    });
+
     it("returns to overlay after switching to separate", async () => {
         pair();
         const {getByTestId, queryByTestId, getByLabelText} =
@@ -156,8 +266,8 @@ describe("the comparison screen", () => {
             waterTotal: 400
         });
         setRecords({
-            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples), frames: ""},
-            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples), frames: ""}
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
+            b: {record: b, samples: makeBrewRecordSamples(rateSamples(3)), frames: ""}
         });
         setParams({a: "a", b: "b"});
 
@@ -167,14 +277,24 @@ describe("the comparison screen", () => {
         expect(within(getByTestId("compare-lane-a")).getByTestId("trace-cup").props.stroke)
             .toEqual(expect.objectContaining({payload: processColor(cupLineFor("#C86A3B"))}));
         expect(getByLabelText(
-            `This brew trace, ${formatBrewDate(0)} ${formatBrewTime(0)}`
+            `This brew trace with flow rate, ${formatBrewDate(0)} ${formatBrewTime(0)}`
+        )).toBeTruthy();
+        expect(getByLabelText(
+            `That brew trace with flow rate, ${formatBrewDate(3_600_000)} ${
+                formatBrewTime(3_600_000)
+            }`
         )).toBeTruthy();
 
         await fireEvent.press(getByLabelText("Swap which brew leads"));
         expect(within(getByTestId("compare-lane-a")).getByTestId("trace-cup").props.stroke)
             .toEqual(expect.objectContaining({payload: processColor(cupLineFor("#3377AA"))}));
         expect(getByLabelText(
-            `This brew trace, ${formatBrewDate(3_600_000)} ${formatBrewTime(3_600_000)}`
+            `This brew trace with flow rate, ${formatBrewDate(3_600_000)} ${
+                formatBrewTime(3_600_000)
+            }`
+        )).toBeTruthy();
+        expect(getByLabelText(
+            `That brew trace with flow rate, ${formatBrewDate(0)} ${formatBrewTime(0)}`
         )).toBeTruthy();
     });
 
@@ -191,6 +311,25 @@ describe("the comparison screen", () => {
         expect(getByText(COMPARE_DEGRADED.one)).toBeTruthy();
         expect(getByTestId("trace-cup-subject")).toBeTruthy();
         expect(queryByTestId("trace-cup-reference")).toBeNull();
+    });
+
+    it("draws no rate lanes when only one brew kept its stream", async () => {
+        const a = makeBrewRecordFixture({id: "a"});
+        const b = makeBrewRecordFixture({id: "b", hasStream: false});
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(rateSamples(2)), frames: ""},
+            b: {record: b, samples: [], frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByLabelText, getByTestId, queryByTestId} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        expect(getByTestId("compare-lane-a")).toBeTruthy();
+        expect(queryByTestId("compare-lane-b")).toBeNull();
+        expect(queryByTestId("compare-rate-subject")).toBeNull();
+        expect(queryByTestId("compare-rate-reference")).toBeNull();
     });
 
     it("draws the reference survivor when the subject trace has been swept", async () => {
@@ -266,6 +405,24 @@ describe("the comparison screen", () => {
         expect(getByText(COMPARE_DEGRADED.both)).toBeTruthy();
         expect(queryByTestId("compare-chart")).toBeNull();
         expect(getByTestId("compare-table")).toBeTruthy();
+    });
+
+    it("draws no rate lanes when neither brew kept its stream", async () => {
+        const a = makeBrewRecordFixture({id: "a", hasStream: false});
+        const b = makeBrewRecordFixture({id: "b", hasStream: false});
+        setRecords({
+            a: {record: a, samples: [], frames: ""},
+            b: {record: b, samples: [], frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+
+        const {getByLabelText, queryByTestId} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        expect(queryByTestId("compare-rate-subject")).toBeNull();
+        expect(queryByTestId("compare-rate-reference")).toBeNull();
     });
 
     it("says so rather than crashing when a brew has been deleted", async () => {

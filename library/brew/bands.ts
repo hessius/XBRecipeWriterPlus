@@ -46,7 +46,7 @@ export type Bands = {
  * divide, so there is nothing to measure and `allocateBands` cannot be called.
  *
  * It still has to look like the same ladder the live screen draws. So it takes
- * the two bands' *soft caps* — the thickness and spacing the live screen holds
+ * the two bands' *soft caps*, the thickness and spacing the live screen holds
  * a comfortably-filled ladder at before it starts spending leftover height on
  * a second helping. At a mid-range phone height a four-to-nine stage brew
  * settles at exactly these values, so the frozen summary and the live screen
@@ -63,14 +63,14 @@ export const SUMMARY_BANDS = {
 } as const;
 
 /**
- * The summary ladder's bands, grown into whatever height it has been given.
+ * The summary ladder's bands, fitted into whatever height it has been given.
  *
- * `SUMMARY_BANDS` is the floor, not the answer: a summary that has room should
- * look like the live screen, which reaches `BAR_MAX` on a real phone, rather
- * than staying frozen at the soft caps and reading thinner once the brew is
- * over than it did while it ran.
+ * `SUMMARY_BANDS` is the unmeasured fallback, not the answer: a summary that
+ * has room should look like the live screen, which reaches `BAR_MAX` on a real
+ * phone, rather than staying frozen at the soft caps and reading thinner once
+ * the brew is over than it did while it ran.
  *
- * Growth only, in the same order `allocateBands` uses — bars before gaps. A
+ * Growth only, in the same order `allocateBands` uses: bars before gaps. A
  * ladder with no room keeps today's bands and scrolls, which is what it
  * already does; nothing here can make a summary thinner than it is today.
  *

@@ -4,7 +4,7 @@ import Pour from "@/library/Pour";
 import {grindBand} from "@/library/grindBands";
 
 import type {Fermentation, Process, Roast} from "./beanTags";
-import {stageWaterFrom, stallsInStage, type Stall} from "./stalls";
+import {NOISE_FLOOR_ML, stageWaterFrom, stallsInStage, type Stall} from "./stalls";
 
 /**
  * One instant of a brew, as the machine reported it.
@@ -143,6 +143,22 @@ export type BrewRecord = {
      * null for both.
      */
     drawdownAt?: number;
+    /**
+     * Grams in the cup when the drawdown began, on the same clock as
+     * `drawdownAt`. Absent on every row written before it existed, and on any
+     * brew that never drew down.
+     *
+     * A raw observation and deliberately not a computed statistic. A stored
+     * `peakCupRate` was rejected for exactly this: a peak is only defined
+     * relative to a smoothing window, so the window would be frozen into the
+     * data and the day `FLOW_WINDOW_MS` is retuned every old row would
+     * silently stop being comparable with every new one. `stalls` are stored
+     * for the opposite reason, and the distinction is worth keeping straight:
+     * a stall is an observation whose definition the record is deliberately
+     * pinning, because that definition is a judgement about hardware. A rate
+     * is arithmetic.
+     */
+    cupAtDrawdown?: number;
     endedAt: number;
     outcome: BrewOutcome;
     failure: BrewFailure | null;
@@ -374,22 +390,53 @@ export function grinderRan(record: BrewRecord): boolean {
  * apart, and the difference in totals is exactly the unplanned part.
  */
 /**
- * Where the drawdown began, in milliseconds on the sample clock, or 0.
+ * Where the brew's drawdown began, in milliseconds on the sample clock, or 0.
  *
  * 0 both for a brew where water never moved and for one whose only reading is
  * the first drop at 0. The second has no drawdown worth a figure either, so
- * they need not be told apart.
+ * they need not be told apart. Rises must clear the scale's noise floor, and a
+ * later rise after a plateau moves the boundary.
  *
- * @param stages how many brew stages the recipe had. Samples above it are the
- *   bypass, whose water is not the bed's and must not move the boundary.
+ * @param stages how many brew stages the recipe had. Samples outside that
+ *   range are not part of the bed.
+ * @param finalStageOnly when true, only the final stage may move the boundary.
  */
-export function drawdownFrom(samples: BrewSample[], stages: number): number {
+export function drawdownFrom(
+    samples: BrewSample[], stages: number, finalStageOnly = false
+): number {
     let at = 0;
-    let highest = 0;
+    let boundaryLevel = 0;
+    let seenHighest = 0;
+    let plateauBase = 0;
+    let plateauSeen = false;
     for (const sample of samples) {
-        if (sample.pour < 1 || sample.pour > stages) continue;
-        if (sample.water > highest) {
-            highest = sample.water;
+        if (
+            sample.pour < 1 ||
+            sample.pour > stages ||
+            (finalStageOnly && sample.pour !== stages)
+        ) continue;
+
+        if (sample.water <= seenHighest) {
+            plateauSeen = true;
+            plateauBase = seenHighest;
+            continue;
+        }
+
+        if (plateauSeen) {
+            if (sample.water - plateauBase > NOISE_FLOOR_ML) {
+                seenHighest = sample.water;
+                boundaryLevel = sample.water;
+                at = sample.at;
+                plateauSeen = false;
+            } else {
+                seenHighest = sample.water;
+            }
+            continue;
+        }
+
+        seenHighest = sample.water;
+        if (sample.water - boundaryLevel > NOISE_FLOOR_ML) {
+            boundaryLevel = sample.water;
             at = sample.at;
         }
     }

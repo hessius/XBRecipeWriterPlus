@@ -3,7 +3,7 @@ import React, {createContext, useContext, useRef, useState} from "react";
 import {OVER} from "@/constants/brewCopy";
 import {useBrewRun} from "@/hooks/useBrewRun";
 import type {BrewStore} from "@/hooks/useBrewRun";
-import type {BrewSample} from "@/library/brew/BrewRecord";
+import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {Stall} from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {BypassView} from "@/library/brew/bypassState";
@@ -27,6 +27,8 @@ export type LiveBrewSnapshot = {
     pauseElapsed: number;
     /** The bypass this brew has, if any. */
     bypass?: BypassView;
+    /** The row the recorder wrote for a finished brew. */
+    record?: BrewRecord;
 };
 
 type LiveBrew = {
@@ -177,7 +179,7 @@ function RunOwner({
     const result = useBrewRun(recipe, store, runId);
     const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
            heldSeconds, stalls, stageWater, pauseElapsed, brew, startBrew,
-           cancelBrew, canOfferProMode, switchToProAndRetry, bypass} = result;
+           cancelBrew, canOfferProMode, switchToProAndRetry, bypass, record} = result;
 
     // Command the machine exactly once, on the first mount of this RunOwner.
     // How many screens are showing this run in full. A count rather than a
@@ -213,7 +215,7 @@ function RunOwner({
 
     const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
-        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass,
+        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
     };
 
     return (

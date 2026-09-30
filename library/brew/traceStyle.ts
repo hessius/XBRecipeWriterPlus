@@ -4,16 +4,18 @@ import {cupLineFor, palette} from "@/constants/colors";
  * What the lines on a brew chart look like.
  *
  * Companion to `brewShape.ts`, which says where they go. The split matters
- * because two components draw these channels now: `BrewTrace` for one brew and
- * `CompareTrace` for two. A dash pattern that lives at its use site can be
- * retuned in one of them and not the other, and the two screens then disagree
- * about what dotted means.
+ * because four components draw these channels now: `BrewTrace` for one brew,
+ * `CompareTrace` for two, `FlowSparkline` for the live row and
+ * `BrewRateChart` for stored rates. A dash pattern
+ * that lives at its use site can be retuned in one of them and not the other,
+ * and the screens then disagree about what dotted means.
  *
  * Same rule as `constants/colors.ts` and `constants/motion.ts`: a value that is
  * not in the module cannot take part when the thing is retuned.
  *
  * KEEP IN STEP WITH: `components/BrewTrace.tsx`,
- * `components/CompareTrace.tsx`, `components/__tests__/traceGrammar.test.tsx`.
+ * `components/CompareTrace.tsx`, `components/FlowSparkline.tsx`,
+ * `components/BrewRateChart.tsx`, `components/__tests__/traceGrammar.test.tsx`.
  */
 
 export type Channel = "water" | "cup" | "plan";

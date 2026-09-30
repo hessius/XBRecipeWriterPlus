@@ -1,9 +1,36 @@
 import React from "react";
 import {XStack, YStack} from "tamagui";
 
-import DotMatrixText from "@/components/DotMatrixText";
+import DotMatrixText, {drawnFontSize} from "@/components/DotMatrixText";
+import FlowSparkline, {
+    FLOW_SPARKLINE_HEIGHT,
+    FLOW_SPARKLINE_MIN_POINTS
+} from "@/components/FlowSparkline";
 import {palette} from "@/constants/colors";
 import {formatBrewClock} from "@/library/brew/brewFormat";
+import type {GrindFigure} from "@/library/brew/dialAfterBrew";
+import {
+    BREW_FIGURE_DETAIL_VALUE_SIZE,
+    BREW_FIGURE_INTERNAL_GAP,
+    BREW_FIGURE_LABEL_SIZE,
+    BREW_FIGURE_ROW_GAP,
+    BREW_FIGURE_VALUE_SIZE
+} from "@/library/brew/figureGeometry";
+import {formatFlowRate} from "@/library/brew/flowRate";
+
+const DOTO_LINE_HEIGHT = 1.35;
+const FLOW_ROW_VERTICAL_ROOM = 4;
+
+export function flowRowMinHeight(): number {
+    const cupRateHeight = Math.ceil(drawnFontSize(14) * DOTO_LINE_HEIGHT);
+    return Math.max(FLOW_SPARKLINE_HEIGHT, cupRateHeight) + FLOW_ROW_VERTICAL_ROOM;
+}
+
+export function detailRowMinHeight(): number {
+    return Math.ceil(drawnFontSize(BREW_FIGURE_LABEL_SIZE) * DOTO_LINE_HEIGHT)
+        + BREW_FIGURE_INTERNAL_GAP
+        + Math.ceil(drawnFontSize(BREW_FIGURE_DETAIL_VALUE_SIZE) * DOTO_LINE_HEIGHT);
+}
 
 type Props = {
     water: number;
@@ -31,34 +58,97 @@ type Props = {
      */
     drawdown?: number | null;
     /**
-     * What the machine's grind dial read, as a ready line, or null when there
-     * is nothing the record may say.
+     * The instantaneous cup rate in g/s, or null when nobody can say.
      *
-     * A line rather than a number because the wording is the honesty rule:
-     * `dialNote` owns both, so one screen cannot start claiming the coffee
-     * was ground at a setting while another reports where a dial was. Null on
-     * the live screen, where the reading is taken after the brew has ended.
+     * Null and not 0. The row is absent before a brew has poured and while
+     * the bypass is the only thing on the scale, because a rate of 0 would be
+     * a claim that the bed has stopped.
      */
-    dial?: string | null;
+    flow?: number | null;
+    /** The last 30 seconds of cup rate. Fewer than two readings draw no sparkline. */
+    flowTail?: number[] | null;
+    /**
+     * The instantaneous pour rate in ml/s, or null when nobody can say.
+     *
+     * Same absence rule as `flow`, and it rides along rather than leading:
+     * the cup rate is the subject, the pour rate is what the machine is doing
+     * about it.
+     */
+    pourRate?: number | null;
+    /**
+     * Reserve the flow row's height even when there is nothing to draw.
+     *
+     * Live only. A finished record and the shared image cannot gain a rate
+     * later, so reserving there is dead space in a still picture.
+     */
+    reserveFlow?: boolean;
+    /**
+     * Reserve the live second figures row before the clock may print.
+     *
+     * Live only. Records and shared images either have row two or do not, but
+     * the live screen can learn drawdown and delay after the boundary.
+     */
+    reserveDrawdown?: boolean;
+    /**
+     * The average rate across the drawdown, in g/s.
+     *
+     * It sits on the drawdown figure because it is a property of that same
+     * interval, not a fourth total beside water, cup and time.
+     */
+    drawdownRate?: number | null;
+    /** Seconds late to the pour end, or null when nobody can say. */
+    delay?: number | null;
+    /**
+     * What the machine's grind dial read, and the recipe grind if it differed.
+     *
+     * Null on the live screen, where the reading is taken after the brew has
+     * ended.
+     */
+    grind?: GrindFigure | null;
 };
 
-function Figure({label, value, color, badge}: {
-    label: string; value: string; color: string; badge?: React.ReactNode;
+function FigureBadge({children, testID}: {children: string | number; testID?: string}) {
+    return (
+        <XStack testID={testID}
+                paddingHorizontal={4} paddingVertical={1}
+                borderRadius="$2" borderWidth={1} borderStyle="dashed"
+                borderColor={palette.line}>
+            <DotMatrixText fontSize={11} weight="bold" color={palette.dim}>
+                {children}
+            </DotMatrixText>
+        </XStack>
+    );
+}
+
+function Figure({label, value, color, badge, fontSize, testID, accessibilityLabel}: {
+    label: string;
+    value: string;
+    color: string;
+    badge?: React.ReactNode;
+    fontSize: number;
+    testID?: string;
+    accessibilityLabel?: string;
 }) {
     return (
-        <YStack flex={1} gap="$1">
-            <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
-                           color={palette.dim}>
+        <YStack flex={1} gap={BREW_FIGURE_INTERNAL_GAP} testID={testID}
+                accessible={accessibilityLabel !== undefined}
+                accessibilityLabel={accessibilityLabel}>
+            <DotMatrixText fontSize={BREW_FIGURE_LABEL_SIZE} weight="bold"
+                           letterSpacing={1.6} color={palette.dim}>
                 {label}
             </DotMatrixText>
             <XStack alignItems="center" gap="$1.5">
-                <DotMatrixText fontSize={28} weight="bold" color={color}>
+                <DotMatrixText fontSize={fontSize} weight="bold" color={color}>
                     {value}
                 </DotMatrixText>
                 {badge}
             </XStack>
         </YStack>
     );
+}
+
+function FigurePlaceholder({testID}: {testID: string}) {
+    return <YStack testID={testID} flex={1} />;
 }
 
 /**
@@ -68,42 +158,154 @@ function Figure({label, value, color, badge}: {
  * a figure this size that changes every 100 ms cannot be read at all.
  */
 export default function BrewFigures(
-    {water, cup, seconds, accent, bypass, drawdown = null, dial = null}: Props
+    {
+        water, cup, seconds, accent, bypass, drawdown = null, flow = null,
+        flowTail, pourRate = null, reserveFlow = false, reserveDrawdown = false,
+        drawdownRate = null, delay = null, grind = null
+    }: Props
 ) {
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
-        <XStack testID="figures-bypass"
-                paddingHorizontal={4} paddingVertical={1}
-                borderRadius="$2" borderWidth={1} borderStyle="dashed"
-                borderColor={palette.line}>
-            <DotMatrixText fontSize={11} weight="bold" color={palette.dim}>
-                {`+${Math.round(bypass)}`}
-            </DotMatrixText>
-        </XStack>
+        <FigureBadge testID="figures-bypass">{`+${Math.round(bypass)}`}</FigureBadge>
     );
+    const flowText = flow === null ? null : formatFlowRate(flow);
+    const pourRateText = pourRate === null ? null : formatFlowRate(pourRate);
+    const drawdownRateText = drawdownRate === null ? null : formatFlowRate(drawdownRate);
+    // A row exists when the caller had a rate to give. The formatter only
+    // declines a non-finite number, so presence stays one upstream decision
+    // and the row cannot blink as a noisy fit crosses zero.
+    const hasFlow = flowText !== null;
+    const hasFlowTail = (flowTail?.length ?? 0) >= FLOW_SPARKLINE_MIN_POINTS;
+    const flowAccessibilityLabel = flowText === null
+        ? undefined
+        : `Flow, ${flowText} grams per second${
+            pourRateText === null ? "" : `, pouring ${pourRateText} millilitres per second`
+        }`;
+    const drawdownText = drawdown === null ? null : formatBrewClock(drawdown);
+    const hasDetailRow = drawdownText !== null || delay !== null || grind !== null;
+    const drawdownAccessibility = drawdown === null
+        ? undefined
+        : `Drawdown, ${Math.floor(drawdown)} seconds${
+            drawdownRateText === null
+                ? ""
+                : `, average ${drawdownRateText} grams per second`
+        }`;
+    const delayAccessibility = delay === null ? undefined : `Delay, ${delay} seconds`;
+    const grindAccessibility = grind === null
+        ? undefined
+        : grind.kind === "off"
+            ? "Grind, the grinder was off"
+            : `Grind, dial ${grind.dial}${
+                grind.recipe === null ? "" : `, recipe ${grind.recipe}`
+            }`;
 
     return (
-        <YStack gap="$1.5">
+        <YStack testID="brew-figures" gap={BREW_FIGURE_ROW_GAP}>
             <XStack gap="$3">
                 <Figure label="WATER" value={String(Math.round(water))} color={accent}
-                        badge={badge} />
-                <Figure label="CUP" value={String(Math.round(cup))} color={palette.text} />
-                <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text} />
+                        badge={badge} fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-water" />
+                <Figure label="CUP" value={String(Math.round(cup))} color={palette.text}
+                        fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-cup" />
+                <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text}
+                        fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-time" />
             </XStack>
-            {/* Absent, not zero, when it was not measured. A brew that was
-                interrupted never drew down and a record written before the
-                boundary was kept cannot say, and printing 0:00 for either
-                would invent a figure somebody might dial a grind against. */}
-            {drawdown !== null && (
-                <DotMatrixText testID="figures-drawdown" fontSize={10} weight="bold"
-                               letterSpacing={1.6} color={palette.dim}>
-                    {`DRAWDOWN ${formatBrewClock(drawdown)}`}
-                </DotMatrixText>
+            {(hasFlow || reserveFlow) && (
+                <YStack testID="figures-flow-slot"
+                        minHeight={reserveFlow ? flowRowMinHeight() : undefined}
+                        justifyContent="center">
+                    {hasFlow && (
+                        <XStack testID="figures-flow" alignItems="center"
+                                accessible
+                                accessibilityLabel={flowAccessibilityLabel}
+                                justifyContent="space-between" gap="$2">
+                            <DotMatrixText fontSize={10} weight="bold" letterSpacing={1.6}
+                                           color={palette.dim}>
+                                FLOW
+                            </DotMatrixText>
+                            <XStack alignItems="center" gap="$3" flex={1} minWidth={0}
+                                    justifyContent="flex-end">
+                                {hasFlowTail && flowTail !== null && flowTail !== undefined && (
+                                    <FlowSparkline values={flowTail} accent={accent} />
+                                )}
+                                <DotMatrixText fontSize={14} weight="bold" color={palette.text}
+                                               numberOfLines={1} style={{flexShrink: 0}}>
+                                    {`${flowText} G/S`}
+                                </DotMatrixText>
+                                {pourRateText !== null && (
+                                    <DotMatrixText fontSize={10} weight="bold"
+                                                   letterSpacing={1.6} color={palette.dim}
+                                                   numberOfLines={1} style={{flexShrink: 0}}>
+                                        {`POUR ${pourRateText} ML/S`}
+                                    </DotMatrixText>
+                                )}
+                            </XStack>
+                        </XStack>
+                    )}
+                </YStack>
             )}
-            {dial !== null && (
-                <DotMatrixText testID="figures-dial" fontSize={10} weight="bold"
-                               letterSpacing={1.6} color={palette.dim}>
-                    {dial}
-                </DotMatrixText>
+            {/* Absent, not zero, when a figure was not measured. A cancelled
+                brew never drew down, an old record cannot say, and 0:00 would
+                invent a figure somebody might dial a grind against. */}
+            {(hasDetailRow || reserveDrawdown) && (
+                <YStack testID="figures-detail-slot"
+                        minHeight={reserveDrawdown ? detailRowMinHeight() : undefined}
+                        justifyContent="center">
+                    {hasDetailRow && (
+                        <XStack testID="figures-detail-row" gap="$3">
+                            {/* TIME is the right figure above, and DRAWDOWN is
+                                also a duration, so the right column rhymes. */}
+                            {grind === null ? (
+                                <FigurePlaceholder testID="figures-grind-placeholder" />
+                            ) : (
+                                <Figure
+                                    testID="figures-grind"
+                                    label="GRIND"
+                                    value={grind.kind === "off" ? "OFF" : String(grind.dial)}
+                                    color={palette.text}
+                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
+                                    badge={grind.kind === "off" || grind.recipe === null
+                                        ? undefined
+                                        : (
+                                            <FigureBadge testID="figures-grind-recipe">
+                                                {`RECIPE ${grind.recipe}`}
+                                            </FigureBadge>
+                                        )}
+                                    accessibilityLabel={grindAccessibility}
+                                />
+                            )}
+                            {delay === null ? (
+                                <FigurePlaceholder testID="figures-delay-placeholder" />
+                            ) : (
+                                <Figure
+                                    testID="figures-delay"
+                                    label="DELAY"
+                                    value={`+${delay}`}
+                                    color={palette.warn}
+                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
+                                    accessibilityLabel={delayAccessibility}
+                                />
+                            )}
+                            {drawdownText === null ? (
+                                <FigurePlaceholder testID="figures-drawdown-placeholder" />
+                            ) : (
+                                <Figure
+                                    testID="figures-drawdown"
+                                    label="DRAWDOWN"
+                                    value={drawdownText}
+                                    color={palette.text}
+                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
+                                    badge={drawdownRateText === null
+                                        ? undefined
+                                        : (
+                                            <FigureBadge testID="figures-drawdown-rate">
+                                                {`${drawdownRateText} G/S`}
+                                            </FigureBadge>
+                                        )}
+                                    accessibilityLabel={drawdownAccessibility}
+                                />
+                            )}
+                        </XStack>
+                    )}
+                </YStack>
             )}
         </YStack>
     );
