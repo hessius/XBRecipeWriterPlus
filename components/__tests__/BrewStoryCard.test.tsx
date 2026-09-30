@@ -49,9 +49,6 @@ describe("the story card", () => {
         const calls = renderSummary.mock.calls as unknown as [[StorySummaryBudget]];
         const budget = calls[0][0];
         expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
-        expect(budget.summaryAvailableHeight).toBeGreaterThanOrEqual(
-            budget.minimumSummaryHeight
-        );
     });
 
     it("stands the frame up at nine by sixteen", async () => {

@@ -54,10 +54,6 @@ describe("the frame", () => {
         });
 
         expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
-        expect(budget.summaryAvailableHeight).toBeGreaterThanOrEqual(
-            budget.minimumSummaryHeight
-        );
-        expect(budget.rateLabelRowHeight).toBeGreaterThan(0);
     });
 
     it("spends spare story room on the ladder bands", () => {
@@ -77,7 +73,6 @@ describe("the frame", () => {
     });
 
     it("fits every story sheet width, card stage count and bounded font scale", () => {
-        let worst = {margin: Number.POSITIVE_INFINITY, width: 0, stages: 0, fontScale: 0};
         const visibleRows = (budget: ReturnType<typeof storySummaryBudget>) =>
             Number(budget.showCoffee)
             + Number(budget.showRating)
@@ -100,17 +95,12 @@ describe("the frame", () => {
                         hasBypass: true,
                         figureExtraRows: 2
                     });
-                    const margin = budget.contentHeight - budget.requiredHeight;
-                    if (margin < worst.margin) worst = {margin, width, stages, fontScale};
-
                     expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
                     expect(visibleRows(budget)).toBeGreaterThanOrEqual(rowsAtPreviousWidth);
                     rowsAtPreviousWidth = visibleRows(budget);
                 }
             }
         }
-
-        expect(worst.margin).toBeGreaterThanOrEqual(0);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {

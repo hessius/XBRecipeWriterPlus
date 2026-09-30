@@ -68,14 +68,11 @@ export type StorySummaryBudgetInput = {
 export type StorySummaryBudget = {
     contentHeight: number;
     surroundingHeight: number;
-    summaryAvailableHeight: number;
-    minimumSummaryHeight: number;
     requiredHeight: number;
     traceHeight: number;
     rateHeight: number;
     capturePadding: number;
     ladderTopGap: number;
-    rateLabelRowHeight: number;
     barHeight: number;
     rungGap: number;
     showRateChart: boolean;
@@ -289,14 +286,11 @@ export function storySummaryBudget(
     return {
         contentHeight,
         surroundingHeight: measured.around,
-        summaryAvailableHeight: Math.max(0, contentHeight - measured.around),
-        minimumSummaryHeight: measured.summary + bands.spent,
         requiredHeight,
         traceHeight: chosen.trace,
         rateHeight: chosen.rate ? RATE_HEIGHT : 0,
         capturePadding: STORY_CAPTURE_PADDING,
         ladderTopGap: chosen.stages ? STORY_LADDER_TOP_GAP : 0,
-        rateLabelRowHeight: rows.rateLabel,
         barHeight: bands.barHeight,
         rungGap: bands.rungGap,
         showRateChart: chosen.rate,
