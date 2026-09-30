@@ -645,7 +645,7 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 Note: `BrewStageRung` builds its a11y sentence from spelled-out fragments —
 `Stage 01`, `centred pour`, `92 degrees`, `250 millilitres`, `, then 30 seconds
 pause`, `, held once, 12 seconds` — for the screen reader. These are cited at
-`components/BrewStageRung.tsx:156-274`.
+`components/BrewStageRung.tsx:159-180`.
 
 ---
 
@@ -733,10 +733,10 @@ empty library with nothing to explain it.
 | `brewHistory.handoff.openFailed` | `hooks/useBrewBatchHandoff.ts` | Error toast when iOS or Android rejects the Beanconqueror deep link. | `Could not open Beanconqueror. Make sure it is installed and try again.` |
 | `brewHistory.row.delete.a11y` | `app/brewHistory.tsx:32` (a11y) | (a11y) Swipe delete on a history row. | `Delete brew` |
 | `brewHistory.row.delete.label` | `app/brewHistory.tsx:45` | Doto label on the delete tile. | `DELETE` |
-| `brewHistory.confirm.title` | `app/brewHistory.tsx:182` | Title of the delete-confirmation dialog. | `Delete brew` |
-| `brewHistory.confirm.body` | `app/brewHistory.tsx:186` | Confirmation body. `${...}` is the recipe name. | `Delete ${pendingBrew?.recipeName}? This cannot be undone.` |
-| `brewHistory.confirm.delete.a11y` | `app/brewHistory.tsx:190` (a11y) | (a11y) Confirm-delete button. `${...}` is the recipe name (or "brew"). | `Delete ${pendingBrew?.recipeName ?? "brew"}` |
-| `brewHistory.confirm.delete` | `app/brewHistory.tsx:193` | Confirm-delete button label. | `Delete` |
+| `brewHistory.confirm.title` | `app/brewHistory.tsx:514` | Title of the delete-confirmation dialog. | `Delete brew` |
+| `brewHistory.confirm.body` | `app/brewHistory.tsx:518` | Confirmation body. `${...}` is the recipe name. | `Delete ${pendingBrew?.recipeName}? This cannot be undone.` |
+| `brewHistory.confirm.delete.a11y` | `app/brewHistory.tsx:522` (a11y) | (a11y) Confirm-delete button. `${...}` is the recipe name (or "brew"). | `Delete ${pendingBrew?.recipeName ?? "brew"}` |
+| `brewHistory.confirm.delete` | `app/brewHistory.tsx:525` | Confirm-delete button label. | `Delete` |
 | `brewHistory.confirm.keep.a11y` | `app/brewHistory.tsx:529` (a11y) | (a11y) Cancel button. | `Keep this brew` |
 | `brewHistory.confirm.keep` | `app/brewHistory.tsx:532` | Cancel button label. | `Keep this brew` |
 | `brewHistory.row.a11y` | `components/BrewHistoryRow.tsx:52` (a11y) | (a11y) The whole row as one announcement -- the explicit label replaces every visible child, so the date, cup weight, drawdown rate, duration and any flag have to be in it or a reader hears one indistinguishable name per brew. Empty parts are dropped. | `${name}, ${date}, ${grams} grams, ${rate} grams per second, ${duration}, ended early, stopped, no trace kept` |

@@ -37,9 +37,12 @@ type Props = {
      *
      * Must be at least this lane's own extent in both dimensions. A smaller
      * axis clips at the viewport rather than rescaling, so the lane would lose
-     * its tail with nothing on screen to say it had. Both callers build it
-     * with `traceAxisFor`, the same derivation this lane falls back to, so
-     * neither can hand down an axis smaller than the lane it wraps.
+     * its tail with nothing on screen to say it had. `BrewSummary` meets that
+     * by building it with `traceAxisFor`, the same derivation this lane falls
+     * back to. The comparison screen cannot: it has to reconcile two lanes, so
+     * `compareAxis` in `library/brew/compare.ts` builds its own and owes the
+     * requirement above directly. It clears its lanes today because neither is
+     * given a bypass, and a bypass box added to one would overflow it.
      *
      * Sharing an axis only makes two lanes comparable when both are `compact`:
      * the temperature band is not part of the axis, so two full size lanes
@@ -216,7 +219,7 @@ export default function BrewTrace({
     // The plan's final water level: where the target line ends, and the floor
     // the bypass box is stacked on.
     const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
-    const selfAxis = traceAxisFor(pours, samples, plannedSeconds, bypass);
+    const extent = axis ?? traceAxisFor(pours, samples, plannedSeconds, bypass);
     // In compact mode the SVG fills the full height; otherwise the legend row
     // and the overrun row take theirs first.
     const svgHeight = compact
@@ -225,8 +228,8 @@ export default function BrewTrace({
     const box: Box = {
         width,
         height: svgHeight,
-        maxT: axis?.maxT ?? selfAxis.maxT,
-        maxV: axis?.maxV ?? selfAxis.maxV
+        maxT: extent.maxT,
+        maxV: extent.maxV
     };
 
     const planPath = toPath(plan, box);
