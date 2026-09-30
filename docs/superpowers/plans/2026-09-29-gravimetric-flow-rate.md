@@ -1849,11 +1849,13 @@ In `app/brewCompare.tsx`, under each separate volume lane, render a
 `BrewRateChart` for that side with `maxRate={axis.maxRate}` and the test IDs
 above. Pass the ready `axis.subjectRate` and `axis.referenceRate` series rather
 than deriving them in the screen. Reuse the screen's existing samples and
-accent. Gate rate lanes on both derived series having at least two points,
-because a lone rate lane is not a comparison. This is deliberately asymmetric
-with the volume trace: a surviving volume lane still draws alone, but the rate
-lanes are all or nothing. If either retained stream cannot form a rate line,
-draw neither rate lane.
+accent. Gate rate lanes on the same shared drawability predicate the chart uses:
+each derived series must contain a contiguous run long enough to draw a line.
+This is deliberately asymmetric with the volume trace. A surviving volume lane
+still draws alone because it is a readable record of one brew on its own, but a
+rate lane's only value is the comparison, so a single rate lane on an axis
+negotiated from one brew invites reading a second brew that is not there. If
+either retained stream cannot form a rate line, draw neither rate lane.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 

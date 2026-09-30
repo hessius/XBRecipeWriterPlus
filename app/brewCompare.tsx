@@ -187,7 +187,6 @@ function CompareRateLane({
     maxRate: number;
     role?: Role;
 }) {
-    if (series.length < 2) return null;
     return (
         <YStack testID={testID}>
             <BrewRateChart

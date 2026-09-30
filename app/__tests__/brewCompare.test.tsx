@@ -73,6 +73,18 @@ function shortRateSamples(rate: number) {
     });
 }
 
+function isolatedRateSamples(rate: number) {
+    return [0, 1_000, 1_200].map((at) => {
+        const seconds = at / 1000;
+        return {
+            at,
+            water: rate * seconds,
+            cup: rate * seconds,
+            pour: 1
+        };
+    });
+}
+
 function pair(over: Parameters<typeof makeBrewRecordFixture>[0] = {}) {
     const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan});
     const b = makeBrewRecordFixture({id: "b", plan: comparisonPlan, ...over});
@@ -178,6 +190,35 @@ describe("the comparison screen", () => {
         expect(getByTestId("compare-lane-b")).toBeTruthy();
         expect(queryByTestId("compare-rate-subject")).toBeNull();
         expect(queryByTestId("compare-rate-reference")).toBeNull();
+    });
+
+    it("draws no rate lanes when one retained rate series has no drawable run", async () => {
+        const a = makeBrewRecordFixture({id: "a", plan: comparisonPlan, startedAt: 0});
+        const b = makeBrewRecordFixture({
+            id: "b",
+            plan: comparisonPlan,
+            startedAt: 3_600_000
+        });
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(isolatedRateSamples(2)), frames: ""},
+            b: {record: b, samples: makeBrewRecordSamples(rateSamples(5)), frames: ""}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByLabelText, getByTestId, queryByTestId} =
+            await renderWithProviders(<BrewCompareScreen />);
+
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        expect(getByTestId("compare-lane-a")).toBeTruthy();
+        expect(getByTestId("compare-lane-b")).toBeTruthy();
+        expect(queryByTestId("compare-rate-subject")).toBeNull();
+        expect(queryByTestId("compare-rate-reference")).toBeNull();
+        expect(getByLabelText(
+            `This brew trace, ${formatBrewDate(0)} ${formatBrewTime(0)}`
+        )).toBeTruthy();
+        expect(getByLabelText(
+            `That brew trace, ${formatBrewDate(3_600_000)} ${formatBrewTime(3_600_000)}`
+        )).toBeTruthy();
     });
 
     it("returns to overlay after switching to separate", async () => {
