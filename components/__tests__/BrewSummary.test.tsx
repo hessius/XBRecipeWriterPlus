@@ -2,7 +2,7 @@ import React from "react";
 import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, within} from "@testing-library/react-native";
 
-import BrewSummary, {SUMMARY_SCROLL_PEEK} from "@/components/BrewSummary";
+import BrewSummary, {SUMMARY_SCROLL_PEEK, summaryLadderHeight} from "@/components/BrewSummary";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
@@ -170,38 +170,32 @@ describe("BrewSummary", () => {
         expect(ladderProps.rungGap).toBe(20);
     });
 
-    it("does not reserve the scroll peek inside a story-card summary", async () => {
-        const measured = await draw({
+    it("leaves the measured ladder slot at auto height so tall ladders can scroll", async () => {
+        const {getByTestId} = await draw({
+            stages: pours(4),
+            stageWater: [40, 40, 40, 40],
+            stalls: [[], [], [], []],
             stagesUnavailable: false,
-            availableHeight: 600
+            availableHeight: 700
         });
-        await act(async () => {
-            fireEvent(measured.getByTestId("summary-chrome"), "layout", {
-                nativeEvent: {layout: {height: 300, width: 330, x: 0, y: 0}}
-            });
-        });
-        const measuredStyle = StyleSheet.flatten(
-            measured.getByTestId("summary-ladder-slot").props.style as StyleProp<ViewStyle>
-        );
 
-        const story = await draw({
-            stagesUnavailable: false,
-            availableHeight: 600,
-            storyBands: {barHeight: 28, rungGap: 20}
-        });
         await act(async () => {
-            fireEvent(story.getByTestId("summary-chrome"), "layout", {
-                nativeEvent: {layout: {height: 300, width: 330, x: 0, y: 0}}
+            fireEvent(getByTestId("summary-chrome"), "layout", {
+                nativeEvent: {layout: {height: 420, width: 330, x: 0, y: 0}}
             });
         });
-        const storyStyle = StyleSheet.flatten(
-            story.getByTestId("summary-ladder-slot").props.style as StyleProp<ViewStyle>
+
+        const style = StyleSheet.flatten(
+            getByTestId("summary-ladder-slot").props.style as StyleProp<ViewStyle>
         );
-        const measuredHeight = measuredStyle?.height;
-        const storyHeight = storyStyle?.height;
-        if (typeof measuredHeight !== "number" || typeof storyHeight !== "number") {
-            throw new Error("Expected both summary ladder slots to render a numeric height");
-        }
+        expect(style?.height).toBeUndefined();
+        expect(ladderProps.barHeight).toBe(28);
+        expect(ladderProps.rungGap).toBe(20);
+    });
+
+    it("does not reserve the scroll peek inside a story-card summary", async () => {
+        const measuredHeight = summaryLadderHeight(600, 300, 30, 12, undefined);
+        const storyHeight = summaryLadderHeight(600, 300, 30, 12, {barHeight: 28, rungGap: 20});
 
         expect(storyHeight - measuredHeight).toBe(SUMMARY_SCROLL_PEEK);
     });

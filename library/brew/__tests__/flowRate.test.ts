@@ -136,6 +136,27 @@ function quantisedSteadyFlow(seconds = 60, phase = 0): BrewSample[] {
     return out;
 }
 
+function quantisedProfile(
+    seconds: number,
+    rateAt: (at: number) => number,
+    phase = 0
+): BrewSample[] {
+    const out: BrewSample[] = [];
+    let value = 0;
+    for (let i = 0; i <= Math.round(seconds * 10); i += 1) {
+        const at = i * 100;
+        if (i > 0) value += rateAt(at) * 0.1;
+        const quantised = Math.round((value + phase) / 0.5) * 0.5;
+        out.push({
+            at,
+            water: quantised,
+            cup: quantised,
+            pour: 1
+        });
+    }
+    return out;
+}
+
 function populationSpread(values: number[]): number {
     const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
     return Math.sqrt(
@@ -426,6 +447,20 @@ describe("retrospectiveFlowSeries", () => {
         expect(maxRateOf(smoothed)).toBeLessThan(2.1);
     });
 
+    it("does not flatten the retrospective endpoint zone into one plateau", () => {
+        const samples = quantisedProfile(24, (at) =>
+            at < 10_000 ? 0 : at < 22_000 ? 4 : 0);
+        const smoothed = retrospectiveFlowSeries(samples, 1);
+        const ending = smoothed
+            .filter((point) => point.at >= 22_100 && point.at <= 24_000)
+            .map((point) => Number(point.cup.toFixed(3)));
+        const distinct = new Set(ending);
+
+        expect(ending.length).toBeGreaterThan(10);
+        expect(distinct.size).toBeGreaterThan(5);
+        expect(ending[ending.length - 1]).toBeLessThan(0.5);
+    });
+
     it("fits a drawable two point retrospective run without raw spikes", () => {
         const samples: BrewSample[] = [
             {at: 0, water: 0, cup: 0, pour: 1},
@@ -453,11 +488,12 @@ describe("retrospectiveFlowSeries", () => {
         ];
 
         expect(retrospectiveFlowSeries(tooShort, 1)).toEqual([]);
-        expect(retrospectiveFlowSeries(exactlyThree, 1)).toEqual([
-            {at: 1000, cup: 1, water: 1},
-            {at: 2000, cup: 1, water: 1},
-            {at: 3000, cup: 1, water: 1}
-        ]);
+        const threePoint = retrospectiveFlowSeries(exactlyThree, 1);
+        expect(threePoint).toHaveLength(3);
+        for (const point of threePoint) {
+            expect(point.cup).toBeCloseTo(1, 12);
+            expect(point.water).toBeCloseTo(1, 12);
+        }
     });
 
     it("flattens noisy square-wave plateaus while keeping the real edges sharp", () => {

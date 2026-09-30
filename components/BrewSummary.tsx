@@ -38,6 +38,21 @@ export const SUMMARY_SCROLL_PEEK = 44;
  */
 export const CAPTURE_MARGIN = 12;
 
+export function summaryLadderHeight(
+    availableHeight: number,
+    chromeHeight: number,
+    capturePadding: number,
+    ladderTopGap: number,
+    storyBands: {barHeight: number; rungGap: number} | undefined
+): number {
+    if (availableHeight === 0 || chromeHeight === 0) return 0;
+    const scrollPeek = storyBands === undefined ? SUMMARY_SCROLL_PEEK : 0;
+    return Math.max(
+        0,
+        availableHeight - chromeHeight - capturePadding * 2 - ladderTopGap - scrollPeek
+    );
+}
+
 type Props = {
     recipeName: string;
     hasStream: boolean;
@@ -158,14 +173,13 @@ export default function BrewSummary({
     // ladder is one subtree, so its height is one reading; the ladder's own
     // height is excluded, which is what stops this feeding back on itself.
     const [chromeHeight, setChromeHeight] = useState(0);
-    const scrollPeek = storyBands === undefined ? SUMMARY_SCROLL_PEEK : 0;
-    const ladderHeight = availableHeight === 0 || chromeHeight === 0
-        ? 0
-        : Math.max(
-            0,
-            availableHeight - chromeHeight - capturePadding * 2 - ladderTopGap - scrollPeek
-        );
-    const ladderSlotHeight = ladderHeight === 0 ? undefined : ladderHeight;
+    const ladderHeight = summaryLadderHeight(
+        availableHeight,
+        chromeHeight,
+        capturePadding,
+        ladderTopGap,
+        storyBands
+    );
     const bands = storyBands ?? summaryBands(ladderHeight, stages.length);
 
     return (
@@ -254,7 +268,7 @@ export default function BrewSummary({
                 figures stay flush the way they were on screen. */}
             {showStages && (
             <View testID="summary-ladder-slot"
-                  style={{marginTop: ladderTopGap, height: ladderSlotHeight}}>
+                  style={{marginTop: ladderTopGap}}>
             {stagesUnavailable ? (
                 <DotMatrixText fontSize={11} letterSpacing={1.2} color={palette.muted}>
                     Recipe deleted. Stages not available.

@@ -435,6 +435,10 @@ function retrospectiveWindowFor(
     return run.filter((candidate) => candidate.at >= from && candidate.at <= to);
 }
 
+/**
+ * Cumulative readings are exactly re-derived from contiguous derivative points
+ * so endpoint fits use the same run segmentation as the rate series.
+ */
 function cumulativeSlopeAt(
     window: RawFlowPoint[], centreAt: number, of: "cup" | "water"
 ): number | null {
@@ -465,6 +469,52 @@ function cumulativeSlopeAt(
     return Number.isFinite(fitted) ? fitted : null;
 }
 
+function cumulativeQuadraticDerivativeAt(
+    window: RawFlowPoint[], centreAt: number, windowMs: number, of: "cup" | "water"
+): number | null {
+    const first = window[0];
+    const last = window[window.length - 1];
+    if (first === undefined) return null;
+    if (last === undefined) return null;
+
+    let s0 = 1;
+    let s1 = (first.fromAt - centreAt) / 1000;
+    let s2 = s1 * s1;
+    let s3 = s2 * s1;
+    let s4 = s2 * s2;
+    let y0 = 0;
+    let y1 = 0;
+    let y2 = 0;
+    let value = 0;
+
+    for (const point of window) {
+        value += point[of] * ((point.at - point.fromAt) / 1000);
+        const x = (point.at - centreAt) / 1000;
+        const x2 = x * x;
+        s0 += 1;
+        s1 += x;
+        s2 += x2;
+        s3 += x2 * x;
+        s4 += x2 * x2;
+        y0 += value;
+        y1 += x * value;
+        y2 += x2 * value;
+    }
+
+    const coefficients = solve3(
+        [[s0, s1, s2], [s1, s2, s3], [s2, s3, s4]],
+        [y0, y1, y2]
+    );
+    if (coefficients === null) return null;
+
+    const quadratic = coefficients[1];
+    const linear = cumulativeSlopeAt(window, centreAt, of);
+    if (linear === null) return null;
+    const support = Math.min(1, Math.max(0, (last.at - first.fromAt) / windowMs));
+    const fitted = linear + (quadratic - linear) * support * support;
+    return Number.isFinite(fitted) ? fitted : null;
+}
+
 function retrospectiveFitAt(
     window: RawFlowPoint[], pointAt: number, windowMs: number, of: "cup" | "water"
 ): number | null {
@@ -480,13 +530,14 @@ function retrospectiveFitAt(
         leftSupportMs < halfWindowMs ||
         rightSupportMs < halfWindowMs
     ) {
-        // A quadratic derivative fit needs the full smoothing span split
-        // around the point. Otherwise the matrix has enough points to solve,
-        // but not enough two-sided scale movement to determine curvature. The
-        // best supported model is then a straight line through reconstructed
-        // scale readings; two derivative points become three readings, so a
-        // degraded link still produces a drawable rate without raw spikes.
-        return cumulativeSlopeAt(window, pointAt, of);
+        // Less support gets less flexible rate models: a quadratic cumulative
+        // fit at endpoints, capped by the verified endpoint rate fit.
+        const cumulative = window.length < RETROSPECTIVE_FLOW_MIN_SAMPLES
+            ? cumulativeSlopeAt(window, pointAt, of)
+            : cumulativeQuadraticDerivativeAt(window, pointAt, windowMs, of);
+        if (cumulative === null) return null;
+        const rateFit = savitzkyGolayAt(window, pointAt, of);
+        return rateFit === null ? cumulative : Math.min(cumulative, rateFit);
     }
 
     return savitzkyGolayAt(window, pointAt, of);
