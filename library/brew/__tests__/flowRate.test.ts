@@ -121,11 +121,11 @@ function noisySquareWave(): BrewSample[] {
     return out;
 }
 
-function quantisedSteadyFlow(): BrewSample[] {
+function quantisedSteadyFlow(seconds = 60, phase = 0): BrewSample[] {
     const out: BrewSample[] = [];
-    for (let i = 0; i <= 600; i += 1) {
+    for (let i = 0; i <= Math.round(seconds * 10); i += 1) {
         const at = i * 100;
-        const value = Math.round((2 * (at / 1000)) / 0.5) * 0.5;
+        const value = Math.round((2 * (at / 1000) + phase) / 0.5) * 0.5;
         out.push({
             at,
             water: value,
@@ -415,13 +415,42 @@ describe("retrospectiveFlowSeries", () => {
         expect(maxRateOf(smoothed)).toBeLessThan(2.25);
     });
 
-    it("keeps short retrospective runs honest without raw fallback points", () => {
-        const tooShort: BrewSample[] = [
+    it("does not let a short quantised run overshoot the live estimator", () => {
+        const samples = quantisedSteadyFlow(1.1, 0.1);
+        const smoothed = retrospectiveFlowSeries(samples, 1);
+        const causal = flowSeries(samples, 1);
+
+        expect(smoothed).toHaveLength(11);
+        expect(causal.length).toBeGreaterThan(0);
+        expect(maxRateOf(smoothed)).toBeLessThanOrEqual(maxRateOf(causal) + 0.01);
+        expect(maxRateOf(smoothed)).toBeLessThan(2.1);
+    });
+
+    it("fits a drawable two point retrospective run without raw spikes", () => {
+        const samples: BrewSample[] = [
             {at: 0, water: 0, cup: 0, pour: 1},
             {at: 1000, water: 1, cup: 1, pour: 1},
             {at: 2000, water: 2, cup: 2, pour: 1}
         ];
-        const exactlyThree = [...tooShort, {at: 3000, water: 3, cup: 3, pour: 1}];
+
+        expect(retrospectiveFlowSeries(samples, 1)).toEqual([
+            {at: 1000, cup: 1, water: 1},
+            {at: 2000, cup: 1, water: 1}
+        ]);
+    });
+
+    it("keeps short retrospective runs honest without raw fallback points", () => {
+        const tooShort: BrewSample[] = [
+            {at: 0, water: 0, cup: 0, pour: 1},
+            {at: 500, water: 0.5, cup: 0.5, pour: 1},
+            {at: 1000, water: 1, cup: 1, pour: 1}
+        ];
+        const exactlyThree: BrewSample[] = [
+            {at: 0, water: 0, cup: 0, pour: 1},
+            {at: 1000, water: 1, cup: 1, pour: 1},
+            {at: 2000, water: 2, cup: 2, pour: 1},
+            {at: 3000, water: 3, cup: 3, pour: 1}
+        ];
 
         expect(retrospectiveFlowSeries(tooShort, 1)).toEqual([]);
         expect(retrospectiveFlowSeries(exactlyThree, 1)).toEqual([

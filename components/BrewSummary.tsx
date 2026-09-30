@@ -165,6 +165,7 @@ export default function BrewSummary({
             0,
             availableHeight - chromeHeight - capturePadding * 2 - ladderTopGap - scrollPeek
         );
+    const ladderSlotHeight = ladderHeight === 0 ? undefined : ladderHeight;
     const bands = storyBands ?? summaryBands(ladderHeight, stages.length);
 
     return (
@@ -252,7 +253,8 @@ export default function BrewSummary({
             {/* Spaced by hand: the capture has no gap, so the trace and the
                 figures stay flush the way they were on screen. */}
             {showStages && (
-            <YStack marginTop={ladderTopGap}>
+            <View testID="summary-ladder-slot"
+                  style={{marginTop: ladderTopGap, height: ladderSlotHeight}}>
             {stagesUnavailable ? (
                 <DotMatrixText fontSize={11} letterSpacing={1.2} color={palette.muted}>
                     Recipe deleted. Stages not available.
@@ -285,7 +287,7 @@ export default function BrewSummary({
                     bypass={bypass}
                 />
             )}
-            </YStack>
+            </View>
             )}
         </View>
     );

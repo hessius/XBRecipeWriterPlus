@@ -413,8 +413,8 @@ function savitzkyGolayAt(
 }
 
 function retrospectiveWindowFor(
-    run: FlowPoint[], pointAt: number, windowMs: number
-): FlowPoint[] {
+    run: RawFlowPoint[], pointAt: number, windowMs: number
+): RawFlowPoint[] {
     const first = run[0];
     const last = run[run.length - 1];
     if (first === undefined || last === undefined) return [];
@@ -435,7 +435,64 @@ function retrospectiveWindowFor(
     return run.filter((candidate) => candidate.at >= from && candidate.at <= to);
 }
 
-function smoothRetrospectiveRun(run: FlowPoint[]): FlowPoint[] {
+function cumulativeSlopeAt(
+    window: RawFlowPoint[], centreAt: number, of: "cup" | "water"
+): number | null {
+    const first = window[0];
+    if (first === undefined) return null;
+
+    let count = 1;
+    let sumT = (first.fromAt - centreAt) / 1000;
+    let sumTT = sumT * sumT;
+    let sumV = 0;
+    let sumTV = 0;
+    let value = 0;
+
+    for (const point of window) {
+        value += point[of] * ((point.at - point.fromAt) / 1000);
+        const t = (point.at - centreAt) / 1000;
+        count += 1;
+        sumT += t;
+        sumTT += t * t;
+        sumV += value;
+        sumTV += t * value;
+    }
+
+    const covariance = sumTV - (sumT * sumV) / count;
+    const variance = sumTT - (sumT * sumT) / count;
+    if (variance === 0) return null;
+    const fitted = covariance / variance;
+    return Number.isFinite(fitted) ? fitted : null;
+}
+
+function retrospectiveFitAt(
+    window: RawFlowPoint[], pointAt: number, windowMs: number, of: "cup" | "water"
+): number | null {
+    const first = window[0];
+    const last = window[window.length - 1];
+    if (first === undefined || last === undefined) return null;
+
+    const leftSupportMs = pointAt - first.fromAt;
+    const rightSupportMs = last.at - pointAt;
+    const halfWindowMs = windowMs / 2;
+    if (
+        last.at - first.fromAt < windowMs ||
+        leftSupportMs < halfWindowMs ||
+        rightSupportMs < halfWindowMs
+    ) {
+        // A quadratic derivative fit needs the full smoothing span split
+        // around the point. Otherwise the matrix has enough points to solve,
+        // but not enough two-sided scale movement to determine curvature. The
+        // best supported model is then a straight line through reconstructed
+        // scale readings; two derivative points become three readings, so a
+        // degraded link still produces a drawable rate without raw spikes.
+        return cumulativeSlopeAt(window, pointAt, of);
+    }
+
+    return savitzkyGolayAt(window, pointAt, of);
+}
+
+function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
     const first = run[0];
     const last = run[run.length - 1];
     if (first === undefined || last === undefined) return [];
@@ -443,8 +500,8 @@ function smoothRetrospectiveRun(run: FlowPoint[]): FlowPoint[] {
     const windowMs = retrospectiveWindowMs(run);
     return run.flatMap((point) => {
         const window = retrospectiveWindowFor(run, point.at, windowMs);
-        const cup = savitzkyGolayAt(window, point.at, "cup");
-        const water = savitzkyGolayAt(window, point.at, "water");
+        const cup = retrospectiveFitAt(window, point.at, windowMs, "cup");
+        const water = retrospectiveFitAt(window, point.at, windowMs, "water");
         if (cup === null || water === null) return [];
         return {
             at:    point.at,
