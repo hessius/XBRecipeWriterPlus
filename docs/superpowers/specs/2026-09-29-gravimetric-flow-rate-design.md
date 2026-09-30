@@ -326,6 +326,12 @@ maximum of planned time, last raw sample time, and bypass extent. That keeps the
 same second at the same x in both stacked charts even when a plan tail, overrun
 or bypass box reaches past the last fitted rate point.
 
+Amendment, 2026-09-30: the chart has a named `RATE_TOP_GAP` of 18 pt and keeps
+the 12 pt `RATE_BOTTOM_GAP`. The volume trace legend immediately above the
+rate chart is text, so it needs more air than the figure block below. The story
+card budget spends `RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP` for the rate
+chart and passes those same values into `BrewSummary`.
+
 The rate chart does not inset horizontally. Its plot is the full `width`, just
 like `BrewTrace`, and only the vertical dimension is inset by half the widest
 rate stroke so high and low rates do not clip. Horizontal stroke caps are

@@ -45,6 +45,7 @@ describe("the story card", () => {
             showStages: true,
             traceHeight: expect.any(Number),
             rateHeight: expect.any(Number),
+            rateTopGap: expect.any(Number),
             rateBottomGap: expect.any(Number)
         }));
         const calls = renderSummary.mock.calls as unknown as [[StorySummaryBudget]];
@@ -77,7 +78,7 @@ describe("the story card", () => {
     });
 
     it("prints the coffee when there is one", async () => {
-        await show({coffee: "Huila · Washed"});
+        await show({coffee: "Huila · Washed", hasRateChart: false});
         expect(screen.getByTestId("story-coffee")).toHaveTextContent("Huila · Washed");
     });
 
@@ -100,7 +101,7 @@ describe("the story card", () => {
     });
 
     it("prints the tags", async () => {
-        await show({tags: ["Ethiopia", "filter"]});
+        await show({tags: ["Ethiopia", "filter"], hasRateChart: false});
         expect(screen.getByTestId("story-tags")).toHaveTextContent(/Ethiopia/);
         expect(screen.getByTestId("story-tags")).toHaveTextContent(/filter/);
     });
@@ -111,7 +112,7 @@ describe("the story card", () => {
     });
 
     it("counts the tags it has no room for rather than wrapping them", async () => {
-        await show({tags: ["a", "b", "c", "d", "e", "f"]});
+        await show({tags: ["a", "b", "c", "d", "e", "f"], hasRateChart: false});
         expect(screen.getByTestId("story-tags-more")).toHaveTextContent("+2");
         expect(screen.getByTestId("story-tags")).not.toHaveTextContent(/e/);
     });

@@ -215,6 +215,22 @@ describe("BrewSummary", () => {
         expect(style?.marginBottom).toBe(12);
     });
 
+    it("gives a drawable rate chart the larger top gap", async () => {
+        await draw({
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        const style = StyleSheet.flatten(
+            screen.getByTestId("rate-chart-slot").props.style as StyleProp<ViewStyle>
+        );
+        // The trace's legend row is text, so it needs more air above the
+        // rate chart than the figures need below it.
+        expect(style?.marginTop).toBe(18);
+    });
+
     it("passes delay and grind figures into the captured summary", async () => {
         await draw({
             drawdown: 32,

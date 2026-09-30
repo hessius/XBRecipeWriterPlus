@@ -5,7 +5,7 @@ import {
 } from "../storyCard";
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
-import {RATE_HEIGHT} from "../rateChartGeometry";
+import {RATE_BOTTOM_GAP, RATE_HEIGHT, RATE_TOP_GAP} from "../rateChartGeometry";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
 import {dotoRowHeight} from "@/library/dotoMetrics";
 
@@ -165,7 +165,7 @@ describe("the frame", () => {
         expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
     });
 
-    it("budgets the rate chart's drawn height and bottom gap separately", () => {
+    it("budgets the rate chart's top gap, drawn height and bottom gap separately", () => {
         const withoutRate = storySummaryBudget({
             width: 600,
             stages: 0,
@@ -182,9 +182,10 @@ describe("the frame", () => {
         });
 
         expect(withRate.rateHeight).toBe(RATE_HEIGHT);
-        expect(withRate.rateBottomGap).toBe(12);
+        expect(withRate.rateTopGap).toBe(RATE_TOP_GAP);
+        expect(withRate.rateBottomGap).toBe(RATE_BOTTOM_GAP);
         expect(withRate.requiredHeight - withoutRate.requiredHeight)
-            .toBe(RATE_HEIGHT + 12);
+            .toBe(RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP);
     });
 
     it("budgets one smaller figure row instead of the removed caption lines", () => {

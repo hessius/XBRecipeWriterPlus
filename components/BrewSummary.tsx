@@ -19,7 +19,8 @@ import type {FlowPoint} from "@/library/brew/flowRate";
 import {
     hasDrawableRateRun,
     RATE_BOTTOM_GAP,
-    RATE_HEIGHT
+    RATE_HEIGHT,
+    RATE_TOP_GAP
 } from "@/library/brew/rateChartGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
@@ -107,6 +108,7 @@ type Props = {
     availableHeight?: number;
     traceHeight?: number;
     rateHeight?: number;
+    rateTopGap?: number;
     rateBottomGap?: number;
     capturePadding?: number;
     ladderTopGap?: number;
@@ -138,7 +140,8 @@ export default function BrewSummary({
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
     drawdown = null, rateSeries, drawdownRate = null, delay = null, grind = null,
     availableHeight = 0,
-    traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT, rateBottomGap = RATE_BOTTOM_GAP,
+    traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT, rateTopGap = RATE_TOP_GAP,
+    rateBottomGap = RATE_BOTTOM_GAP,
     capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
     storyBands, showRateChart = true, showStages = true,
     testID = "brew-capture"
@@ -208,7 +211,8 @@ export default function BrewSummary({
             )}
 
             {drawsRateChart && (
-                <View testID="rate-chart-slot" style={{marginBottom: rateBottomGap}}>
+                <View testID="rate-chart-slot"
+                      style={{marginTop: rateTopGap, marginBottom: rateBottomGap}}>
                 <BrewRateChart
                     series={rates}
                     accent={accent}

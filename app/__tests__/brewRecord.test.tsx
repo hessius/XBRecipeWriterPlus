@@ -1335,6 +1335,7 @@ describe("brew record's story card", () => {
             testID: "story-capture",
             traceHeight: expect.any(Number),
             rateHeight: expect.any(Number),
+            rateTopGap: expect.any(Number),
             rateBottomGap: expect.any(Number),
             capturePadding: expect.any(Number),
             ladderTopGap: expect.any(Number),
