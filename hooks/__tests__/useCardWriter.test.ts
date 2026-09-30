@@ -7,7 +7,7 @@ import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import type NFC from "@/library/NFC";
 import {CardCapacityError, CardWriteError} from "@/library/cardWriteErrors";
-import {CARD_WRITE_FAILED} from "@/constants/copy";
+import {CARD_WRITE_FAILED, HOLD_CARD} from "@/constants/copy";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
 
@@ -26,13 +26,18 @@ jest.mock("@/library/NFC", () => ({
         cancel:       jest.fn(),
         readCard:     jest.fn()
     })),
-    setNfcAlertIOS: jest.fn()
+    setNfcAlertIOS: jest.fn(),
+    // Ready unless a test says otherwise. Most of them are about what happens
+    // after the ceremony opens, and a probe that answered nothing would stop
+    // every one of them before it started.
+    checkNfcAvailability: jest.fn().mockResolvedValue("ready"),
+    openNfcSettings: jest.fn()
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {notify} = require("@/components/XbrwToast");
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const {setNfcAlertIOS} = require("@/library/NFC");
+const {setNfcAlertIOS, checkNfcAvailability} = require("@/library/NFC");
 
 function invalidRecipe(): Recipe {
     const r = new Recipe();
@@ -57,6 +62,7 @@ describe("useCardWriter", () => {
     beforeEach(() => {
         (notify as jest.Mock).mockClear();
         (setNfcAlertIOS as jest.Mock).mockClear();
+        (checkNfcAvailability as jest.Mock).mockClear().mockResolvedValue("ready");
     });
 
     it("does not use a native Alert for the volume mismatch", async () => {
@@ -241,9 +247,12 @@ describe("useCardWriter", () => {
 
         await act(async () => result.current.writeCard(valid));
 
-        expect(setNfcAlertIOS).toHaveBeenCalledWith(
-            expect.stringMatching(/hold the card to the top of the phone/i)
-        );
+        // Asserted against the constant rather than a literal: the line is
+        // chosen per platform at module load, so an Android bundle's copy is
+        // the Android one even when a test moves `Platform.OS` afterwards.
+        // Spelling the iPhone sentence out here made this suite fail on the
+        // Android project for a reason that has nothing to do with the sheet.
+        expect(setNfcAlertIOS).toHaveBeenCalledWith(HOLD_CARD);
         expect(setNfcAlertIOS).not.toHaveBeenCalledWith(expect.stringContaining("%"));
         Platform.OS = "android";
     });
@@ -264,6 +273,104 @@ describe("the transport it writes through", () => {
         await rerender(undefined);
 
         expect(NFC).toHaveBeenCalledTimes(1);
+        expect(result.current.showNfcOverlay).toBe(false);
+    });
+});
+
+/**
+ * A phone with no usable radio.
+ *
+ * Neither state reaches an iPhone, and the hook does not ask which platform it
+ * is on: it asks the phone, and iOS answers "ready" whenever it has NFC. The
+ * thing worth pinning is that a write which cannot happen never opens a
+ * transport, because a ceremony that opens onto a bloom that will never move
+ * is worse than being told why.
+ */
+describe("useCardWriter when the phone cannot read a card", () => {
+    beforeEach(() => {
+        (notify as jest.Mock).mockClear();
+        (checkNfcAvailability as jest.Mock).mockClear().mockResolvedValue("ready");
+    });
+
+    it("reports nothing to report when the radio is ready", async () => {
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        await act(async () => {
+            await result.current.writeCard(validRecipe());
+        });
+
+        expect(result.current.nfcUnavailable).toBeNull();
+    });
+
+    it("says why rather than opening a ceremony that cannot run", async () => {
+        (checkNfcAvailability as jest.Mock).mockResolvedValue("disabled");
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        await act(async () => {
+            await result.current.writeCard(validRecipe());
+        });
+
+        expect(result.current.nfcUnavailable).toBe("disabled");
+        expect(result.current.showNfcOverlay).toBe(true);
+    });
+
+    it("distinguishes a phone with no radio from one with the switch off", async () => {
+        (checkNfcAvailability as jest.Mock).mockResolvedValue("unsupported");
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        await act(async () => {
+            await result.current.writeCard(validRecipe());
+        });
+
+        expect(result.current.nfcUnavailable).toBe("unsupported");
+    });
+
+    it("asks again every time, because the switch can be flipped meanwhile", async () => {
+        // The reading belongs to the moment the user asked for a card, not to
+        // mount: Android's NFC toggle can be changed while the app is in the
+        // background, and a cached answer would be about a different moment.
+        (checkNfcAvailability as jest.Mock).mockResolvedValue("disabled");
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        await act(async () => {
+            await result.current.writeCard(validRecipe());
+        });
+        (checkNfcAvailability as jest.Mock).mockResolvedValue("ready");
+        await act(async () => {
+            await result.current.writeCard(validRecipe());
+        });
+
+        expect(checkNfcAvailability).toHaveBeenCalledTimes(2);
+        expect(result.current.nfcUnavailable).toBeNull();
+    });
+
+    it("does not ask before it has decided the recipe is writable at all", async () => {
+        // The volume mismatch is about the recipe and has nothing to do with
+        // the phone. Asking first would put a hardware answer in front of a
+        // recipe problem the user can actually fix.
+        const onVolumeError = jest.fn();
+        const {result} = await renderHook(() => useCardWriter(onVolumeError));
+
+        await act(async () => {
+            await result.current.writeCard(invalidRecipe());
+        });
+
+        expect(checkNfcAvailability).not.toHaveBeenCalled();
+        expect(onVolumeError).toHaveBeenCalled();
+    });
+
+    it("clears the reason when the overlay is dismissed", async () => {
+        (checkNfcAvailability as jest.Mock).mockResolvedValue("unsupported");
+        const {result} = await renderHook(() => useCardWriter(jest.fn()));
+
+        await act(async () => {
+            await result.current.writeCard(validRecipe());
+        });
+        await act(async () => {
+            await result.current.onNFCDialogClose();
+        });
+
+        expect(result.current.nfcUnavailable).toBeNull();
         expect(result.current.showNfcOverlay).toBe(false);
     });
 });

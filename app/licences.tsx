@@ -8,6 +8,7 @@ import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 import {LICENCES, LICENCE_TEXTS, type Licence} from "@/constants/licences";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
+import {UNCLIPPED_LIST} from "@/constants/lists";
 
 /**
  * The full third-party licence list, on its own route.
@@ -48,7 +49,7 @@ export default function LicencesScreen({
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
                 <ScreenHeader title="Licences" onBack={() => router.back()}/>
-                <FlatList data={entries}
+                <FlatList {...UNCLIPPED_LIST} data={entries}
                           keyExtractor={(entry) => entry.name}
                           renderItem={({item}: ListRenderItemInfo<Licence>) => (
                               <LicenceRow entry={item}

@@ -1,4 +1,5 @@
 import * as SQLite from 'expo-sqlite';
+import {appDatabase} from '@/library/appDatabase';
 import type {SortAxis, SortDirection} from './librarySort';
 import type {LibraryView} from './libraryView';
 import type {MachineModel} from './machine/machineModel';
@@ -403,7 +404,7 @@ export class SqliteSettingsStorage implements SettingsStorage {
     private db: SQLite.SQLiteDatabase;
 
     constructor() {
-        this.db = SQLite.openDatabaseSync('xbrecipewriter.db');
+        this.db = appDatabase();
         this.db.execSync(`
             CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY NOT NULL, value TEXT);`
         );

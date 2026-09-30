@@ -82,6 +82,7 @@
       "expo-share-intent",
       "expo-font",
       "expo-sqlite",
+      "./plugins/withOptionalRadios",
       "./plugins/withUserScriptSandboxDisabled",
       "./plugins/withExplicitModulesDisabled",
       "./plugins/withInhibitPodWarnings",

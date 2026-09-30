@@ -837,7 +837,8 @@ export default function EditRecipe(
         onSaved:    () => navigation.goBack()
     });
 
-    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress} = useCardWriter(setVolumeError);
+    const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress, nfcUnavailable} =
+        useCardWriter(setVolumeError);
     const {state: shareState, share: shareRecipe} = useShareRecipe();
 
     useEffect(() => {
@@ -1331,8 +1332,8 @@ export default function EditRecipe(
                                   heldExit.current = null;
                               }}/>
 
-            <NfcOverlay visible={showNfcOverlay} mode="write"
-                        progress={writeProgress} onCancel={onNFCDialogClose}/>
+            <NfcOverlay visible={showNfcOverlay} mode="write" progress={writeProgress}
+                        unavailable={nfcUnavailable} onCancel={onNFCDialogClose}/>
 
         </>
     );

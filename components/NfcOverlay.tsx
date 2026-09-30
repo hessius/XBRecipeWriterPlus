@@ -6,7 +6,8 @@ import {Text, YStack} from "tamagui";
 import DotBloom from "@/components/DotBloom";
 import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
-import {HOLD_CARD} from "@/constants/copy";
+import {HOLD_CARD, NFC_DISABLED, NFC_UNSUPPORTED} from "@/constants/copy";
+import {openNfcSettings, type NfcAvailability} from "@/library/NFC";
 import {DURATION, useReducedMotion} from "@/constants/motion";
 
 /**
@@ -27,6 +28,15 @@ type Props = {
     /** 0–100. */
     progress: number;
     onCancel: () => void;
+    /**
+     * Why there is no ceremony to run, when there is not one.
+     *
+     * Null is the ordinary case and the only one iOS ever sees. The other two
+     * replace the bloom with an explanation: the user asked for a card and
+     * something has to answer, and an overlay that opened onto a spinner which
+     * never moved would be worse than saying so.
+     */
+    unavailable?: Exclude<NfcAvailability, "ready"> | null;
 };
 
 /**
@@ -45,14 +55,16 @@ type Props = {
  * Replaces `AndroidNFCDialog`, which was Android-only and spoke in a different
  * visual language from everything around it.
  */
-export default function NfcOverlay({visible, mode, progress, onCancel}: Props) {
+export default function NfcOverlay({visible, mode, progress, onCancel, unavailable = null}: Props) {
     const reduced = useReducedMotion();
 
     if (!visible) {
         return null;
     }
 
-    const isIOS = Platform.OS === "ios";
+    // With nothing to scan there is no system sheet to stage above, so the
+    // iOS composition does not apply even on iOS.
+    const isIOS = Platform.OS === "ios" && !unavailable;
     const stageHeight = isIOS
         ? Dimensions.get("window").height * (1 - IOS_SYSTEM_SHEET_FRACTION)
         : undefined;
@@ -98,26 +110,69 @@ export default function NfcOverlay({visible, mode, progress, onCancel}: Props) {
                     paddingTop:     isIOS ? 64 : 0
                 }}>
                 <YStack alignItems="center" gap="$5" paddingHorizontal="$6">
-                    <DotBloom progress={progress / 100} size={BLOOM_SIZE}/>
-
-                    <YStack alignItems="center" gap="$2">
-                        <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
-                                       color={palette.text}>
-                            {counts
-                                ? `${verb.toUpperCase()} ${Math.round(progress)}%`
-                                : verb.toUpperCase()}
-                        </DotMatrixText>
-                        {!isIOS && (
+                    {unavailable ? (
+                        <YStack alignItems="center" gap="$2">
+                            <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
+                                           color={palette.text}>
+                                {unavailable === "disabled" ? "NFC IS OFF" : "NO NFC"}
+                            </DotMatrixText>
                             <Text fontSize={14} textAlign="center" color={palette.dim}>
-                                {HOLD_CARD}
+                                {unavailable === "disabled" ? NFC_DISABLED : NFC_UNSUPPORTED}
                             </Text>
-                        )}
-                    </YStack>
+                        </YStack>
+                    ) : (
+                        <>
+                            <DotBloom progress={progress / 100} size={BLOOM_SIZE}/>
 
-                    {!isIOS && (
+                            <YStack alignItems="center" gap="$2">
+                                <DotMatrixText fontSize={14} weight="bold" letterSpacing={1.6}
+                                               color={palette.text}>
+                                    {counts
+                                        ? `${verb.toUpperCase()} ${Math.round(progress)}%`
+                                        : verb.toUpperCase()}
+                                </DotMatrixText>
+                                {!isIOS && (
+                                    <Text fontSize={14} textAlign="center" color={palette.dim}>
+                                        {HOLD_CARD}
+                                    </Text>
+                                )}
+                            </YStack>
+                        </>
+                    )}
+
+                    {/* A switch the user can go and flip. Offered for that one
+                        case only: there is no setting behind a phone that has
+                        no controller, and a button that opens a screen with
+                        nothing on it reads as a broken promise. */}
+                    {unavailable === "disabled" && (
                         <Pressable
                             accessibilityRole="button"
-                            accessibilityLabel="Cancel"
+                            accessibilityLabel="Open NFC settings"
+                            onPress={() => {
+                                void openNfcSettings();
+                            }}
+                            style={{
+                                minHeight:         44,
+                                minWidth:          44,
+                                justifyContent:    "center",
+                                alignItems:        "center",
+                                paddingVertical:   12,
+                                paddingHorizontal: 24
+                            }}>
+                            <Text fontSize={16} color={palette.text}>
+                                Open NFC settings
+                            </Text>
+                        </Pressable>
+                    )}
+
+                    {/* The way out. Always there when the overlay is the whole
+                        screen, and there on iOS too when there is no ceremony
+                        underneath it: Apple's sheet carries Cancel, but an
+                        unavailable overlay has no sheet under it to carry one. */}
+                    {(!isIOS || unavailable) && (
+                        <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={unavailable ? "Close" : "Cancel"}
                             onPress={onCancel}
                             style={{
                                 minHeight:         44,
@@ -128,7 +183,7 @@ export default function NfcOverlay({visible, mode, progress, onCancel}: Props) {
                                 paddingHorizontal: 24
                             }}>
                             <Text fontSize={16} color={palette.dim}>
-                                Cancel
+                                {unavailable ? "Close" : "Cancel"}
                             </Text>
                         </Pressable>
                     )}

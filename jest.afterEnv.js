@@ -29,3 +29,17 @@ beforeEach(() => {
 beforeEach(() => {
     jest.requireActual("./hooks/steadyRouter").forgetLastMove();
 });
+
+/**
+ * Forget the app's one database handle between tests.
+ *
+ * `library/appDatabase` opens SQLite once and hands the same handle to
+ * `RecipeDatabase`, `BrewDatabase` and `Settings`, because on Android a second
+ * open is what closes the first (the comment there has the mechanism). Every
+ * suite that exercises the schema mocks `openDatabaseSync` to return a fresh
+ * in-memory database per call, so without this the first test in a file would
+ * hand its rows to all the rest.
+ */
+beforeEach(() => {
+    jest.requireActual("./library/appDatabase").forgetAppDatabase();
+});

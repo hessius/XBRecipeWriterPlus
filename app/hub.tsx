@@ -22,6 +22,7 @@ import {loadHubCriteria, roastLabel} from "@/library/hub/hubCriteria";
 import {HUB_SORTS, type HubFacet, type HubSort} from "@/library/hub/hubQuery";
 import type {HubCriteria} from "@/library/hub/hubApi";
 import type {HubRecipe} from "@/library/hub/hubRow";
+import {UNCLIPPED_LIST} from "@/constants/lists";
 
 const FACETS: readonly HubFacet[] = ["origins", "processes", "varietals", "flavours"];
 
@@ -445,7 +446,7 @@ export default function HubScreen() {
         );
     } else {
         body = (
-            <FlatList
+            <FlatList {...UNCLIPPED_LIST}
                 testID="hub-list"
                 data={rows}
                 keyExtractor={(row) => String(row.id)}

@@ -11,7 +11,7 @@ import BrewRecord from "@/app/brewRecord";
 import type {RecipeLookup} from "@/app/brewRecord";
 import {sharedSettings} from "@/hooks/useSetting";
 import {palette} from "@/constants/colors";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, SHEET_PRESS_TIMEOUT} from "@/test-utils/render";
 import {
     brewRecordFixture as record,
     makeBrewRecordFixture,
@@ -157,10 +157,16 @@ async function pressOnSheet(
     target: () => Parameters<typeof fireEvent.press>[0],
     landed?: () => boolean
 ): Promise<void> {
-    await waitFor(async () => {
-        await fireEvent.press(target());
-        if (landed !== undefined) expect(landed()).toBe(true);
-    });
+    // waitFor's own budget, not jest's. The default second is enough on a
+    // developer's machine and is not enough on a shared CI runner, where the
+    // sheet's entrance animation and a dozen sibling workers share four cores.
+    await waitFor(
+        async () => {
+            await fireEvent.press(target());
+            if (landed !== undefined) expect(landed()).toBe(true);
+        },
+        {timeout: SHEET_PRESS_TIMEOUT}
+    );
 }
 
 function decodeHandoffUrl(url: string): HandoffEnvelope {

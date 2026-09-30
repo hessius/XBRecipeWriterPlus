@@ -31,6 +31,58 @@ export type NfcSystemInfo = {
 };
 
 /**
+ * Whether this phone can read a card at all, and if not, why not.
+ *
+ * Three outcomes rather than a boolean, because two of them want different
+ * things said. "disabled" is a switch the user can go and turn on; on iOS it
+ * is unreachable, since a supported iPhone's NFC has no off switch and telling
+ * an iPhone user to turn one on would send them looking for a control that
+ * does not exist. "unsupported" is a phone with no controller, where the only
+ * useful thing to say is that the rest of the app still works.
+ */
+export type NfcAvailability = "ready" | "disabled" | "unsupported";
+
+/**
+ * Ask the phone whether a card ceremony is worth starting.
+ *
+ * Called from the handler that opens the ceremony rather than at mount: this
+ * is a reading about the moment the user asked for a card, and the NFC switch
+ * can be flipped while the app is in the background.
+ *
+ * A probe that throws answers "unsupported". Anything that cannot say whether
+ * it has a radio is not a radio we should hand a genuine card to, and throwing
+ * out of the handler would take a screen down over a question.
+ */
+export async function checkNfcAvailability(): Promise<NfcAvailability> {
+    try {
+        if (!(await NfcManager.isSupported())) {
+            return "unsupported";
+        }
+        // Not consulted on iOS. Core NFC has no equivalent switch, so whatever
+        // the library answers there cannot be acted on.
+        if (Platform.OS !== "ios" && !(await NfcManager.isEnabled())) {
+            return "disabled";
+        }
+        return "ready";
+    } catch {
+        return "unsupported";
+    }
+}
+
+/**
+ * Send the user to the system NFC switch. Android only; there is nothing to
+ * open on iOS, which is why `checkNfcAvailability` never returns "disabled"
+ * there.
+ */
+export async function openNfcSettings(): Promise<void> {
+    try {
+        await NfcManager.goToNfcSetting();
+    } catch (e) {
+        console.log("Could not open the NFC setting: " + e);
+    }
+}
+
+/**
  * The 32 bytes xBloom derives from the card's serial and writes ahead of the
  * recipe. Re-exported from `cardWriteErrors`, where it now lives so consumers
  * can reason about capacity without importing a runtime value from `NFC`.
@@ -230,29 +282,49 @@ class NFC {
                 console.log("BlockNumber:" + blockNumber);
                 console.log("BlockCount:" + blockCount);
 
-                const resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x23, ...uid, blockNumber, blockCount - 1]);
-
-                if (resp && resp.length && resp.length > 0 && resp[0] === 0) {
-                    resp.splice(0, 1);
-                    console.log(Recipe.convertNumberArrayToHex(resp));
-                    return resp;
-                } else {
-                    console.log("Fallback: card doesn't support 0x23 (READ MULTIPLE BLOCKS), using 0x20 (READ SINGLE BLOCK) in a loop...");
-                    // ---------- fallback: READ SINGLE BLOCK (0x20) in a loop ----------
-                    const data: number[] = [];
-                    for (let i = 0; i < blockCount; i++) {
-                        const bn = blockNumber + i;
-                        const singleCmd = [flags, 0x20, ...uid, bn];   // 0x20 = Read Single Block
-                        const resp: number[] = await NfcManager.nfcVHandler.transceive(singleCmd);
-
-                        if (!resp?.length || resp[0] !== 0x00) {
-                            throw new Error(`Read failed at block ${bn} (status 0x${resp?.[0]?.toString(16) ?? '??'})`);
+                const readMultiple = async (): Promise<number[] | null> => {
+                    try {
+                        const resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x23, ...uid, blockNumber, blockCount - 1]);
+                        if (resp && resp.length && resp.length > 0 && resp[0] === 0) {
+                            resp.splice(0, 1);
+                            console.log(Recipe.convertNumberArrayToHex(resp));
+                            return resp;
                         }
-                        data.push(...resp.slice(1));  // append block payload
+                        // The tag answered and said no.
+                        return null;
+                    } catch (e) {
+                        // And this is the tag never getting to answer. Android
+                        // hands a raw frame to the controller, and a controller
+                        // whose buffer is smaller than the reply rejects rather
+                        // than returning a status byte -- `getMaxTransceiveLength`
+                        // is as low as 253 on some, and a 40-block card asks for
+                        // 161. Both are the same thing from here: this card will
+                        // not be read in one go, so read it a block at a time.
+                        console.log("0x23 (READ MULTIPLE BLOCKS) was refused outright: " + e);
+                        return null;
                     }
-                    console.log(Recipe.convertNumberArrayToHex(data));
-                    return data;
+                };
+
+                const all = await readMultiple();
+                if (all) {
+                    return all;
                 }
+
+                console.log("Fallback: card doesn't support 0x23 (READ MULTIPLE BLOCKS), using 0x20 (READ SINGLE BLOCK) in a loop...");
+                // ---------- fallback: READ SINGLE BLOCK (0x20) in a loop ----------
+                const data: number[] = [];
+                for (let i = 0; i < blockCount; i++) {
+                    const bn = blockNumber + i;
+                    const singleCmd = [flags, 0x20, ...uid, bn];   // 0x20 = Read Single Block
+                    const resp: number[] = await NfcManager.nfcVHandler.transceive(singleCmd);
+
+                    if (!resp?.length || resp[0] !== 0x00) {
+                        throw new Error(`Read failed at block ${bn} (status 0x${resp?.[0]?.toString(16) ?? '??'})`);
+                    }
+                    data.push(...resp.slice(1));  // append block payload
+                }
+                console.log(Recipe.convertNumberArrayToHex(data));
+                return data;
             }
         }
         return null;

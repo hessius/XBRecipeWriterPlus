@@ -19,6 +19,7 @@ import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {useSetting} from "@/hooks/useSetting";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
+import {UNCLIPPED_LIST} from "@/constants/lists";
 
 /** How long one push to the record screen refuses a second (same latch as index.tsx). */
 const PUSH_GUARD_MS = 2000;
@@ -491,7 +492,7 @@ export default function BrewHistory() {
                     onDelete={() => setConfirmingBatchDelete(true)}
                     onCancel={handleSelectCancel}
                 />
-                <FlatList
+                <FlatList {...UNCLIPPED_LIST}
                     data={filtered}
                     keyExtractor={(item) => item.id}
                     renderItem={({item}) => (
