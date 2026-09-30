@@ -172,7 +172,9 @@ describe("BrewHistoryRow", () => {
             <BrewHistoryRow brew={brew({drawdownAt: 0})} onPress={jest.fn()} />
         );
 
-        expect(screen.queryByText(/G\/S/)).toBeNull();
+        expect(screen.queryByText(/g\/s/i)).toBeNull();
+        expect(screen.getByRole("button").props.accessibilityLabel)
+            .not.toMatch(/grams per second/);
     });
 
     it("puts the drawdown rate in the row's spoken label", async () => {
