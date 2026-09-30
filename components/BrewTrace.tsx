@@ -9,7 +9,7 @@ import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendI
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {livePoints, pathLength, planPoints, stageSpans, toPath,
-        traceTimeParts,
+        traceAxisFor, traceTimeParts,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
@@ -37,9 +37,13 @@ type Props = {
      *
      * Must be at least this lane's own extent in both dimensions. A smaller
      * axis clips at the viewport rather than rescaling, so the lane would lose
-     * its tail with nothing on screen to say it had. And it is for `compact`
-     * lanes: the temperature band is not part of the axis, so two full-size
-     * lanes would still put the same temperature at different heights.
+     * its tail with nothing on screen to say it had. Both callers build it
+     * with `traceAxisFor`, the same derivation this lane falls back to, so
+     * neither can hand down an axis smaller than the lane it wraps.
+     *
+     * Sharing an axis only makes two lanes comparable when both are `compact`:
+     * the temperature band is not part of the axis, so two full size lanes
+     * would still put the same temperature at different heights.
      */
     axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */
@@ -212,6 +216,7 @@ export default function BrewTrace({
     // The plan's final water level: where the target line ends, and the floor
     // the bypass box is stacked on.
     const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
+    const selfAxis = traceAxisFor(pours, samples, plannedSeconds, bypass);
     // In compact mode the SVG fills the full height; otherwise the legend row
     // and the overrun row take theirs first.
     const svgHeight = compact
@@ -220,12 +225,8 @@ export default function BrewTrace({
     const box: Box = {
         width,
         height: svgHeight,
-        maxT: axis?.maxT ?? times.maxT,
-        maxV: axis?.maxV ?? Math.max(
-            planTop,
-            water.length > 0 ? water[water.length - 1].v : 0,
-            planTop + bypassMl
-        )
+        maxT: axis?.maxT ?? selfAxis.maxT,
+        maxV: axis?.maxV ?? selfAxis.maxV
     };
 
     const planPath = toPath(plan, box);

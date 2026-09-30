@@ -160,6 +160,41 @@ export function traceTimeExtent(
 }
 
 /**
+ * The whole extent a volume trace is sized to: its real seconds across, and
+ * the highest volume anything drawn in it reaches.
+ *
+ * `BrewTrace` sizes itself with this, and `BrewSummary` hands the same value
+ * down so the rate chart underneath shares the horizontal extent. Both read it
+ * from here rather than each spelling the rule out. Derived separately the two
+ * agreed only while the summary passed no plan of its own, and a plan line
+ * added to it later would have silently cost the volume trace its tail: a
+ * short axis clips at the viewport instead of rescaling, with nothing on
+ * screen to say anything is missing.
+ */
+export function traceAxisFor(
+    pours: Pour[],
+    samples: BrewSample[],
+    plannedSeconds: number,
+    bypass?: {volume: number; startedAt: number | null}
+): {maxT: number; maxV: number} {
+    const times = traceTimeParts(plannedSeconds, samples, bypass);
+    const plan = planPoints(pours);
+    // The plan's final water level: the floor the bypass box is stacked on.
+    const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
+    const water = livePoints(samples, "water");
+    return {
+        maxT: times.maxT,
+        maxV: Math.max(
+            water.length > 0 ? water[water.length - 1].v : 0,
+            // The bypass box is stacked on the plan's final level rather than
+            // drawn beside it. `bypassMl` is clamped non-negative upstream, so
+            // this covers a plan with no bypass at all.
+            planTop + times.bypassMl
+        )
+    };
+}
+
+/**
  * The rectangle a set of points is drawn into, and the range it spans.
  *
  * `toPath` does not clamp: a point beyond `maxT` or `maxV` maps outside the

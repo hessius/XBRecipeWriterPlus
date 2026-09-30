@@ -1,5 +1,8 @@
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {bypassSeconds, traceTimeExtent, traceTimeParts} from "@/library/brew/brewShape";
+import {
+    bypassSeconds, traceAxisFor, traceTimeExtent, traceTimeParts
+} from "@/library/brew/brewShape";
+import Pour from "@/library/Pour";
 
 /*
  * The horizontal extent the volume trace and the rate chart share. The two
@@ -10,6 +13,14 @@ import {bypassSeconds, traceTimeExtent, traceTimeParts} from "@/library/brew/bre
 
 function sample(at: number, water: number, cup: number, pour = 1): BrewSample {
     return {at, water, cup, pour};
+}
+
+/** A pour of `volume` ml at 10 (= 1 ml/s), so its length reads as its volume. */
+function pour(volume: number): Pour {
+    const p = new Pour(1);
+    p.volume = volume;
+    p.flowRate = 10;
+    return p;
 }
 
 describe("traceTimeExtent", () => {
@@ -58,5 +69,48 @@ describe("traceTimeExtent", () => {
         expect(parts.bypassMl).toBe(30);
         expect(parts.bypassFrom).toBe(90);
         expect(parts.maxT).toBeCloseTo(90 + bypassSeconds(30), 6);
+    });
+});
+
+/*
+ * The whole box, which the trace sizes itself to and the summary hands down so
+ * the rate chart under it agrees. Derived in two places these once differed by
+ * the plan's own height, which was invisible only because the one caller that
+ * built its own passed no plan.
+ */
+describe("traceAxisFor", () => {
+    const pours = [pour(200), pour(100)];
+
+    it("clears a plan that reaches higher than the run did", () => {
+        const axis = traceAxisFor(pours, [sample(30_000, 90, 60)], 120);
+
+        expect(axis.maxV).toBe(300);
+    });
+
+    it("clears a run that overshot its plan", () => {
+        const axis = traceAxisFor(pours, [sample(30_000, 340, 300)], 120);
+
+        expect(axis.maxV).toBe(340);
+    });
+
+    it("stacks the bypass on top of the plan rather than beside it", () => {
+        const axis = traceAxisFor(pours, [sample(30_000, 300, 260)], 120,
+                                  {volume: 50, startedAt: 130});
+
+        expect(axis.maxV).toBe(350);
+    });
+
+    it("falls back to nothing when there is neither plan nor run", () => {
+        const axis = traceAxisFor([], [], 120);
+
+        expect(axis.maxV).toBe(0);
+        expect(axis.maxT).toBe(120);
+    });
+
+    it("carries the same seconds the trace and the rate chart share", () => {
+        const samples = [sample(90_000, 180, 140)];
+
+        expect(traceAxisFor([], samples, 60, {volume: 30, startedAt: null}).maxT)
+            .toBeCloseTo(90 + bypassSeconds(30), 6);
     });
 });

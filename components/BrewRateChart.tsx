@@ -101,7 +101,7 @@ export default function BrewRateChart({
                 >
                     FLOW RATE
                 </SvgText>
-                <G testID="rate-chart-plot" transform={`translate(0 ${plotTop})`}>
+                <G testID="rate-chart-plot" y={plotTop}>
                     {waterPath !== "" && (
                         <Path
                             testID="rate-chart-water"
