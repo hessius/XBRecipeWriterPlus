@@ -619,27 +619,27 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 
 | ID | Source | Context — when the user sees this | Current text |
 |----|--------|-----------------------------------|--------------|
-| `brew.figures.water` | `components/BrewFigures.tsx:43` | Doto figure label. | `WATER` |
-| `brew.figures.cup` | `components/BrewFigures.tsx:44` | Doto figure label. | `CUP` |
-| `brew.figures.time` | `components/BrewFigures.tsx:45` | Doto figure label. | `TIME` |
-| `brew.figures.flow` | `components/BrewFigures.tsx:149` | Doto flow row label, visible only when a cup rate can be said. | `FLOW` |
-| `brew.figures.flow.rate` | `components/BrewFigures.tsx:160` | Doto primary figure on the flow row. `${...}` is the cup rate in g/s to one decimal place. The design mockup used lowercase `g/s`, but the app renders Doto units uppercase by rule. | `${flow} G/S` |
-| `brew.figures.pour` | `components/BrewFigures.tsx:161` | Smaller second figure on the flow row. `${...}` is ml/s to one decimal place. | `POUR ${pourRate.toFixed(1)}` |
-| `brew.figures.flow.a11y` | `components/BrewFigures.tsx:134` (a11y) | (a11y) The grouped flow row's spoken label. Grouping the row replaces its children's spoken text, so both rates and both units have to be in the label. Not a live region: on the brew screen the figures change continuously, and the user's focus should not be interrupted. | `Flow, 2.4 grams per second, pouring 3.1 millilitres per second` |
-| `brew.figures.drawdown` | `components/BrewFigures.tsx:128` | Doto drawdown line. The rate term is present only when a finished record can say it. `${...}` are the drawdown clock and g/s to one decimal place. | `DRAWDOWN ${clock(drawdown)} · ${rate} G/S` |
-| `brew.trace.a11y` | `components/BrewTrace.tsx:111,152` (a11y) | (a11y) The brew trace graph. | `Brew trace` |
-| `brew.rateChart.a11y` | `components/BrewRateChart.tsx:96` (a11y) | (a11y) The retained stream's flow rate chart on a finished brew record, shared image and compare screen. On the compare screen this child label sits inside the lane's own grouped label. | `Brew rate chart` |
-| `brew.rateChart.label` | `components/BrewRateChart.tsx:105` | Doto label above the retained stream's rate chart. Names what the second chart measures without pretending the unlabelled y axis is calibrated for reading exact values. | `FLOW RATE` |
+| `brew.figures.water` | `components/BrewFigures.tsx:166` | Doto figure label. | `WATER` |
+| `brew.figures.cup` | `components/BrewFigures.tsx:168` | Doto figure label. | `CUP` |
+| `brew.figures.time` | `components/BrewFigures.tsx:169` | Doto figure label. | `TIME` |
+| `brew.figures.flow` | `components/BrewFigures.tsx:182` | Doto flow row label, visible only when a cup rate can be said. | `FLOW` |
+| `brew.figures.flow.rate` | `components/BrewFigures.tsx:191` | Doto primary figure on the flow row. `${...}` is the cup rate in g/s to one decimal place. The design mockup used lowercase `g/s`, but the app renders Doto units uppercase by rule. | `${flow} G/S` |
+| `brew.figures.pour` | `components/BrewFigures.tsx:197` | Smaller second figure on the flow row. `${...}` is ml/s to one decimal place. | `POUR ${pourRate.toFixed(1)}` |
+| `brew.figures.flow.a11y` | `components/BrewFigures.tsx:178` (a11y) | (a11y) The grouped flow row's spoken label. Grouping the row replaces its children's spoken text, so both rates and both units have to be in the label. Not a live region: on the brew screen the figures change continuously, and the user's focus should not be interrupted. | `Flow, 2.4 grams per second, pouring 3.1 millilitres per second` |
+| `brew.figures.drawdown` | `components/BrewFigures.tsx:159` | Doto drawdown line. The rate term is present only when a finished record can say it. `${...}` are the drawdown clock and g/s to one decimal place. | `DRAWDOWN ${clock(drawdown)} · ${rate} G/S` |
+| `brew.trace.a11y` | `components/BrewTrace.tsx:181,182` (a11y) | (a11y) The brew trace graph. | `Brew trace` |
+| `brew.rateChart.a11y` | `components/BrewRateChart.tsx:93` (a11y) | (a11y) The retained stream's flow rate chart on a finished brew record, shared image and compare screen. On the compare screen this child label sits inside the lane's own grouped label. | `Brew rate chart` |
+| `brew.rateChart.label` | `components/BrewRateChart.tsx:102` | Doto label above the retained stream's rate chart. Names what the second chart measures without pretending the unlabelled y axis is calibrated for reading exact values. | `FLOW RATE` |
 | `brew.compare.traceLane.a11y` | `app/brewCompare.tsx:204,401,439` (a11y) | (a11y) The separate comparison lane's grouped spoken label. When the all-or-nothing rate lanes draw, the label says the grouped lane includes flow rate because the lane is one accessibility element. `${...}` is the brew date and time. | `This brew trace with flow rate, ${formatBrewDate(startedAt)} ${formatBrewTime(startedAt)}` / `That brew trace with flow rate, ${formatBrewDate(startedAt)} ${formatBrewTime(startedAt)}` |
 | `brew.story.sheet.title` | `components/BrewStorySheet.tsx:56` | Sheet title while previewing the fixed 9:16 story card before sharing. | `STORY CARD` |
 | `brew.story.share` | `components/BrewStorySheet.tsx:74` | Button to share the story card PNG. | `Share the card` |
 | `brew.story.when` | `components/BrewStoryCard.tsx:91` (`when`, passed from `app/brewRecord.tsx:518`) | Doto date and time row on the fixed 9:16 story card. | `${formatBrewDate(startedAt)} · ${formatBrewTime(startedAt)}` |
 | `brew.story.coffee` | `components/BrewStoryCard.tsx:105` (`coffee`, passed from `app/brewRecord.tsx:521`) | Optional Doto coffee line on the story card. Hidden when the story budget needs the space or the brew has no coffee metadata. | `${storyCoffeeLine(record)}` |
 | `brew.story.tags.more` | `components/BrewStoryCard.tsx:143` | Optional Doto overflow count on the story card when more tags exist than the budget can show. Hidden when the story budget drops tags. | `+${extra}` |
-| `brew.trace.legend.water` | `components/BrewTrace.tsx:218` | Doto legend item. | `WATER` |
-| `brew.trace.legend.cup` | `components/BrewTrace.tsx:219` | Doto legend item. | `CUP` |
-| `brew.trace.legend.plan` | `components/BrewTrace.tsx:221` | Doto legend item. | `PLAN` |
-| `brew.trace.overrun` | `components/BrewTrace.tsx:228` | Doto overrun label. `${overrun}` is seconds over plan. | `+${overrun} S` |
+| `brew.trace.legend.water` | `components/BrewTrace.tsx:569` | Doto legend item. | `WATER` |
+| `brew.trace.legend.cup` | `components/BrewTrace.tsx:570` | Doto legend item. | `CUP` |
+| `brew.trace.legend.plan` | `components/BrewTrace.tsx:572` | Doto legend item. | `PLAN` |
+| `brew.trace.overrun` | `components/BrewTrace.tsx:580` | Doto overrun label. `${overrun}` is seconds over plan. | `+${overrun} S` |
 | `brew.rung.a11y` | `components/BrewStageRung.tsx:47,70` (a11y) | (a11y) A stage row on the ladder, composed from parts. `${...}` describe the stage, pattern, temperature, volume, pause, agitation and any holds. | `${stage}, ${pattern}, ${temp}, ${vol}${pause}${agitation}${held}` |
 
 Note: `BrewStageRung` builds its a11y sentence from spelled-out fragments —
@@ -739,14 +739,14 @@ empty library with nothing to explain it.
 | `brewHistory.confirm.delete` | `app/brewHistory.tsx:193` | Confirm-delete button label. | `Delete` |
 | `brewHistory.confirm.keep.a11y` | `app/brewHistory.tsx:197` (a11y) | (a11y) Cancel button. | `Keep this brew` |
 | `brewHistory.confirm.keep` | `app/brewHistory.tsx:200` | Cancel button label. | `Keep this brew` |
-| `brewHistory.row.a11y` | `components/BrewHistoryRow.tsx:55` (a11y) | (a11y) The whole row as one announcement -- the explicit label replaces every visible child, so the date, cup weight, drawdown rate, duration and any flag have to be in it or a reader hears one indistinguishable name per brew. Empty parts are dropped. | `${name}, ${date}, ${grams} grams, ${rate} grams per second, ${duration}, ended early, stopped, no trace kept` |
-| `brewHistory.row.cup` | `components/BrewHistoryRow.tsx:130` | Doto cup weight on a row. `${...}` is grams. | `${Math.round(brew.cupTotal)} G` |
-| `brewHistory.row.drawdownRate` | `components/BrewHistoryRow.tsx:135` | Doto drawdown rate on a row. Hidden when the rate is absent. | `${drawdownRateText} G/S` |
-| `brewHistory.row.notWatched` | `components/BrewHistoryRow.tsx:146` | Doto flag for a brew the app did not watch. | `NOT WATCHED` |
-| `brewHistory.row.endedEarly` | `components/BrewHistoryRow.tsx:152` | Doto flag, warn colour, on a brew the machine ended short. Deliberately not the danger colour: this is an observation, not a failure. | `ENDED EARLY` |
-| `brewHistory.row.stopped` | `components/BrewHistoryRow.tsx:158` | Doto flag on a cancelled, failed or link-lost brew. | `STOPPED` |
-| `brewHistory.row.kept` | `components/BrewHistoryRow.tsx:171` | Doto flag on a pinned brew whose stream is kept through retention. | `KEPT` |
-| `brewHistory.row.noTrace` | `components/BrewHistoryRow.tsx:177` | Doto flag when no trace was kept. | `NO TRACE KEPT` |
+| `brewHistory.row.a11y` | `components/BrewHistoryRow.tsx:52` (a11y) | (a11y) The whole row as one announcement -- the explicit label replaces every visible child, so the date, cup weight, drawdown rate, duration and any flag have to be in it or a reader hears one indistinguishable name per brew. Empty parts are dropped. | `${name}, ${date}, ${grams} grams, ${rate} grams per second, ${duration}, ended early, stopped, no trace kept` |
+| `brewHistory.row.cup` | `components/BrewHistoryRow.tsx:127` | Doto cup weight on a row. `${...}` is grams. | `${Math.round(brew.cupTotal)} G` |
+| `brewHistory.row.drawdownRate` | `components/BrewHistoryRow.tsx:132` | Doto drawdown rate on a row. Hidden when the rate is absent. | `${drawdownRateText} G/S` |
+| `brewHistory.row.notWatched` | `components/BrewHistoryRow.tsx:143` | Doto flag for a brew the app did not watch. | `NOT WATCHED` |
+| `brewHistory.row.endedEarly` | `components/BrewHistoryRow.tsx:149` | Doto flag, warn colour, on a brew the machine ended short. Deliberately not the danger colour: this is an observation, not a failure. | `ENDED EARLY` |
+| `brewHistory.row.stopped` | `components/BrewHistoryRow.tsx:155` | Doto flag on a cancelled, failed or link-lost brew. | `STOPPED` |
+| `brewHistory.row.kept` | `components/BrewHistoryRow.tsx:168` | Doto flag on a pinned brew whose stream is kept through retention. | `KEPT` |
+| `brewHistory.row.noTrace` | `components/BrewHistoryRow.tsx:174` | Doto flag when no trace was kept. | `NO TRACE KEPT` |
 
 ---
 

@@ -57,6 +57,6 @@ describe("traceTimeExtent", () => {
         expect(parts.ranTo).toBe(90);
         expect(parts.bypassMl).toBe(30);
         expect(parts.bypassFrom).toBe(90);
-        expect(parts.maxT).toBe(traceTimeExtent(60, samples, bypass));
+        expect(parts.maxT).toBeCloseTo(90 + bypassSeconds(30), 6);
     });
 });

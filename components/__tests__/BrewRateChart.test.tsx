@@ -4,7 +4,11 @@ import {PixelRatio} from "react-native";
 import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
 import {palette} from "@/constants/colors";
-import {rateChartPlotTop} from "@/library/brew/rateChartGeometry";
+import {
+    RATE_HEIGHT,
+    rateChartLabelRowHeight,
+    rateChartPlotTop
+} from "@/library/brew/rateChartGeometry";
 import {traceTimeExtent} from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {flowSeries, type FlowPoint} from "@/library/brew/flowRate";
@@ -48,8 +52,8 @@ function svgText(node: {props: {children?: unknown}}): string | undefined {
     return undefined;
 }
 
-function svgScalar(value: number | number[] | string): number {
-    return Number(Array.isArray(value) ? value[0] : value);
+function matrixTranslateY(value: number[]): number {
+    return value[5];
 }
 
 function sample(at: number, water: number, cup: number, pour: number): BrewSample {
@@ -184,19 +188,36 @@ describe("BrewRateChart", () => {
         expect(Math.min(...yValues(tallPath))).toBeGreaterThan(Math.min(...yValues(shortPath)));
     });
 
+    it("keeps a nearly flat brew in the lower quarter of the plot", async () => {
+        const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1);
+        const flat: FlowPoint[] = [
+            {at: 1_000, cup: 1, water: 1},
+            {at: 1_100, cup: 1, water: 1}
+        ];
+
+        const {getByTestId} = await renderWithProviders(
+            <BrewRateChart series={flat} accent={ACCENT} width={WIDTH} maxT={2} />
+        );
+
+        const plotHeight = RATE_HEIGHT - rateChartLabelRowHeight(1);
+        const waterY = yValues(getByTestId("rate-chart-water").props.d as string)[0];
+        expect(waterY).toBeGreaterThanOrEqual(plotHeight * 0.7);
+
+        scaleSpy.mockRestore();
+    });
+
     it("reserves the label row from the current font scale", async () => {
         const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1.4);
-        const {getByTestId, queryByTestId} = await renderWithProviders(
+        const {getByTestId} = await renderWithProviders(
             <BrewRateChart series={series} accent={ACCENT} width={WIDTH} maxT={5} />
         );
 
-        const labelY = svgScalar(
-            getByTestId("rate-chart-label").props.y as number | number[] | string
-        );
-        expect(queryByTestId("rate-chart-plot-origin", {includeHiddenElements: true}))
-            .toBeNull();
-        const plotY = rateChartPlotTop(1.4);
-        expect(plotY - labelY).toBeGreaterThanOrEqual(labelY * 0.35);
+        const verticalInset = Math.max(
+            getByTestId("rate-chart-water").props.strokeWidth as number,
+            getByTestId("rate-chart-cup").props.strokeWidth as number
+        ) / 2;
+        const plotY = matrixTranslateY(getByTestId("rate-chart-plot").props.matrix as number[]);
+        expect(plotY).toBeCloseTo(rateChartPlotTop(1.4, verticalInset), 1);
 
         scaleSpy.mockRestore();
     });

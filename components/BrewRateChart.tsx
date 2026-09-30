@@ -10,8 +10,8 @@ import {
     contiguousRateRuns,
     hasDrawableRateRun,
     RATE_HEIGHT,
-    RATE_LABEL_LINE_HEIGHT,
     RATE_LABEL_SIZE,
+    rateChartLabelRowHeight,
     rateChartPlotTop
 } from "@/library/brew/rateChartGeometry";
 import {channelStyle, type Role} from "@/library/brew/traceStyle";
@@ -67,9 +67,10 @@ export default function BrewRateChart({
     const waterStyle = channelStyle("water", {accent, role});
     const cupStyle = channelStyle("cup", {accent, role});
     const verticalInset = Math.max(waterStyle.strokeWidth, cupStyle.strokeWidth) / 2;
+    const fontScale = PixelRatio.getFontScale();
     const labelSize = drawnFontSize(RATE_LABEL_SIZE);
-    const labelRow = Math.ceil(labelSize * RATE_LABEL_LINE_HEIGHT);
-    const plotTop = rateChartPlotTop(PixelRatio.getFontScale(), verticalInset);
+    const labelRow = rateChartLabelRowHeight(fontScale);
+    const plotTop = rateChartPlotTop(fontScale, verticalInset);
     const box: Box = {
         width,
         height: Math.max(height - labelRow - verticalInset * 2, 0),
@@ -100,7 +101,7 @@ export default function BrewRateChart({
                 >
                     FLOW RATE
                 </SvgText>
-                <G y={plotTop}>
+                <G testID="rate-chart-plot" transform={`translate(0 ${plotTop})`}>
                     {waterPath !== "" && (
                         <Path
                             testID="rate-chart-water"

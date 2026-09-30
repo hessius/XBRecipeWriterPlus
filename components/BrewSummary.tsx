@@ -11,7 +11,7 @@ import DotMatrixText from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
 import {summaryBands} from "@/library/brew/bands";
-import {traceTimeParts} from "@/library/brew/brewShape";
+import {livePoints, traceTimeParts} from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {BypassView} from "@/library/brew/bypassState";
 import type {FlowPoint} from "@/library/brew/flowRate";
@@ -133,6 +133,14 @@ export default function BrewSummary({
     // The drawable width inside the capture's own padding.
     const traceWidth = width - capturePadding * 2;
     const traceTimes = traceTimeParts(plannedSeconds, samples, bypass);
+    const traceWater = livePoints(samples, "water");
+    const traceAxis = {
+        maxT: traceTimes.maxT,
+        maxV: Math.max(
+            traceWater.length > 0 ? traceWater[traceWater.length - 1].v : 0,
+            traceTimes.bypassMl
+        )
+    };
 
     // Measured from an onLayout event, never an effect. Everything above the
     // ladder is one subtree, so its height is one reading; the ladder's own
@@ -176,6 +184,7 @@ export default function BrewSummary({
                     selectedIndex={selectedIndex}
                     onSelectStage={onSelectStage}
                     bypass={bypass}
+                    axis={traceAxis}
                 />
             ) : (
                 <YStack height={traceHeight} alignItems="center"
@@ -196,7 +205,7 @@ export default function BrewSummary({
                     series={rateSeries ?? []}
                     accent={accent}
                     width={traceWidth}
-                    maxT={traceTimes.maxT}
+                    maxT={traceAxis.maxT}
                     height={rateHeight}
                 />
             )}

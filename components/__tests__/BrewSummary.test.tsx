@@ -180,9 +180,16 @@ describe("BrewSummary", () => {
 
     it("draws the rate chart on the same time axis as the trace", async () => {
         await draw({
+            plannedSeconds: 50,
+            samples: [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 90_000, water: 120, cup: 90, pour: 1}
+            ],
+            bypass: {volume: 30, temperature: 85, delivered: 30,
+                     startedAt: null, state: "done"},
             rateSeries: [
-                {at: 59_900, cup: 1.6, water: 3.2},
-                {at: 60_000, cup: 1.7, water: 3.2}
+                {at: 89_900, cup: 1.6, water: 3.2},
+                {at: 90_000, cup: 1.7, water: 3.2}
             ]
         });
 
@@ -190,6 +197,18 @@ describe("BrewSummary", () => {
         const traceX = pathPoints(screen.getByTestId("trace-water").props.d as string)[1].x;
         const rateX = pathPoints(screen.getByTestId("rate-chart-water").props.d as string)[1].x;
         expect(rateX).toBeCloseTo(traceX, 1);
+    });
+
+    it("keeps the rate chart hidden for a swept record even if a caller hands over rates", async () => {
+        await draw({
+            hasStream: false,
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        expect(screen.queryByTestId("rate-chart")).toBeNull();
     });
 
     it("leaves no rate chart wrapper when the chart cannot draw", async () => {

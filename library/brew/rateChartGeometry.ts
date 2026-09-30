@@ -3,7 +3,6 @@ import type {FlowPoint} from "@/library/brew/flowRate";
 
 export const RATE_HEIGHT = 84;
 export const RATE_LABEL_SIZE = 9;
-export const RATE_LABEL_LINE_HEIGHT = 1.35;
 
 /**
  * The recorder samples at about 10 Hz, and every stream fixture that models

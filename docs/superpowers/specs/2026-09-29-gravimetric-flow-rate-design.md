@@ -373,12 +373,13 @@ record that already merges by `id` and never overwrites.
 **Where it is shown:**
 
 - On the **record** and on the **finished brew**, `BrewFigures` grows a second
-  term on the drawdown line it already draws: `DRAWDOWN 0:38 · 1.68 g/s`. The
+  term on the drawdown line it already draws: `DRAWDOWN 0:38 · 1.7 g/s`. The
+  displayed rate is deliberately rounded to one decimal place. The
   rate is dropped and the line reads as it does today whenever `drawdownRate`
   is null, which is the same rule the drawdown figure itself already follows.
   Not on the live screen, whose drawdown line (§5.1) is a clock only: a rate
   averaged over a drawdown still happening changes meaning as it is read.
-- The **history list row** gains one figure, `1.68 g/s`, beside the water and
+- The **history list row** gains one figure, `1.7 g/s`, beside the water and
   cup figures it already draws and before the stars. Silent when null, exactly
   as the pin and the rating already are. It joins the row's accessibility
   label, which `BrewHistoryRow` builds by hand because `Pressable` with an

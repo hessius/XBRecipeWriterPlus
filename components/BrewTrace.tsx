@@ -29,19 +29,17 @@ type Props = {
     /**
      * An axis imposed from outside, overriding the self-sizing below.
      *
-     * Only the comparison screen sets it. Two lanes stacked one above the
-     * other are not a comparison unless they share a scale: the same 30 second
-     * mark has to be at the same x in both, and the same 200 ml at the same y.
-     * Absent, the box is sized to whichever of the plan, the run and the
-     * bypass box reaches furthest, which is what every other caller wants.
+     * The comparison screen sets it so two stacked lanes share a scale: the
+     * same 30 second mark has to be at the same x in both, and the same 200 ml
+     * at the same y. `BrewSummary` also sets it so the trace and the rate chart
+     * below it share the same real-seconds extent. Absent, the box is sized to
+     * whichever of the plan, the run and the bypass box reaches furthest.
      *
      * Must be at least this lane's own extent in both dimensions. A smaller
      * axis clips at the viewport rather than rescaling, so the lane would lose
      * its tail with nothing on screen to say it had. And it is for `compact`
      * lanes: the temperature band is not part of the axis, so two full-size
      * lanes would still put the same temperature at different heights.
-     * Do not pass it from BrewSummary: the rate chart below it shares the
-     * traceTimeParts axis, so overriding this one would break their alignment.
      */
     axis?: {maxT: number; maxV: number};
     /** Overflow protection has stopped the water. Turns the live line amber. */
