@@ -154,18 +154,11 @@ describe("BrewTrace", () => {
     });
 
     it("stretches the axis when the brew ran past the plan", async () => {
-        const {getByTestId, queryByText} = await draw({
+        const {getByTestId} = await draw({
             samples: samples([0, 0, 0], [84_000, 200, 190])
         });
         expect(getByTestId("trace-plan").props.d).not.toContain("300");
         expect(getByTestId("trace-water").props.d).toContain("300");
-        expect(queryByText("+14 S")).toBeNull();
-    });
-
-    it("says nothing about a gap the user cannot see", async () => {
-        // A second of overrun is a rounding artefact, not a hold.
-        const {queryByText} = await draw({samples: samples([0, 0, 0], [71_000, 200, 190])});
-        expect(queryByText("+1 S")).toBeNull();
     });
 
     it("turns the water line amber while the machine is holding", async () => {
@@ -184,22 +177,13 @@ describe("BrewTrace", () => {
     });
 
     it("compact draws the chart and nothing else", async () => {
-        const {queryByText, getByTestId} = await draw({
+        const {getByTestId} = await draw({
             compact: true,
             samples: samples([0, 0, 0], [84_000, 200, 190]),
             plannedSeconds: 70,
         });
-        // The delay figure lives in BrewFigures, not on the trace.
-        expect(queryByText("+14 S")).toBeNull();
         // The chart itself must still render.
         expect(getByTestId("trace-water")).toBeTruthy();
-    });
-
-    it("does not reserve the removed overrun row", async () => {
-        const {queryByTestId} = await draw({
-            samples: samples([0, 0, 0], [84_000, 200, 190]),
-        });
-        expect(queryByTestId("trace-overrun-row")).toBeNull();
     });
 
     it("gives the legend a row tall enough to hold it", async () => {

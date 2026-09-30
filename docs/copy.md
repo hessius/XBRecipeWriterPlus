@@ -644,7 +644,6 @@ Shared readouts on the brew screen and record (`components/BrewFigures.tsx`,
 | `brew.trace.legend.water` | `components/BrewTrace.tsx:570` | Doto legend item. | `WATER` |
 | `brew.trace.legend.cup` | `components/BrewTrace.tsx:571` | Doto legend item. | `CUP` |
 | `brew.trace.legend.plan` | `components/BrewTrace.tsx:573` | Doto legend item. | `PLAN` |
-| `brew.trace.overrun` | `components/BrewTrace.tsx:581` | Doto overrun label. `${overrun}` is seconds over plan. | `+${overrun} S` |
 | `brew.rung.a11y` | `components/BrewStageRung.tsx:277` (a11y) | (a11y) A stage row on the ladder, composed from parts. `${...}` describe the stage, pattern, temperature, volume, pause, agitation and any holds. | `${stage}, ${pattern}, ${temp}, ${vol}${pause}${agitation}${held}` |
 
 Note: `BrewStageRung` builds its a11y sentence from spelled-out fragments —

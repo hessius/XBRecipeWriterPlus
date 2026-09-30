@@ -1,4 +1,5 @@
 import type {BrewRecord} from "./BrewRecord";
+import {grindBand} from "@/library/grindBands";
 
 /** The part of `Machine` this needs. Narrow, so a test can be a literal. */
 export type DialMachine = {
@@ -62,24 +63,6 @@ export async function readDialAfterBrew(
     return dial;
 }
 
-/**
- * Whether the two readings disagree.
- *
- * They normally agree, because the dial is set before a brew and cannot be
- * moved during one. A difference means the pre-send reading was taken before
- * the machine had caught up with the hand that had just moved it, so the
- * post-brew number is the true one and the earlier one is worth showing
- * beside it.
- *
- * Both readings have to exist for the question to have an answer: one reading
- * alone is a position, not a difference.
- */
-export function dialWasMoved(record: BrewRecord): boolean {
-    const before = record.dialBefore ?? 0;
-    const after = record.dialAfter ?? 0;
-    return before > 0 && after > 0 && before !== after;
-}
-
 export type GrindFigure = {
     dial: number;
     recipe: number | null;
@@ -107,6 +90,6 @@ export function dialNote(record: BrewRecord): GrindFigure | null {
     const recipe = record.grindSize ?? 0;
     return {
         dial: after,
-        recipe: recipe > 0 && recipe !== after ? recipe : null
+        recipe: grindBand(recipe) !== undefined && recipe !== after ? recipe : null
     };
 }

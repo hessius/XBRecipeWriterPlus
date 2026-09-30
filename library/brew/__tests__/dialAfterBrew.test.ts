@@ -1,6 +1,7 @@
 import type {BrewRecord} from "@/library/brew/BrewRecord";
-import {dialNote, dialWasMoved, readDialAfterBrew, type DialMachine}
+import {dialNote, readDialAfterBrew, type DialMachine}
     from "@/library/brew/dialAfterBrew";
+import {GRINDER_OFF_VALUE} from "@/library/Recipe";
 
 function record(overrides: Partial<BrewRecord> = {}): BrewRecord {
     return {
@@ -107,22 +108,6 @@ describe("readDialAfterBrew", () => {
     });
 });
 
-describe("dialWasMoved", () => {
-    it("is true when the two readings differ", () => {
-        expect(dialWasMoved(record({dialBefore: 47, dialAfter: 52}))).toBe(true);
-    });
-
-    it("is false when they agree", () => {
-        expect(dialWasMoved(record({dialBefore: 47, dialAfter: 47}))).toBe(false);
-    });
-
-    it("is false when only one reading exists", () => {
-        // One reading is a position, not a movement.
-        expect(dialWasMoved(record({dialAfter: 52}))).toBe(false);
-        expect(dialWasMoved(record({dialBefore: 47}))).toBe(false);
-    });
-});
-
 describe("dialNote", () => {
     it("reports the confirmed dial as the grind figure", () => {
         expect(dialNote(record({dialAfter: 47}))).toEqual({dial: 47, recipe: null});
@@ -135,6 +120,11 @@ describe("dialNote", () => {
 
     it("does not badge a recipe grind matching the dial", () => {
         expect(dialNote(record({grindSize: 47, dialAfter: 47})))
+            .toEqual({dial: 47, recipe: null});
+    });
+
+    it("does not badge the grinder-off sentinel as a recipe grind", () => {
+        expect(dialNote(record({grindSize: GRINDER_OFF_VALUE, dialAfter: 47})))
             .toEqual({dial: 47, recipe: null});
     });
 

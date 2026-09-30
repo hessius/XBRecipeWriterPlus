@@ -355,8 +355,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // so the width it may draw in is not the window's.
                         // Handed the window width it laid its trace out 36
                         // points too wide: it overflowed right, read as
-                        // off-centre, and clipped the trace's right-aligned
-                        // overrun label. The export is unaffected because ViewShot
+                        // off-centre, and pushed the chart past its visible
+                        // edge. The export is unaffected because ViewShot
                         // takes the capture's width from its parent, and this
                         // prop only sizes the trace inside it.
                         width={width - SCREEN_PADDING * 2}
