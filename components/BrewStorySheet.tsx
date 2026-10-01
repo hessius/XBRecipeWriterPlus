@@ -7,7 +7,7 @@ import ExportButton from "@/components/ExportButton";
 import RailChip from "@/components/RailChip";
 import XbrwSheet from "@/components/XbrwSheet";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {STORY_ASPECT} from "@/library/brew/storyCard";
+import {STORY_ASPECT, storyFrame} from "@/library/brew/storyCard";
 
 export type StoryToggleOption = {
     key: string;
@@ -84,6 +84,7 @@ export default function BrewStorySheet({
     const cardWidth = box.width === 0 || box.height === 0
         ? 0
         : Math.floor(Math.min(box.width, box.height / STORY_ASPECT));
+    const frame = cardWidth > 0 ? storyFrame(cardWidth) : null;
 
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange} title="STORY CARD"
@@ -91,16 +92,37 @@ export default function BrewStorySheet({
             <YStack flex={1} gap="$3" paddingBottom="$2">
                 <View
                     testID="story-stage"
-                    style={{flex: 1, alignItems: "center", justifyContent: "center"}}
+                    style={{
+                        flex: 1,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        overflow: "hidden",
+                        position: "relative"
+                    }}
                     onLayout={(e) => setBox({
                         width:  e.nativeEvent.layout.width,
                         height: e.nativeEvent.layout.height
                     })}
                 >
-                    {cardWidth > 0 && (
-                        <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
-                            {children(cardWidth)}
-                        </ViewShot>
+                    {frame !== null && (
+                        // Absolute on purpose: the card height is derived from
+                        // the stage measurement, so putting that height back
+                        // in normal flow would make the measured stage depend
+                        // on the card it is sizing. ViewShot captures this
+                        // drawn size directly, so a larger preview is also a
+                        // higher resolution PNG.
+                        <View
+                            testID="story-card-host"
+                            style={{
+                                position: "absolute",
+                                width:    frame.width,
+                                height:   frame.height
+                            }}
+                        >
+                            <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
+                                {children(cardWidth)}
+                            </ViewShot>
+                        </View>
                     )}
                 </View>
                 <StoryToggleRow toggles={toggles}/>

@@ -10,7 +10,9 @@ import {
     storyFrame,
     storyHiddenFromSetting,
     storyHiddenToSetting,
-    storySummaryBudget
+    storyHorizontalFit,
+    storySummaryBudget,
+    storyTextScale
 } from "../storyCard";
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
@@ -53,20 +55,22 @@ function storyMaskInputs(width: number, stages: number, fontScale: number): Swee
 
 function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySummaryBudget>) {
     const fontScale = input.fontScale ?? 1;
-    const nameHeight = dotoRowHeight(STORY_NAME_SIZE, fontScale) + STORY_NAME_MARGIN;
-    const baseFigures = dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+    const textScale = storyTextScale(input.width);
+    const nameHeight = dotoRowHeight(STORY_NAME_SIZE * textScale, fontScale)
+        + STORY_NAME_MARGIN * textScale;
+    const baseFigures = dotoRowHeight(BREW_FIGURE_LABEL_SIZE * textScale, fontScale)
         + BREW_FIGURE_INTERNAL_GAP
-        + dotoRowHeight(BREW_FIGURE_VALUE_SIZE, fontScale);
+        + dotoRowHeight(BREW_FIGURE_VALUE_SIZE * textScale, fontScale);
     const detailFigures = budget.showFigureDetails !== false
         ? Math.max(0, input.figureExtraRows ?? 0) * (
             BREW_FIGURE_ROW_GAP
-            + dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+            + dotoRowHeight(BREW_FIGURE_LABEL_SIZE * textScale, fontScale)
             + BREW_FIGURE_INTERNAL_GAP
-            + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale)
+            + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE * textScale, fontScale)
         )
         : 0;
     const noteHeight = budget.showSummaryNote !== false && input.hasSummaryNote === true
-        ? dotoRowHeight(11, fontScale) + 8
+        ? dotoRowHeight(11 * textScale, fontScale) + 8
         : 0;
     const ladderRows = input.stages + (input.hasBypass === true ? 1 : 0);
     const ladderHeight = budget.showStages
@@ -112,6 +116,25 @@ function storySweepWorstSlack(): {worst: number; cell: SweepInput; visited: numb
     }
     if (cell === null) throw new Error("story slack sweep visited no cells");
     return {worst, cell, visited};
+}
+
+function storyHorizontalSweep(): {visited: number} {
+    let visited = 0;
+    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+        for (const fontScale of STORY_TEST_FONT_SCALES) {
+            for (const width of STORY_TEST_WIDTHS) {
+                for (const input of storyMaskInputs(width, stages, fontScale)) {
+                    visited += 1;
+                    const budget = storySummaryBudget(input);
+
+                    expect(storyHorizontalFit(input, budget)).toEqual(
+                        expect.objectContaining({fits: true})
+                    );
+                }
+            }
+        }
+    }
+    return {visited};
 }
 
 function expectAllMasksFit(widths: number[]) {
@@ -247,6 +270,17 @@ describe("the frame", () => {
 
     it("keeps the height the story card really draws inside the safe band", () => {
         expectAllMasksFit(STORY_TEST_WIDTHS);
+    });
+
+    it("keeps every drawn story row inside the card width", () => {
+        const sweep = storyHorizontalSweep();
+
+        expect(sweep.visited).toBe(
+            MACHINE_CARD_MAX_STAGES
+            * STORY_TEST_FONT_SCALES.length
+            * STORY_TEST_WIDTHS.length
+            * 128
+        );
     });
 
     it("keeps the real narrow-phone story width band inside the safe band", () => {

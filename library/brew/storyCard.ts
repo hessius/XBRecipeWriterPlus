@@ -12,9 +12,14 @@ import {
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
-    BREW_FIGURE_VALUE_SIZE
+    BREW_FIGURE_VALUE_SIZE,
+    brewFigureTextGeometry
 } from "@/library/brew/figureGeometry";
-import {dotoRowHeight, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
+import {
+    dotoRowHeight,
+    dotoTextWidth,
+    DOTO_MAX_FONT_SCALE
+} from "@/library/dotoMetrics";
 
 /**
  * The shape of a story frame, as a ratio of width to height.
@@ -177,6 +182,7 @@ export const STORY_TEST_WIDTHS = [
     185, 200, 220, 240, 270, 281, 300, 320, 343, 360, 375, 393, 430
 ];
 export const STORY_TEST_FONT_SCALES = [1, 1.2, DOTO_MAX_FONT_SCALE];
+export const STORY_REFERENCE_WIDTH = 430;
 
 const STORY_HEADER_MARK = 16;
 const STORY_HEADER_DATE = 11;
@@ -189,6 +195,19 @@ const STORY_TAG_PAD_X = 8;
 const STORY_TAG_PAD_Y = 4;
 const STORY_TAG_GAP = 8;
 const STORY_TAG_MORE_CHARS = 3;
+
+export function storyTextScale(width: number): number {
+    return Math.min(1, width / STORY_REFERENCE_WIDTH);
+}
+
+function scaledSize(size: number, width: number): number {
+    return size * storyTextScale(width);
+}
+
+function scaledTracking(tracking: number, width: number): number {
+    return tracking * storyTextScale(width);
+}
+
 type StoryRows = {
     header: number;
     name: number;
@@ -198,39 +217,84 @@ type StoryRows = {
     tag: number;
 };
 
-function figureRowHeight(valueSize: number, fontScale: number): number {
-    return dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+function figureRowHeight(valueSize: number, fontScale: number, width: number): number {
+    return dotoRowHeight(scaledSize(BREW_FIGURE_LABEL_SIZE, width), fontScale)
         + BREW_FIGURE_INTERNAL_GAP
-        + dotoRowHeight(valueSize, fontScale);
+        + dotoRowHeight(scaledSize(valueSize, width), fontScale);
 }
 
-function storyRows(fontScale: number): StoryRows {
+export type StoryHeaderLayout = {
+    stacked: boolean;
+    height: number;
+    markSize: number;
+    dateSize: number;
+    markTracking: number;
+    dateTracking: number;
+    dateVisualScale: number;
+    markWidth: number;
+    dateWidth: number;
+};
+
+export function storyHeaderLayout(
+    width: number,
+    fontScale: number,
+    when = "2026-09-30 · 06:55"
+): StoryHeaderLayout {
+    const markSize = scaledSize(STORY_HEADER_MARK, width);
+    const dateSize = scaledSize(STORY_HEADER_DATE, width);
+    const markTracking = scaledTracking(1, width);
+    const dateTracking = scaledTracking(1.4, width);
+    const innerWidth = Math.max(0, width - 36);
+    const markWidth = dotoTextWidth("XBRW++", markSize, fontScale, markTracking);
+    const dateWidth = dotoTextWidth(when, dateSize, fontScale, dateTracking);
+    const markHeight = dotoRowHeight(markSize, fontScale);
+    const dateHeight = dotoRowHeight(dateSize, fontScale);
+    const stacked = markWidth + dateWidth > innerWidth;
+    const dateVisualScale = dateWidth <= innerWidth || innerWidth === 0
+        ? 1
+        : innerWidth / dateWidth;
+
     return {
-        header: Math.max(
-            dotoRowHeight(STORY_HEADER_MARK, fontScale),
-            dotoRowHeight(STORY_HEADER_DATE, fontScale)
-        ),
-        name: dotoRowHeight(STORY_NAME_SIZE, fontScale) + STORY_NAME_MARGIN,
-        figures: figureRowHeight(BREW_FIGURE_VALUE_SIZE, fontScale),
-        coffee: dotoRowHeight(STORY_COFFEE_SIZE, fontScale),
-        rating: Math.ceil(Math.max(STORY_RATING_SIZE, dotoRowHeight(11, fontScale))),
-        tag: dotoRowHeight(STORY_TAG_SIZE, fontScale) + STORY_TAG_PAD_Y * 2
+        stacked,
+        height: stacked ? markHeight + 2 + dateHeight : Math.max(markHeight, dateHeight),
+        markSize,
+        dateSize,
+        markTracking,
+        dateTracking,
+        dateVisualScale,
+        markWidth,
+        dateWidth
     };
 }
 
-function tagWidth(tag: string, fontScale: number): number {
-    const size = Math.max(11, STORY_TAG_SIZE) * Math.min(fontScale, DOTO_MAX_FONT_SCALE);
-    const glyphs = tag.length * size * 0.75;
-    const tracking = Math.max(0, tag.length - 1) * 1.2;
-    return Math.ceil(glyphs + tracking + STORY_TAG_PAD_X * 2);
+function storyRows(width: number, fontScale: number): StoryRows {
+    return {
+        header: storyHeaderLayout(width, fontScale).height,
+        name: dotoRowHeight(scaledSize(STORY_NAME_SIZE, width), fontScale)
+            + STORY_NAME_MARGIN * storyTextScale(width),
+        figures: figureRowHeight(BREW_FIGURE_VALUE_SIZE, fontScale, width),
+        coffee: dotoRowHeight(scaledSize(STORY_COFFEE_SIZE, width), fontScale),
+        rating: Math.ceil(Math.max(STORY_RATING_SIZE, dotoRowHeight(11, fontScale))),
+        tag: dotoRowHeight(scaledSize(STORY_TAG_SIZE, width), fontScale)
+            + STORY_TAG_PAD_Y * 2 * storyTextScale(width)
+    };
+}
+
+function tagWidth(tag: string, fontScale: number, width: number): number {
+    const size = scaledSize(STORY_TAG_SIZE, width);
+    const tracking = scaledTracking(1.2, width);
+    return Math.ceil(
+        dotoTextWidth(tag, size, fontScale, tracking)
+        + STORY_TAG_PAD_X * 2 * storyTextScale(width)
+    );
 }
 
 function tagRows(tags: string[], width: number, fontScale: number): number {
     if (tags.length === 0) return 0;
-    const innerWidth = Math.max(0, width - 32);
+    const innerWidth = Math.max(0, width - 36);
     let rows = 1;
     let used = 0;
-    const widths = tags.map((tag) => tagWidth(tag, fontScale));
+    const widths = tags.map((tag) => tagWidth(tag, fontScale, width));
     for (const next of widths) {
         const spend = used === 0 ? next : next + STORY_TAG_GAP;
         if (used > 0 && used + spend > innerWidth) {
@@ -253,6 +317,148 @@ type GrowableAllowance = {
     cap: number;
     share: number;
 };
+
+export type StoryHorizontalFit = {
+    fits: boolean;
+    widest: string;
+    width: number;
+    limit: number;
+};
+
+function fitResult(rows: {id: string; width: number; limit: number}[]): StoryHorizontalFit {
+    const widest = rows.reduce(
+        (best, row) => (row.width - row.limit > best.width - best.limit ? row : best),
+        {id: "none", width: 0, limit: Number.POSITIVE_INFINITY}
+    );
+    return {
+        fits: rows.every((row) => row.width <= row.limit),
+        widest: widest.id,
+        width: widest.width,
+        limit: widest.limit
+    };
+}
+
+function storyFigureColumnWidth(width: number): number {
+    const figures = brewFigureTextGeometry(storyTextScale(width));
+    return Math.max(
+        0,
+        (width - STORY_CAPTURE_PADDING * 2 - figures.columnGap * 2) / 3
+    );
+}
+
+function storyFiguresFit(width: number, fontScale: number): StoryHorizontalFit {
+    const figures = brewFigureTextGeometry(storyTextScale(width));
+    const column = storyFigureColumnWidth(width);
+    return fitResult([
+        {
+            id:    "water label",
+            width: dotoTextWidth("WATER", figures.labelSize, fontScale, figures.labelTracking),
+            limit: column
+        },
+        {
+            id:    "water value",
+            width: dotoTextWidth("240", figures.valueSize, fontScale, figures.valueTracking),
+            limit: column
+        },
+        {
+            id:    "cup label",
+            width: dotoTextWidth("CUP", figures.labelSize, fontScale, figures.labelTracking),
+            limit: column
+        },
+        {
+            id:    "cup value",
+            width: dotoTextWidth("201", figures.valueSize, fontScale, figures.valueTracking),
+            limit: column
+        },
+        {
+            id:    "time label",
+            width: dotoTextWidth("TIME", figures.labelSize, fontScale, figures.labelTracking),
+            limit: column
+        },
+        {
+            id:    "time value",
+            width: dotoTextWidth("3:26", figures.valueSize, fontScale, figures.valueTracking),
+            limit: column
+        }
+    ]);
+}
+
+function storyDetailsFit(width: number, fontScale: number): StoryHorizontalFit {
+    const figures = brewFigureTextGeometry(storyTextScale(width));
+    const column = storyFigureColumnWidth(width);
+    return fitResult([
+        {
+            id:    "grind label",
+            width: dotoTextWidth("GRIND", figures.labelSize, fontScale, figures.labelTracking),
+            limit: column
+        },
+        {
+            id:    "grind value",
+            width: dotoTextWidth("OFF", figures.detailValueSize, fontScale, figures.valueTracking),
+            limit: column
+        },
+        {
+            id:    "delay label",
+            width: dotoTextWidth("DELAY", figures.labelSize, fontScale, figures.labelTracking),
+            limit: column
+        },
+        {
+            id:    "delay value",
+            width: dotoTextWidth("+99", figures.detailValueSize, fontScale, figures.valueTracking),
+            limit: column
+        },
+        {
+            id:    "drawdown label",
+            width: dotoTextWidth("DRAWDOWN", figures.labelSize, fontScale, figures.labelTracking),
+            limit: column
+        },
+        {
+            id:    "drawdown value",
+            width: dotoTextWidth("3:26", figures.detailValueSize, fontScale, figures.valueTracking),
+            limit: column
+        }
+    ]);
+}
+
+export function storyHorizontalFit(
+    input: StorySummaryBudgetInput,
+    budget: Pick<StorySummaryBudget, "showFigureDetails">
+): StoryHorizontalFit {
+    const width = input.width;
+    const fontScale = input.fontScale ?? 1;
+    const header = storyHeaderLayout(width, fontScale);
+    const inner = Math.max(0, width - 36);
+    const headerRows = header.stacked
+        ? [
+            {
+                id:    "header mark",
+                width: dotoTextWidth("XBRW++", header.markSize, fontScale, header.markTracking),
+                limit: inner
+            },
+            {
+                id:    "header date",
+                width: header.dateWidth * header.dateVisualScale,
+                limit: inner
+            }
+        ]
+        : [
+            {
+                id:    "header row",
+                width: header.markWidth + header.dateWidth * header.dateVisualScale,
+                limit: inner
+            }
+        ];
+    const mainFigures = storyFiguresFit(width, fontScale);
+    const details = budget.showFigureDetails
+        ? storyDetailsFit(width, fontScale)
+        : {fits: true, widest: "none", width: 0, limit: Number.POSITIVE_INFINITY};
+
+    return fitResult([
+        ...headerRows,
+        {id: mainFigures.widest, width: mainFigures.width, limit: mainFigures.limit},
+        {id: details.widest, width: details.width, limit: details.limit}
+    ]);
+}
 
 function growAllowances(
     slack: number,
@@ -307,7 +513,7 @@ export function storySummaryBudget(
 ): StorySummaryBudget {
     const frame = storyFrame(width);
     const contentHeight = frame.height - frame.safeTop - frame.safeBottom;
-    const rows = storyRows(fontScale);
+    const rows = storyRows(width, fontScale);
     const shownTags = tags.slice(0, Math.min(tagCount, 4));
     const moreTags = Math.max(0, tagCount - shownTags.length);
     const tagsForWidth = moreTags > 0
@@ -342,22 +548,31 @@ export function storySummaryBudget(
         const figureBlock = rows.figures
             + (showDetails ? Math.max(0, figureExtraRows) * (
                 BREW_FIGURE_ROW_GAP
-                + figureRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale)
+                + figureRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale, width)
             ) : 0)
-            + (showNote ? dotoRowHeight(11, fontScale) + 8 : 0);
+            + (showNote ? dotoRowHeight(scaledSize(11, width), fontScale) + 8 : 0);
         const summary = STORY_CAPTURE_PADDING * 2
             + rows.name
             + traceHeight
             + (showRate ? RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP : 0)
             + figureBlock
             + ladder;
+        const budgetForFit = {showFigureDetails: showDetails};
         return {
             around,
             summary,
             required: around + summary,
             tagLineCount,
             gapSlots: surroundingRows.length,
-            surroundingRows
+            surroundingRows,
+            horizontal: storyHorizontalFit(
+                {
+                    width, stages, hasRateChart: showRate, hasCoffee: showCoffee,
+                    hasRating: showRating, tags, tagCount, hasBypass,
+                    figureExtraRows, hasSummaryNote: showNote, stagesUnavailable, fontScale
+                },
+                budgetForFit
+            )
         };
     };
 
@@ -410,7 +625,7 @@ export function storySummaryBudget(
             attempt.coffee, attempt.rating, attempt.tags, attempt.rate,
             attempt.trace, attempt.stages, attempt.note, attempt.details
         );
-        if (next.required <= contentHeight) {
+        if (next.required <= contentHeight && next.horizontal.fits) {
             chosen = attempt;
             measured = next;
             break;

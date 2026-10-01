@@ -39,6 +39,7 @@ import {
     storyContentFacts,
     storyHiddenFromSetting,
     storyHiddenToSetting,
+    storyTextScale,
     type StoryContentKey
 } from "@/library/brew/storyCard";
 import {plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
@@ -638,6 +639,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 }}
                                 showRateChart={budget.showRateChart}
                                 showStages={budget.showStages}
+                                textScale={storyTextScale(cardWidth)}
                                 // Always still: a capture taken mid-travel
                                 // freezes the name half-scrolled, and unlike
                                 // the screen's own summary there is no moment

@@ -130,6 +130,7 @@ type Props = {
     storyBands?: {barHeight: number; rungGap: number};
     showRateChart?: boolean;
     showStages?: boolean;
+    textScale?: number;
 };
 
 /*
@@ -159,6 +160,7 @@ export default function BrewSummary({
     rateBottomGap = RATE_BOTTOM_GAP,
     capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
     storyBands, showRateChart = true, showStages = true,
+    textScale = 1,
     testID = "brew-capture"
 }: Props) {
     // The drawable width inside the capture's own padding.
@@ -190,9 +192,10 @@ export default function BrewSummary({
                 its end, rests again and comes back, and does nothing at all
                 when it already fits. */}
             <MarqueeText testID="brew-summary-name" paused={nameStill}>
-                <DotMatrixText fontSize={13} weight="bold" letterSpacing={1.4}
+                <DotMatrixText fontSize={13 * textScale} weight="bold"
+                               letterSpacing={1.4 * textScale}
                                color={palette.dim}
-                               style={{marginBottom: 12}}>
+                               style={{marginBottom: 12 * textScale}}>
                     {recipeName}
                 </DotMatrixText>
             </MarqueeText>
@@ -259,6 +262,7 @@ export default function BrewSummary({
                 drawdownRate={drawdownRate}
                 delay={delay}
                 grind={grind}
+                textScale={textScale}
             />
             </View>
             {/* Spaced by hand: the capture has no gap, so the trace and the

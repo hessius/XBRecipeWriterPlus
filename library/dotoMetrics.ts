@@ -14,3 +14,15 @@ export function dotoDrawnFontSize(fontSize: number, fontScale: number): number {
 export function dotoRowHeight(fontSize: number, fontScale: number): number {
     return Math.ceil(dotoDrawnFontSize(fontSize, fontScale) * DOTO_LINE_HEIGHT);
 }
+
+export function dotoTextWidth(
+    text: string,
+    fontSize: number,
+    fontScale: number,
+    tracking = 0.5
+): number {
+    const chars = text.length;
+    if (chars === 0) return 0;
+    return chars * 0.6 * dotoDrawnFontSize(fontSize, fontScale)
+        + Math.max(0, chars - 1) * tracking;
+}

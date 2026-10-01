@@ -7,7 +7,13 @@ import DotMatrixText from "@/components/DotMatrixText";
 import Wordmark from "@/components/Wordmark";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {storyFrame, storySummaryBudget, type StorySummaryBudget} from "@/library/brew/storyCard";
+import {
+    storyFrame,
+    storyHeaderLayout,
+    storySummaryBudget,
+    storyTextScale,
+    type StorySummaryBudget
+} from "@/library/brew/storyCard";
 
 /** How many tags fit on the card before the rest are counted instead. */
 const MAX_SHOWN_TAGS = 4;
@@ -66,6 +72,9 @@ export default function BrewStoryCard({
     hasSummaryNote = false, stagesUnavailable = false
 }: Props) {
     const frame = storyFrame(width);
+    const fontScale = PixelRatio.getFontScale();
+    const textScale = storyTextScale(width);
+    const header = storyHeaderLayout(width, fontScale, when);
     const budget = storySummaryBudget({
         width,
         stages: stageCount,
@@ -73,7 +82,7 @@ export default function BrewStoryCard({
         hasCoffee: coffee !== null,
         hasRating: rating > 0,
         tags,
-        fontScale: PixelRatio.getFontScale(),
+        fontScale,
         hasBypass,
         figureExtraRows,
         hasSummaryNote,
@@ -91,15 +100,35 @@ export default function BrewStoryCard({
             <View style={{height: frame.safeTop}} testID="story-safe-top"/>
             <YStack testID="story-content" flex={1} justifyContent="center"
                     gap={budget.sectionGap}>
-                <XStack paddingHorizontal={SCREEN_PADDING}
-                        alignItems="center" justifyContent="space-between">
-                    <Wordmark fontSize={16} plusColor={accent}/>
-                    <DotMatrixText testID="story-when" fontSize={11}
-                                   weight="bold" letterSpacing={1.4}
-                                   color={palette.dim}>
-                        {when}
-                    </DotMatrixText>
-                </XStack>
+                {header.stacked ? (
+                    <YStack paddingHorizontal={SCREEN_PADDING} gap={2}>
+                        <Wordmark fontSize={header.markSize} plusColor={accent}/>
+                        <XStack justifyContent="flex-end">
+                            <DotMatrixText testID="story-when" fontSize={header.dateSize}
+                                           weight="bold"
+                                           letterSpacing={header.dateTracking}
+                                           style={{
+                                               transform: [{scale: header.dateVisualScale}]
+                                           }}
+                                           numberOfLines={1} color={palette.dim}>
+                                {when}
+                            </DotMatrixText>
+                        </XStack>
+                    </YStack>
+                ) : (
+                    <XStack paddingHorizontal={SCREEN_PADDING}
+                            alignItems="center" justifyContent="space-between">
+                        <Wordmark fontSize={header.markSize} plusColor={accent}/>
+                        <DotMatrixText testID="story-when" fontSize={header.dateSize}
+                                       weight="bold" letterSpacing={header.dateTracking}
+                                       style={{
+                                           transform: [{scale: header.dateVisualScale}]
+                                       }}
+                                       numberOfLines={1} color={palette.dim}>
+                            {when}
+                        </DotMatrixText>
+                    </XStack>
+                )}
 
                 {summaryNode}
 
@@ -108,9 +137,9 @@ export default function BrewStoryCard({
                     nobody gave, reads as a card that failed to load them. */}
                 {coffee !== null && budget.showCoffee && (
                     <XStack paddingHorizontal={SCREEN_PADDING}>
-                        <DotMatrixText testID="story-coffee" fontSize={12}
-                                       weight="bold" letterSpacing={1.4}
-                                       color={palette.text}>
+                        <DotMatrixText testID="story-coffee" fontSize={12 * textScale}
+                                       weight="bold" letterSpacing={1.4 * textScale}
+                                       numberOfLines={1} color={palette.text}>
                             {coffee}
                         </DotMatrixText>
                     </XStack>
@@ -132,11 +161,12 @@ export default function BrewStoryCard({
                     <XStack paddingHorizontal={SCREEN_PADDING} gap="$2"
                             flexWrap="wrap" testID="story-tags">
                         {shown.map((tag) => (
-                            <XStack key={tag} paddingHorizontal={8}
-                                    paddingVertical={4} borderRadius={4}
+                            <XStack key={tag} paddingHorizontal={8 * textScale}
+                                    paddingVertical={4 * textScale} borderRadius={4}
                                     backgroundColor={palette.raised}>
-                                <DotMatrixText fontSize={10} weight="bold"
-                                               letterSpacing={1.2}
+                                <DotMatrixText fontSize={10 * textScale} weight="bold"
+                                               letterSpacing={1.2 * textScale}
+                                               numberOfLines={1}
                                                color={palette.dim}>
                                     {tag}
                                 </DotMatrixText>
@@ -146,9 +176,9 @@ export default function BrewStoryCard({
                             wrap to a second row and push the ladder into the
                             platform's reply box. */}
                         {extra > 0 && (
-                            <DotMatrixText testID="story-tags-more" fontSize={10}
-                                           weight="bold" letterSpacing={1.2}
-                                           color={palette.muted}>
+                            <DotMatrixText testID="story-tags-more" fontSize={10 * textScale}
+                                           weight="bold" letterSpacing={1.2 * textScale}
+                                           numberOfLines={1} color={palette.muted}>
                                 {`+${extra}`}
                             </DotMatrixText>
                         )}

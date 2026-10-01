@@ -1,5 +1,5 @@
 import React from "react";
-import {Pressable, Text} from "react-native";
+import {Pressable, StyleSheet, Text, type StyleProp, type ViewStyle} from "react-native";
 import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 
 import BrewStorySheet from "@/components/BrewStorySheet";
@@ -85,6 +85,24 @@ describe("the story sheet", () => {
             expect(screen.getByTestId("card-stub"))
                 .toHaveTextContent(`card at ${fits}`));
         expect(fits).toBeLessThan(360);
+    });
+
+    it("keeps the measured stage independent from the card it contains", async () => {
+        await show();
+        await measure(360, 500);
+        await waitFor(() => expect(screen.getByTestId("card-stub")).toBeTruthy());
+
+        const stageStyle = StyleSheet.flatten(
+            screen.getByTestId("story-stage").props.style as StyleProp<ViewStyle>
+        );
+        const cardHostStyle = StyleSheet.flatten(
+            screen.getByTestId("story-card-host").props.style as StyleProp<ViewStyle>
+        );
+
+        expect(stageStyle?.overflow).toBe("hidden");
+        expect(cardHostStyle?.position).toBe("absolute");
+        expect(cardHostStyle?.width).toBe(Math.floor(500 / STORY_ASPECT));
+        expect(cardHostStyle?.height).toBe(500);
     });
 
     it("offers no share until there is a card to share", async () => {
