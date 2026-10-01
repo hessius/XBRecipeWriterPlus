@@ -1207,12 +1207,23 @@ of the app and reviewed on those terms. The command table's `name`, `note` and
 | `console.connection.describe` | `app/machine.tsx:516` | Describe-the-radio button label. | `Describe the radio` |
 | `console.connection.empty` | `app/machine.tsx:520` | Empty state for the connection log. | `Nothing yet. This records every attempt at a link, including the ones that fail before a single frame is exchanged.` |
 | `console.connection.log.a11y` | `app/machine.tsx:525` (a11y) | (a11y) The connection log field. | `Connection log` |
-| `console.section.log` | `app/machine.tsx:532` | Section title. | `Log` |
-| `console.log.copy.a11y` | `app/machine.tsx:534` (a11y) | (a11y) Copy-log button. | `Copy log` |
-| `console.log.copy` | `app/machine.tsx:538` | Copy-log button label. | `Copy log` |
-| `console.log.empty` | `app/machine.tsx:541` | Empty state for the frame log. | `Nothing sent or received yet.` |
-| `console.log.a11y` | `app/machine.tsx:544` (a11y) | (a11y) The frame log field. | `Frame log` |
-| `console.toast.logCopied` | `app/machine.tsx:410` | Success toast after copying the log. | `Log copied` |
+| `console.section.log` | `app/machine.tsx:516` | Section title for the in-memory machine log. | `Session log` |
+| `console.log.copy.a11y` | `app/machine.tsx:518` (a11y) | (a11y) Copy button for the in-memory machine log. | `Copy session log` |
+| `console.log.copy` | `app/machine.tsx:522` | Copy button label for the in-memory machine log. | `Copy session log` |
+| `console.log.empty` | `app/machine.tsx:525` | Empty state for the session frame log. | `Nothing sent or received this session.` |
+| `console.log.a11y` | `app/machine.tsx:528` (a11y) | (a11y) The session frame log field. | `Frame log` |
+| `console.log.clipboard.title` | `app/machine.tsx:367` | Clipboard heading for the copied in-memory machine log. | `This session machine log` |
+| `console.toast.logCopied` | `app/machine.tsx:375` | Success toast after copying the in-memory machine log. | `Session log copied` |
+| `console.storedLog.section` | `app/machine.tsx:538` | Section title for the stored per brew frame log. Hidden when no stored log exists. | `Stored brew log` |
+| `console.storedLog.prose` | `app/machine.tsx:541` | Prose above the stored per brew frame log copy action. | `This copies saved frames from the last recorded brew. The log above is only this session.` |
+| `console.storedLog.brew` | `app/machine.tsx:545` | The brew name and local date and time for the stored log that will be copied. `${...}` is the stored brew name, date and time. | `${storedLog.recipeName} · ${storedLogWhen(storedLog)}` |
+| `console.storedLog.copy.a11y` | `app/machine.tsx:548` (a11y) | (a11y) Copy button for the newest stored per brew frame log. | `Copy last recorded brew log` |
+| `console.storedLog.copy` | `app/machine.tsx:552` | Copy button for the newest stored per brew frame log. | `Copy last recorded brew log` |
+| `console.storedLog.clipboard.title` | `app/machine.tsx:383` | Clipboard heading for the copied stored per brew frame log. | `Last recorded brew frame log` |
+| `console.storedLog.clipboard.brew` | `app/machine.tsx:384` | Clipboard brew name line for the copied stored log. `${...}` is the recipe name. | `Brew: ${summary.recipeName}` |
+| `console.storedLog.clipboard.when` | `app/machine.tsx:385` | Clipboard local date and time line for the copied stored log. `${...}` is the date and time. | `When: ${storedLogWhen(summary)}` |
+| `console.storedLog.clipboard.record` | `app/machine.tsx:386` | Clipboard record ID line for the copied stored log. `${...}` is the brew record ID. | `Record: ${summary.brewId}` |
+| `console.toast.storedLogCopied` | `app/machine.tsx:392` | Success toast after copying the stored per brew frame log. | `Stored brew log copied` |
 | `console.confirm.sheet.title` | `app/machine.tsx:555` | Title of the confirm-send sheet. | `Confirm send` |
 | `console.confirm.unresolved` | `app/machine.tsx:559` | Confirm body for an unresolved command. | `Nobody agrees what this does. What the sources actually observed:` |
 | `console.confirm.moves` | `app/machine.tsx:560` | Confirm body for a hardware-moving command. | `This starts a motor, a heater, or rewrites a machine setting.` |
