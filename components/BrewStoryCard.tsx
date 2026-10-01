@@ -161,7 +161,8 @@ export default function BrewStoryCard({
                     <XStack paddingHorizontal={SCREEN_PADDING} gap="$2"
                             flexWrap="wrap" testID="story-tags">
                         {shown.map((tag) => (
-                            <XStack key={tag} paddingHorizontal={8 * textScale}
+                            <XStack key={tag} testID={`story-tag-${tag}`}
+                                    paddingHorizontal={8 * textScale}
                                     paddingVertical={4 * textScale} borderRadius={4}
                                     backgroundColor={palette.raised}>
                                 <DotMatrixText fontSize={10 * textScale} weight="bold"

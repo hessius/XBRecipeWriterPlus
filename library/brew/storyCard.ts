@@ -197,6 +197,7 @@ const STORY_TAG_PAD_X = 8;
 const STORY_TAG_PAD_Y = 4;
 const STORY_TAG_GAP = 8;
 const STORY_TAG_MORE_CHARS = 3;
+const STORY_DRAWDOWN_RATE_BADGE = "12.3 G/S";
 
 export function storyTextScale(width: number): number {
     return Math.min(1, width / STORY_REFERENCE_WIDTH);
@@ -244,7 +245,7 @@ function boundedDateFontScale(
     fontScale: number,
     limit: number
 ): number {
-    if (limit <= 0 || fontScale <= 1) return fontScale;
+    if (limit <= 0 || fontScale <= 1) return DOTO_MAX_FONT_SCALE;
     if (dotoTextWidth(when, dateSize, fontScale, tracking) <= limit) return fontScale;
     if (dotoTextWidth(when, dateSize, 1, tracking) >= limit) return 1;
 
@@ -275,7 +276,12 @@ export function storyHeaderLayout(
     const dateMaxFontSizeMultiplier = boundedDateFontScale(
         when, dateSize, dateTracking, fontScale, innerWidth
     );
-    const dateWidth = dotoTextWidth(when, dateSize, dateMaxFontSizeMultiplier, dateTracking);
+    const dateWidth = dotoTextWidth(
+        when,
+        dateSize,
+        Math.min(fontScale, dateMaxFontSizeMultiplier),
+        dateTracking
+    );
     const markHeight = dotoRowHeight(markSize, fontScale);
     const dateHeight = dotoRowHeight(dateSize, dateMaxFontSizeMultiplier);
     const stacked = markWidth + dateWidth > innerWidth;
@@ -432,6 +438,11 @@ function storyDetailsFit(width: number, fontScale: number): StoryHorizontalFit {
     const grindWithRecipe = dotoTextWidth(
         "80", figures.detailValueSize, fontScale, figures.valueTracking
     ) + badge.gap + brewFigureBadgeWidth("RECIPE 80", fontScale, storyTextScale(width));
+    const drawdownWithRate = dotoTextWidth(
+        "3:26", figures.detailValueSize, fontScale, figures.valueTracking
+    ) + badge.gap + brewFigureBadgeWidth(
+        STORY_DRAWDOWN_RATE_BADGE, fontScale, storyTextScale(width)
+    );
     return fitResult([
         {
             id:    "grind label",
@@ -466,6 +477,11 @@ function storyDetailsFit(width: number, fontScale: number): StoryHorizontalFit {
         {
             id:    "drawdown value",
             width: dotoTextWidth("3:26", figures.detailValueSize, fontScale, figures.valueTracking),
+            limit: column
+        },
+        {
+            id:    "drawdown value and rate",
+            width: drawdownWithRate,
             limit: column
         }
     ]);

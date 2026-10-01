@@ -18,6 +18,7 @@ import {
     brewFigureTextGeometry
 } from "@/library/brew/figureGeometry";
 import {formatFlowRate} from "@/library/brew/flowRate";
+import {DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
 
 const DOTO_LINE_HEIGHT = 1.35;
 const FLOW_ROW_VERTICAL_ROOM = 4;
@@ -124,7 +125,8 @@ function FigureBadge({children, testID, textScale = 1}: {
                 borderWidth={badge.borderWidth} borderStyle="dashed"
                 borderColor={palette.line}>
             <DotMatrixText fontSize={badge.fontSize} weight="bold" color={palette.dim}
-                           letterSpacing={badge.tracking} minFontSize={0}>
+                           letterSpacing={badge.tracking}
+                           minFontSize={DOTO_MIN_FONT_SIZE * textScale}>
                 {children}
             </DotMatrixText>
         </XStack>
@@ -139,7 +141,7 @@ function Figure({
     value: string;
     color: string;
     badge?: React.ReactNode;
-    badgeGap?: number;
+    badgeGap: number;
     fontSize: number;
     labelSize?: number;
     labelTracking?: number;
@@ -157,7 +159,8 @@ function Figure({
                            letterSpacing={labelTracking ?? 1.6} color={palette.dim}>
                 {label}
             </DotMatrixText>
-            <XStack alignItems="center" gap={badgeGap ?? brewFigureBadgeGeometry().gap}>
+            <XStack testID={testID === undefined ? undefined : `${testID}-value-row`}
+                    alignItems="center" gap={badgeGap}>
                 <DotMatrixText fontSize={fontSize} weight="bold" color={color}
                                letterSpacing={valueTracking ?? 0.5}
                                numberOfLines={1}>
@@ -226,7 +229,7 @@ export default function BrewFigures(
 
     return (
         <YStack testID="brew-figures" gap={BREW_FIGURE_ROW_GAP}>
-            <XStack gap={figureText.columnGap}>
+            <XStack testID="figures-main-row" gap={figureText.columnGap}>
                 <Figure label="WATER" value={String(Math.round(water))} color={accent}
                         badge={badge} fontSize={figureText.valueSize}
                         badgeGap={badgeGeometry.gap}

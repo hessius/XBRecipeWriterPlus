@@ -8,6 +8,7 @@ import {
     storyCoffeeLine,
     storyContentFacts,
     storyFrame,
+    storyHeaderLayout,
     storyHiddenFromSetting,
     storyHiddenToSetting,
     storyHorizontalFit,
@@ -24,8 +25,9 @@ import {
     BREW_FIGURE_ROW_GAP,
     BREW_FIGURE_VALUE_SIZE
 } from "../figureGeometry";
+import {formatBrewDate, formatBrewTime} from "../brewFormat";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
-import {dotoRowHeight} from "@/library/dotoMetrics";
+import {dotoRowHeight, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
 import {stageLadderRungMinHeight} from "../stageLadderGeometry";
 
 const brew = (over: Partial<BrewRecord> = {}) =>
@@ -304,6 +306,44 @@ describe("the frame", () => {
         expect(fit.width).toBeLessThanOrEqual(fit.limit);
     });
 
+    it("counts the drawdown rate badge beside the drawdown figure", () => {
+        const input = {
+            width: 430,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: false,
+            figureExtraRows: 1,
+            fontScale: 1
+        };
+        const budget = storySummaryBudget(input);
+        const fit = storyHorizontalFit(input, budget);
+
+        expect(budget.showFigureDetails).toBe(true);
+        expect(fit).toEqual(expect.objectContaining({
+            fits: true,
+            widest: "drawdown value and rate"
+        }));
+        expect(fit.width).toBeGreaterThan(80);
+        expect(fit.width).toBeLessThanOrEqual(fit.limit);
+    });
+
+    it("does not hand React Native an invalid reduced date font multiplier", () => {
+        const header = storyHeaderLayout(185, 0.85);
+
+        expect(header.dateMaxFontSizeMultiplier).toBe(DOTO_MAX_FONT_SCALE);
+        expect(header.dateWidth).toBeLessThanOrEqual(185 - 36);
+    });
+
+    it("keeps the default story date length tied to the real date formatters", () => {
+        const when = `${formatBrewDate(new Date(2026, 8, 30, 6, 55).getTime())} · ${
+            formatBrewTime(new Date(2026, 8, 30, 6, 55).getTime())
+        }`;
+
+        expect(when).toHaveLength("2026-09-30 · 06:55".length);
+    });
+
     it("does not use the header's self-clamped date as horizontal proof", () => {
         const fit = storyHorizontalFit({
             width: 137,
@@ -334,7 +374,7 @@ describe("the frame", () => {
         expect(sweep.cell).toMatchObject({
             width: 430,
             stages: 1,
-            fontScale: 1.4,
+            fontScale: 1.2,
             hasCoffee: false,
             hasRating: false,
             tags: [],
@@ -343,10 +383,11 @@ describe("the frame", () => {
             hasRateChart: false,
             hasBypass: false
         });
-        // The 65 pt bound is the all-caps-saturated case. Trace and section
+        // The 83 pt bound is the all-caps-saturated case. Trace and section
         // gap have hit their composition caps, so the rest is centered-card
-        // breathing room rather than a fit failure.
-        expect(sweep.worst).toBeLessThanOrEqual(65);
+        // breathing room rather than a fit failure. It rose when the wider
+        // drawdown-rate badge made the chooser drop the detail row at 1.2x.
+        expect(sweep.worst).toBeLessThanOrEqual(83);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {
