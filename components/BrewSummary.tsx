@@ -128,6 +128,7 @@ type Props = {
     capturePadding?: number;
     ladderTopGap?: number;
     storyBands?: {barHeight: number; rungGap: number};
+    showBypassBadge?: boolean;
     showRateChart?: boolean;
     showStages?: boolean;
     textScale?: number;
@@ -159,7 +160,7 @@ export default function BrewSummary({
     traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT, rateTopGap = RATE_TOP_GAP,
     rateBottomGap = RATE_BOTTOM_GAP,
     capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
-    storyBands, showRateChart = true, showStages = true,
+    storyBands, showBypassBadge = true, showRateChart = true, showStages = true,
     textScale = 1,
     testID = "brew-capture"
 }: Props) {
@@ -257,7 +258,7 @@ export default function BrewSummary({
                 cup={cup}
                 seconds={seconds}
                 accent={accent}
-                bypass={bypass?.delivered}
+                bypass={showBypassBadge ? bypass?.delivered : undefined}
                 drawdown={drawdown}
                 drawdownRate={drawdownRate}
                 delay={delay}

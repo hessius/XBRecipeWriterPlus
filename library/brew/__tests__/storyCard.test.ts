@@ -14,7 +14,8 @@ import {
     storyHiddenToSetting,
     storyHorizontalFit,
     storySummaryBudget,
-    storyTextScale
+    storyTextScale,
+    type StorySummaryBudget
 } from "../storyCard";
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
@@ -320,6 +321,80 @@ describe("the frame", () => {
         expect(budget.showDrawdownRateBadge).toBe(false);
     });
 
+    it("suppresses an oversized drawdown rate badge on the story card only", () => {
+        const budget = storySummaryBudget({
+            width: 430,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            figureExtraRows: 1,
+            drawdownRate: 9999.9,
+            fontScale: 1
+        });
+
+        expect(budget.showFigureDetails).toBe(true);
+        expect(budget.showDrawdownRateBadge).toBe(false);
+    });
+
+    it("drops tags when one legal tag cannot fit a row by itself", () => {
+        const budget = storySummaryBudget({
+            width: 220,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            tags: ["W".repeat(32)],
+            fontScale: DOTO_MAX_FONT_SCALE
+        });
+
+        expect(budget.shownTagCount).toBe(0);
+        expect(budget.tagRows).toBe(0);
+    });
+
+    it("suppresses the bypass badge when card-limit figures would overflow the story cell", () => {
+        const input = {
+            width: 185,
+            stages: MACHINE_CARD_MAX_STAGES,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: true,
+            fontScale: DOTO_MAX_FONT_SCALE
+        };
+        const budget = storySummaryBudget(input);
+        const fit = storyHorizontalFit(input, budget);
+
+        expect((budget as StorySummaryBudget & {showBypassBadge: boolean}).showBypassBadge)
+            .toBe(false);
+        expect(fit).toEqual(expect.objectContaining({fits: true}));
+        expect(fit.widest).not.toBe("water value and bypass");
+    });
+
+    it("keeps the bypass badge when the actual stage-count maxima fit", () => {
+        const budget = storySummaryBudget({
+            width: 430,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: true,
+            fontScale: 1.2
+        });
+        const maxStageBudget = storySummaryBudget({
+            width: 430,
+            stages: MACHINE_CARD_MAX_STAGES,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: true,
+            fontScale: 1.2
+        });
+
+        expect(budget.showBypassBadge).toBe(true);
+        expect(maxStageBudget.showBypassBadge).toBe(false);
+    });
+
     it("counts the bypass badge beside the water figure", () => {
         const input = {
             width: 185,
@@ -343,12 +418,13 @@ describe("the frame", () => {
 
     it("counts the drawdown rate badge beside the drawdown figure", () => {
         const input = {
-            width: 430,
+            width: 600,
             stages: 2,
             hasRateChart: false,
             hasCoffee: false,
             hasRating: false,
             hasBypass: false,
+            hasGrindRecipeBadge: false,
             figureExtraRows: 1,
             fontScale: 1
         };
@@ -356,10 +432,8 @@ describe("the frame", () => {
         const fit = storyHorizontalFit(input, budget);
 
         expect(budget.showFigureDetails).toBe(true);
-        expect(fit).toEqual(expect.objectContaining({
-            fits: true,
-            widest: "drawdown value and rate"
-        }));
+        expect(budget.showDrawdownRateBadge).toBe(true);
+        expect(fit).toEqual(expect.objectContaining({fits: true}));
         expect(fit.width).toBeGreaterThan(80);
         expect(fit.width + STORY_FIT_MARGIN).toBeLessThanOrEqual(fit.limit);
     });

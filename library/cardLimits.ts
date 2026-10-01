@@ -36,7 +36,7 @@ const GRIND_RPM: Range = {min: 60, max: 120};
 /** Exported for the test that keeps `library/units` in step with the card. */
 export const TEMPERATURE: Range = {min: 39, max: 99};
 /** Tenths of a millilitre per second: the byte 30 means 3.0 ml/s. */
-const FLOW_RATE: Range = {min: 30, max: 35};
+export const FLOW_RATE: Range = {min: 30, max: 35};
 /** Derived from POUR_PATTERN enum: CENTERED=0, CIRCULAR=1, SPIRAL=2. */
 const POUR_PATTERN_RANGE: Range = {
     min: Math.min(...Object.values(POUR_PATTERN)),
@@ -64,6 +64,10 @@ const AGITATION_RANGE: Range = {
 const MAX_POURS = MACHINE_CARD_MAX_STAGES;
 /** The editor stops adding tea stages at three, and the card agrees. */
 export const MAX_TEA_POURS = 3;
+export const COFFEE_POUR_VOLUME: Range = {min: 1, max: 240};
+export const TEA_POUR_VOLUME: Range = {min: 1, max: 90};
+export const COFFEE_POUR_PAUSE: Range = {min: 0, max: 59};
+export const TEA_POUR_PAUSE: Range = {min: 0, max: 360};
 
 function outside(value: number, range: Range): boolean {
     return !Number.isFinite(value) || value < range.min || value > range.max;
@@ -138,14 +142,14 @@ export function cardWriteProblems(
         problems.push(`The recipe has ${recipe.pours.length} stages. The most is ${maxPours}.`);
     }
 
-    const maxVolume = tea ? 90 : 240;
-    const maxPause = tea ? 360 : 59;
+    const volumeRange = tea ? TEA_POUR_VOLUME : COFFEE_POUR_VOLUME;
+    const pauseRange = tea ? TEA_POUR_PAUSE : COFFEE_POUR_PAUSE;
 
     recipe.pours.forEach((pour, index) => {
         const stage = index + 1;
 
-        const volMsg = `Stage ${stage} pours ${pour.volume} ml. The most is ${maxVolume} ml.`;
-        if (outside(pour.volume, {min: 1, max: maxVolume})) {
+        const volMsg = `Stage ${stage} pours ${pour.volume} ml. The most is ${volumeRange.max} ml.`;
+        if (outside(pour.volume, volumeRange)) {
             problems.push(volMsg);
         } else {
             checkInteger(pour.volume, volMsg, problems);
@@ -188,8 +192,8 @@ export function cardWriteProblems(
             checkInteger(pour.flowRate, flowMsg, problems);
         }
 
-        const pauseMsg = `Stage ${stage} waits ${pour.pauseTime} s. The most is ${maxPause} s.`;
-        if (outside(pour.pauseTime, {min: 0, max: maxPause})) {
+        const pauseMsg = `Stage ${stage} waits ${pour.pauseTime} s. The most is ${pauseRange.max} s.`;
+        if (outside(pour.pauseTime, pauseRange)) {
             problems.push(pauseMsg);
         } else {
             checkInteger(pour.pauseTime, pauseMsg, problems);

@@ -648,6 +648,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                                         summary.grind,
                                         budget.showGrindRecipeBadge
                                     ) : null}
+                                showBypassBadge={budget.showBypassBadge}
                                 width={cardWidth}
                                 testID="story-capture"
                                 traceHeight={budget.traceHeight}

@@ -45,7 +45,6 @@ export const FLOW_SPARKLINE_MIN_SPAN = 0.5;
 export const RETROSPECTIVE_FLOW_WINDOW_MS = 6000;
 const RETROSPECTIVE_FLOW_MIN_SAMPLES = 3;
 const RETROSPECTIVE_FLOW_MIN_GAPS = 4;
-export const MAX_DRAWDOWN_RATE = 99.9;
 
 /**
  * One decimal place for a displayed rate, or null when there is no number.
@@ -728,7 +727,7 @@ export function drawdownRate(record: BrewRecord): number | null {
     if (seconds === null || seconds <= 0) return null;
     const delivered = record.cupTotal - (record.bypass?.delivered ?? 0) - opened;
     const rate = delivered / seconds;
-    return Number.isFinite(rate) && rate > 0 && rate <= MAX_DRAWDOWN_RATE ? rate : null;
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
 }
 
 export function drawdownFigures(record: BrewRecord): {seconds: number; rate: number | null} | null {

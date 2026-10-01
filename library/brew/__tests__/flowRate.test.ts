@@ -1122,12 +1122,12 @@ describe("drawdownRate", () => {
         expect(drawdownRate(withBypass)).toBeCloseTo(2, 6);
     });
 
-    it("drops rates above the displayable drawdown ceiling", () => {
+    it("keeps finite positive rates above the story badge width", () => {
         expect(drawdownRate(record({
             cupTotal: 200,
             cupAtDrawdown: 100,
             drawdownAt: 139_100
-        }))).toBeNull();
+        }))).toBeCloseTo(111.111111, 6);
     });
 
     it("is null, never 0, whenever a term is missing", () => {
