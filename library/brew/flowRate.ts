@@ -1,5 +1,5 @@
 import {drawdownSeconds, type BrewRecord, type BrewSample} from "./BrewRecord";
-import {contiguousRateRuns, medianRateGap, rateAdjacentAllowance} from "./rateChartGeometry";
+import {medianRateGap, rateAdjacentAllowance} from "./rateChartGeometry";
 
 /**
  * How much of the stream one reading of the rate is fitted over.
@@ -571,6 +571,29 @@ function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
     });
 }
 
+function splitRateRuns<T extends FlowPoint>(series: T[], adjacentMs: number): T[][] {
+    const runs: T[][] = [];
+    let current: T[] = [];
+
+    for (const point of series) {
+        const previous = current[current.length - 1];
+        if (previous !== undefined && point.at - previous.at > adjacentMs) {
+            runs.push(current);
+            current = [];
+        }
+        current.push(point);
+    }
+    if (current.length > 0) runs.push(current);
+    return runs;
+}
+
+function hasRetrospectiveSupport(run: RawFlowPoint[]): boolean {
+    const first = run[0];
+    const last = run[run.length - 1];
+    return first !== undefined && last !== undefined &&
+        last.at - first.at >= FLOW_MIN_WINDOW_MS;
+}
+
 /**
  * Both channels across the retained stream, for retrospective charts.
  *
@@ -584,17 +607,12 @@ function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
 export function retrospectiveFlowSeries(
     samples: BrewSample[], stages: number
 ): FlowPoint[] {
-    return contiguousRateRuns(rawRateSeries(samples, stages))
-        .map((run) => {
-            const adjacentMs = rateAdjacentAllowance(run);
-            return run.filter((point) => point.at - point.fromAt <= adjacentMs);
-        })
-        .filter((run) => {
-            const first = run[0];
-            const last = run[run.length - 1];
-            return first !== undefined && last !== undefined &&
-                last.at - first.at >= FLOW_MIN_WINDOW_MS;
-        })
+    const raw = rawRateSeries(samples, stages);
+    const adjacentMs = rateAdjacentAllowance(raw);
+    return splitRateRuns(raw, adjacentMs)
+        .map((run) => run.filter((point) => point.at - point.fromAt <= adjacentMs))
+        .flatMap((run) => splitRateRuns(run, adjacentMs))
+        .filter(hasRetrospectiveSupport)
         .flatMap(smoothRetrospectiveRun);
 }
 

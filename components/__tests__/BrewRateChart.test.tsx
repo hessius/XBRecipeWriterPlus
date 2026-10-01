@@ -42,6 +42,11 @@ function pathPoints(path: string): {x: number; y: number}[] {
         .map((match) => ({x: Number(match[1]), y: Number(match[2])}));
 }
 
+function dotXs(path: string): number[] {
+    return [...path.matchAll(/M\s*([-\d.]+)\s+[-\d.]+\s*l\s*0\s+0/g)]
+        .map((match) => Number(match[1]));
+}
+
 function svgText(node: {props: {children?: unknown}}): string | undefined {
     const child = node.props.children;
     if (typeof child === "string") return child;
@@ -108,7 +113,7 @@ describe("BrewRateChart", () => {
             <BrewRateChart series={isolatedSeries()} accent={ACCENT} width={WIDTH} maxT={2} />
         );
 
-        const d = getByTestId("rate-chart-cup").props.d as string;
+        const d = getByTestId("rate-chart-water").props.d as string;
         expect(d.match(/M/g)).toHaveLength(1);
         expect(d.match(/C/g)).toHaveLength(2);
     });
@@ -125,7 +130,7 @@ describe("BrewRateChart", () => {
             <BrewRateChart series={gapped} accent={ACCENT} width={WIDTH} maxT={2} />
         );
 
-        const d = getByTestId("rate-chart-cup").props.d as string;
+        const d = getByTestId("rate-chart-water").props.d as string;
         expect(d.match(/M/g)).toHaveLength(2);
     });
 
@@ -157,8 +162,39 @@ describe("BrewRateChart", () => {
             <BrewRateChart series={rate} accent={ACCENT} width={WIDTH} maxT={8} />
         );
 
-        const d = getByTestId("rate-chart-cup").props.d as string;
+        const d = getByTestId("rate-chart-water").props.d as string;
         expect(d.match(/M/g)).toHaveLength(2);
+    });
+
+    it("places cup dots at a fixed time-axis rhythm without filling real gaps", async () => {
+        const gapped: FlowPoint[] = [
+            ...Array.from({length: 11}, (_, i) => ({
+                at: i * 100,
+                cup: 0.2 + i * 0.36,
+                water: 2
+            })),
+            ...Array.from({length: 11}, (_, i) => ({
+                at: 3_000 + i * 100,
+                cup: 0.4 + i * 0.04,
+                water: 2
+            }))
+        ];
+
+        const {getByTestId} = await renderWithProviders(
+            <BrewRateChart series={gapped} accent={ACCENT} width={400} maxT={4} maxRate={4} />
+        );
+
+        const cup = getByTestId("rate-chart-cup");
+        const xs = dotXs(cup.props.d as string);
+        const measuredGaps = xs
+            .filter((x) => x <= 100)
+            .slice(1)
+            .map((x, i) => Math.round((x - xs[i]) * 10) / 10);
+
+        expect(cup.props.strokeDasharray).toBeUndefined();
+        expect(xs).toHaveLength(52);
+        expect(new Set(measuredGaps)).toEqual(new Set([4]));
+        expect(xs.some((x) => x > 100 && x < 300)).toBe(false);
     });
 
     it("uses the same x for a known second as BrewTrace", async () => {

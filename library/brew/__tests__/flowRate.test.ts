@@ -157,6 +157,62 @@ function quantisedProfile(
     return out;
 }
 
+const QUANTISATION_PHASES = [0, 0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375];
+
+function quantise(value: number, phase: number): number {
+    return Math.round((value + phase) / 0.5) * 0.5;
+}
+
+function ownerLikeBrew(phase: number): BrewSample[] {
+    const samples: BrewSample[] = [];
+    let water = 0;
+    let cup = 0;
+    let at = 0;
+
+    for (let stage = 1; stage <= 4; stage += 1) {
+        for (let i = 0; i < 100; i += 1) {
+            if (samples.length > 0) {
+                water += i < 8 ? 0.9 : 0;
+                cup += i < 8 ? 0.3 : 0.12;
+            }
+            samples.push({
+                at,
+                water: quantise(water, phase),
+                cup: quantise(cup, phase),
+                pour: stage
+            });
+            at += 300;
+        }
+    }
+
+    at += 2_000;
+    for (let i = 0; i <= 320; i += 1) {
+        if (i % 40 === 20 || i % 40 === 21) {
+            at += 100;
+            continue;
+        }
+        if (samples.length > 0) cup += 0.035;
+        samples.push({
+            at,
+            water: quantise(water, phase),
+            cup: quantise(cup, phase),
+            pour: 4
+        });
+        at += 100;
+    }
+
+    return samples;
+}
+
+function longCleanRun(): BrewSample[] {
+    return Array.from({length: 121}, (_, i) => ({
+        at: i * 100,
+        water: quantise(i * 0.2, 0.125),
+        cup: quantise(i * 0.2, 0.125),
+        pour: 1
+    }));
+}
+
 function realisticRampProfile(): BrewSample[] {
     return quantisedProfile(36, (at) => {
         if (at < 1_000) return 0;
@@ -572,6 +628,239 @@ describe("retrospectiveFlowSeries", () => {
         expect(afterGap).toBeDefined();
         expect(afterGap!.water).toBeCloseTo(1, 6);
         expect(afterGap!.cup).toBeCloseTo(1, 6);
+    });
+
+    it("resplits derivative holes before smoothing a quantised drawdown", () => {
+        let visited = 0;
+        let worstRate = 0;
+
+        for (const phase of QUANTISATION_PHASES) {
+            visited += 1;
+            const smoothed = retrospectiveFlowSeries(ownerLikeBrew(phase), 4);
+            const drawdown = smoothed.filter((point) => point.at >= 122_000);
+            expect(drawdown.some((point) => point.at === 124_200)).toBe(true);
+            worstRate = Math.max(worstRate, maxRateOf(drawdown));
+        }
+
+        expect(visited).toBe(8);
+        expect(worstRate).toBeLessThan(0.8);
+    });
+
+    it("leaves the full-support interior of a long run bit-for-bit unchanged", () => {
+        const smoothed = retrospectiveFlowSeries(longCleanRun(), 1);
+        const interior = smoothed
+            .filter((point) => point.at >= 4_000 && point.at <= 8_000)
+            .map((point) => [point.at, point.cup, point.water]);
+
+        expect(interior).toMatchInlineSnapshot(`
+[
+  [
+    4000,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+  [
+    4100,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    4200,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    4300,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    4400,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    4500,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+  [
+    4600,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    4700,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    4800,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    4900,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    5000,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+  [
+    5100,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    5200,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    5300,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    5400,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    5500,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+  [
+    5600,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    5700,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    5800,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    5900,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    6000,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+  [
+    6100,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    6200,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    6300,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    6400,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    6500,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+  [
+    6600,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    6700,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    6800,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    6900,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    7000,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+  [
+    7100,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    7200,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    7300,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    7400,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    7500,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+  [
+    7600,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    7700,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    7800,
+    2.0532158403789404,
+    2.0532158403789404,
+  ],
+  [
+    7900,
+    1.9241455959988891,
+    1.9241455959988891,
+  ],
+  [
+    8000,
+    2.045277127244338,
+    2.045277127244338,
+  ],
+]
+`);
     });
 
     it("keeps the live tail on the causal estimator", () => {

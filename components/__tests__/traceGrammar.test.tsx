@@ -130,10 +130,7 @@ describe("the flow sparkline draws the cup grammar", () => {
 });
 
 describe("the rate chart draws the shared grammar", () => {
-    it.each([
-        ["water", "trace-water", "rate-chart-water"],
-        ["cup", "trace-cup", "rate-chart-cup"]
-    ])("matches the rendered %s channel", async (_channel, traceId, rateId) => {
+    it("matches the rendered water channel", async () => {
         const trace = await renderWithProviders(
             <BrewTrace pours={POURS} samples={SAMPLES} accent={ACCENT}
                        width={300} height={160} plannedSeconds={30} compact />
@@ -142,7 +139,25 @@ describe("the rate chart draws the shared grammar", () => {
             <BrewRateChart series={FLOW_SERIES} accent={ACCENT} width={300} maxT={3} />
         );
 
-        expect(styleOf(rate.getByTestId(rateId)))
-            .toEqual(styleOf(trace.getByTestId(traceId)));
+        expect(styleOf(rate.getByTestId("rate-chart-water")))
+            .toEqual(styleOf(trace.getByTestId("trace-water")));
+    });
+
+    it("keeps the cup colour and dot size while spacing rate dots by time", async () => {
+        const trace = await renderWithProviders(
+            <BrewTrace pours={POURS} samples={SAMPLES} accent={ACCENT}
+                       width={300} height={160} plannedSeconds={30} compact />
+        );
+        const rate = await renderWithProviders(
+            <BrewRateChart series={FLOW_SERIES} accent={ACCENT} width={300} maxT={3} />
+        );
+        const traceCup = styleOf(trace.getByTestId("trace-cup"));
+        const rateCup = styleOf(rate.getByTestId("rate-chart-cup"));
+
+        expect(rateCup).toEqual({
+            ...traceCup,
+            strokeDasharray: undefined,
+            strokeLinejoin:  undefined
+        });
     });
 });
