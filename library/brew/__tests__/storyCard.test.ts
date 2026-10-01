@@ -1,6 +1,7 @@
 import {
     STORY_ASPECT, STORY_SAFE_BOTTOM, STORY_SAFE_TOP,
     STORY_CAPTURE_PADDING,
+    STORY_CONTENT_KEYS,
     STORY_LADDER_TOP_GAP,
     STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
     offeredStoryContent,
@@ -91,27 +92,26 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
         + ladderHeight;
 }
 
-function storySweepWorstSlack(): number {
-    let worst = 0;
+function storySweepWorstSlack(): {worst: number; cell: SweepInput; visited: number} {
+    let worst = -1;
+    let cell: SweepInput | null = null;
+    let visited = 0;
     for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
         for (const fontScale of STORY_TEST_FONT_SCALES) {
             for (const width of STORY_TEST_WIDTHS) {
-                const budget = storySummaryBudget({
-                    width,
-                    stages,
-                    hasRateChart: true,
-                    hasCoffee: true,
-                    hasRating: true,
-                    tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
-                    fontScale,
-                    hasBypass: true,
-                    figureExtraRows: 1
-                });
-                worst = Math.max(worst, budget.margin);
+                for (const input of storyMaskInputs(width, stages, fontScale)) {
+                    visited += 1;
+                    const budget = storySummaryBudget(input);
+                    if (budget.margin > worst) {
+                        worst = budget.margin;
+                        cell = input;
+                    }
+                }
             }
         }
     }
-    return worst;
+    if (cell === null) throw new Error("story slack sweep visited no cells");
+    return {worst, cell, visited};
 }
 
 function expectAllMasksFit(widths: number[]) {
@@ -253,8 +253,31 @@ describe("the frame", () => {
         expectAllMasksFit([185, 200, 220, 240]);
     });
 
-    it("leaves only integer rounding slack after growing the story content", () => {
-        expect(storySweepWorstSlack()).toBeLessThanOrEqual(6);
+    it("bounds slack after growing every story content mask", () => {
+        const sweep = storySweepWorstSlack();
+
+        expect(sweep.visited).toBe(
+            MACHINE_CARD_MAX_STAGES
+            * STORY_TEST_FONT_SCALES.length
+            * STORY_TEST_WIDTHS.length
+            * 128
+        );
+        expect(sweep.cell).toMatchObject({
+            width: 430,
+            stages: 1,
+            fontScale: 1,
+            hasCoffee: false,
+            hasRating: false,
+            tags: [],
+            hasSummaryNote: false,
+            figureExtraRows: 0,
+            hasRateChart: false,
+            hasBypass: false
+        });
+        // The 38 pt bound is the all-caps-saturated case. Trace and section
+        // gap have hit their composition caps, so the rest is centered-card
+        // breathing room rather than a fit failure.
+        expect(sweep.worst).toBeLessThanOrEqual(38);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {
@@ -427,6 +450,21 @@ describe("the story content chooser", () => {
 
         expect(setting).toBe("[\"coffee\",\"note\",\"flow\"]");
         expect([...storyHiddenFromSetting(setting)]).toEqual(["coffee", "note", "flow"]);
+    });
+
+    it("serializes every hidden section from a one-shot iterator", () => {
+        function* hiddenSections() {
+            yield "rating" as const;
+            yield "details" as const;
+            yield "flow" as const;
+            yield "coffee" as const;
+            yield "tags" as const;
+            yield "note" as const;
+        }
+
+        const setting = storyHiddenToSetting(hiddenSections());
+
+        expect(JSON.parse(setting)).toEqual([...STORY_CONTENT_KEYS]);
     });
 
     it("ignores unknown hidden sections from an old or edited setting", () => {

@@ -124,12 +124,8 @@ export function storyHiddenFromSetting(value: string): Set<StoryContentKey> {
 }
 
 export function storyHiddenToSetting(hidden: Iterable<StoryContentKey>): string {
-    const ordered = STORY_CONTENT_KEYS.filter((key) => {
-        for (const hiddenKey of hidden) {
-            if (hiddenKey === key) return true;
-        }
-        return false;
-    });
+    const hiddenSet = new Set(hidden);
+    const ordered = STORY_CONTENT_KEYS.filter((key) => hiddenSet.has(key));
     return ordered.length === 0 ? "" : JSON.stringify(ordered);
 }
 

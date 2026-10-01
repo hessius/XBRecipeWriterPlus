@@ -1157,7 +1157,11 @@ describe("brew record's story card", () => {
     async function pressStoryToggle(label: string): Promise<void> {
         await waitFor(
             async () => {
+                const selected = screen.getByLabelText(label)
+                    .props.accessibilityState?.selected;
                 await fireEvent.press(screen.getByLabelText(label));
+                expect(screen.getByLabelText(label).props.accessibilityState)
+                    .toEqual(expect.objectContaining({selected: !selected}));
             },
             {timeout: SHEET_PRESS_TIMEOUT}
         );
