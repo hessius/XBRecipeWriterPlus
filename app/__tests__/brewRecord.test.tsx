@@ -1336,7 +1336,7 @@ describe("brew record's story card", () => {
             .toEqual(expect.objectContaining({selected: false}));
     });
 
-    it("drops the story rate chart when the fixed frame needs the room", async () => {
+    it("marks a requested story section unavailable when it cannot fit", async () => {
         mockOpened = {
             record:  recordWithDrawdownRate({
                 rating: 4,
@@ -1349,10 +1349,37 @@ describe("brew record's story card", () => {
         };
 
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-        await openCard();
+        await openCard(120);
 
+        expect(screen.getByLabelText("FLOW unavailable, this will not fit")).toBeTruthy();
+        expect(screen.getByTestId("story-toggle-flow-unavailable")).toBeTruthy();
+    });
+
+    it("turns the story flow chart off and back on from its chip", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating: 4,
+                origin: "Huila",
+                roast:  "Medium",
+                tags:   ["filter", "washed"],
+                plan:   planFromPours(twoPours.pours)
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(349);
+
+        expect(summaryProps.showRateChart).toBe(true);
+        expect(screen.getByTestId("rate-chart")).toBeTruthy();
+
+        await pressStoryToggle("FLOW");
         expect(summaryProps.showRateChart).toBe(false);
         expect(screen.queryByTestId("rate-chart")).toBeNull();
+
+        await pressStoryToggle("FLOW");
+        expect(summaryProps.showRateChart).toBe(true);
+        expect(screen.getByTestId("rate-chart")).toBeTruthy();
         const style = StyleSheet.flatten(
             screen.getByTestId("brew-story-card").props.style as StyleProp<ViewStyle>
         );

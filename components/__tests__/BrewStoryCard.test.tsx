@@ -3,22 +3,60 @@ import {PixelRatio, StyleSheet, Text, type StyleProp, type ViewStyle} from "reac
 import {screen} from "@testing-library/react-native";
 
 import BrewStoryCard from "@/components/BrewStoryCard";
-import {storyFrame, type StorySummaryBudget} from "@/library/brew/storyCard";
+import {storyFrame, storySummaryBudget, type StorySummaryBudget} from "@/library/brew/storyCard";
 import {renderWithProviders} from "@/test-utils/render";
 
 const summary = <Text testID="summary-stub">the brew</Text>;
 
-async function show(over: Partial<React.ComponentProps<typeof BrewStoryCard>> = {}) {
+type ShowOptions = Partial<React.ComponentProps<typeof BrewStoryCard>> & {
+    stageCount?: number;
+    hasRateChart?: boolean;
+    hasBypass?: boolean;
+    hasGrindRecipeBadge?: boolean;
+    drawdownRate?: number | null;
+    figureExtraRows?: number;
+    hasSummaryNote?: boolean;
+    stagesUnavailable?: boolean;
+};
+
+async function show(over: ShowOptions = {}) {
+    const width = over.width ?? 360;
+    const rating = over.rating ?? 0;
+    const coffee = over.coffee ?? null;
+    const tags = over.tags ?? [];
+    const storySummary = over.summary ?? summary;
+    const when = over.when ?? "3 Sep · 07:12";
+    const {
+        stageCount, hasRateChart, hasBypass, hasGrindRecipeBadge, drawdownRate,
+        figureExtraRows, hasSummaryNote, stagesUnavailable, summary: _summary,
+        when: _when, ...cardProps
+    } = over;
+    const budget = over.budget ?? storySummaryBudget({
+        width,
+        stages: stageCount ?? 2,
+        hasRateChart: hasRateChart ?? true,
+        hasCoffee: coffee !== null,
+        hasRating: rating > 0,
+        tags,
+        fontScale: PixelRatio.getFontScale(),
+        hasBypass,
+        hasGrindRecipeBadge,
+        drawdownRate,
+        figureExtraRows,
+        hasSummaryNote,
+        stagesUnavailable
+    });
     await renderWithProviders(
         <BrewStoryCard
-            width={360}
-            summary={summary}
-            when="3 Sep · 07:12"
+            {...cardProps}
+            width={width}
+            budget={budget}
+            summary={storySummary}
+            when={when}
             accent="#FF007F"
-            rating={0}
-            coffee={null}
-            tags={[]}
-            {...over}
+            rating={rating}
+            coffee={coffee}
+            tags={tags}
         />
     );
 }

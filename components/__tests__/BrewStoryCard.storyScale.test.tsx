@@ -9,6 +9,7 @@ import {
 import {screen} from "@testing-library/react-native";
 
 import BrewStoryCard from "@/components/BrewStoryCard";
+import {storySummaryBudget} from "@/library/brew/storyCard";
 import {renderWithProviders} from "@/test-utils/render";
 
 const MockText = Text;
@@ -43,17 +44,27 @@ describe("BrewStoryCard story scaling", () => {
     it("scales coffee and tag typography and tag padding from the story width", async () => {
         const width = 300;
         const scale = width / 430;
+        const coffee = "Huila · Washed";
+        const tags = ["filter", "sweet", "balanced", "washed", "extra", "hidden"];
+        const budget = storySummaryBudget({
+            width,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: true,
+            hasRating: false,
+            tags
+        });
 
         await renderWithProviders(
             <BrewStoryCard
                 width={width}
+                budget={budget}
                 summary={<Text>the brew</Text>}
                 when="2026-09-30 · 06:55"
                 accent="#8ab4f8"
                 rating={0}
-                coffee="Huila · Washed"
-                tags={["filter", "sweet", "balanced", "washed", "extra", "hidden"]}
-                hasRateChart={false}
+                coffee={coffee}
+                tags={tags}
             />
         );
 

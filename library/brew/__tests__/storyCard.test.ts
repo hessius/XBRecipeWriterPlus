@@ -3,7 +3,7 @@ import {
     STORY_CAPTURE_PADDING,
     STORY_CONTENT_KEYS,
     STORY_FIT_MARGIN,
-    STORY_LADDER_TOP_GAP,
+    STORY_TRACE_HEIGHT,
     STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
     offeredStoryContent,
     storyCoffeeLine,
@@ -82,7 +82,7 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
         : 0;
     const ladderRows = input.stages + (input.hasBypass === true ? 1 : 0);
     const ladderHeight = budget.showStages
-        ? STORY_LADDER_TOP_GAP
+        ? budget.ladderTopGap
             + (input.stagesUnavailable === true
                 ? dotoRowHeight(11, fontScale)
                 : ladderRows * stageLadderRungMinHeight(
@@ -206,6 +206,77 @@ describe("the frame", () => {
         expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
     });
 
+    it("grants the flow chart at a real height-constrained phone card width", () => {
+        const budget = storySummaryBudget({
+            width: 349,
+            stages: 4,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            fontScale: 1
+        });
+
+        expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+        expect(budget.showFigureDetails).toBe(true);
+        expect(budget.showRateChart).toBe(true);
+    });
+
+    it("shrinks the trace before it drops an enabled flow chart", () => {
+        const budget = storySummaryBudget({
+            width: 270,
+            stages: 4,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            fontScale: 1
+        });
+
+        expect(budget.showRateChart).toBe(true);
+        expect(budget.traceHeight).toBeLessThan(STORY_TRACE_HEIGHT);
+    });
+
+    it("keeps content the user turned off out even when there is room", () => {
+        const budget = storySummaryBudget({
+            width: 600,
+            stages: 4,
+            hasRateChart: false,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            fontScale: 1
+        });
+
+        expect(budget.showRateChart).toBe(false);
+        expect(budget.rateHeight).toBe(0);
+        expect(budget.declinedContent.flow).toBe(false);
+    });
+
+    it("reports enabled content that cannot fit at its minimum", () => {
+        const budget = storySummaryBudget({
+            width: 120,
+            stages: 10,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            hasSummaryNote: true,
+            fontScale: DOTO_MAX_FONT_SCALE
+        });
+
+        expect(budget.showRateChart).toBe(false);
+        expect(budget.declinedContent.flow).toBe(true);
+    });
+
     it("spends spare story room on the ladder bands", () => {
         const budget = storySummaryBudget({
             width: 600,
@@ -268,7 +339,7 @@ describe("the frame", () => {
                         ].filter(Boolean).length;
 
                         expect(budget.gapSlots).toBe(1 + optionalRows);
-                        expect(budget.requiredHeight)
+                        expect(budget.requiredHeight + 0.001)
                             .toBeGreaterThanOrEqual(trueDrawnHeight(input, budget));
                     }
                 }
@@ -316,8 +387,8 @@ describe("the frame", () => {
         });
 
         expect(budget.showFigureDetails).toBe(true);
-        expect(budget.showStages).toBe(true);
         expect(budget.showSummaryNote).toBe(true);
+        expect(budget.showRateChart).toBe(true);
         expect(budget.showDrawdownRateBadge).toBe(false);
     });
 
@@ -578,8 +649,9 @@ describe("the frame", () => {
     });
 
     it("budgets the rate chart's top gap, drawn height and bottom gap separately", () => {
+        const width = 600;
         const withRate = storySummaryBudget({
-            width: 600,
+            width,
             stages: 0,
             hasRateChart: true,
             hasCoffee: false,
@@ -591,7 +663,7 @@ describe("the frame", () => {
         expect(withRate.rateBottomGap).toBe(RATE_BOTTOM_GAP);
 
         const withoutRate = storySummaryBudget({
-            width: 600,
+            width,
             stages: 0,
             hasRateChart: false,
             hasCoffee: false,

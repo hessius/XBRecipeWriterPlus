@@ -149,6 +149,7 @@ export function storyHiddenToSetting(hidden: Iterable<StoryContentKey>): string 
 
 export type StorySummaryBudget = {
     contentHeight: number;
+    fontScale: number;
     surroundingHeight: number;
     requiredHeight: number;
     traceHeight: number;
@@ -172,6 +173,7 @@ export type StorySummaryBudget = {
     showDrawdownRateBadge: boolean;
     showBypassBadge: boolean;
     showStages: boolean;
+    declinedContent: StoryContentFacts;
     margin: number;
 };
 
@@ -214,6 +216,12 @@ const STORY_TAG_MORE_CHARS = 3;
 export const STORY_FIT_MARGIN = 0.75;
 const STORY_DRAWDOWN_RATE_BADGE = "99.9 G/S";
 const STORY_SLOWEST_FLOW_ML_S = FLOW_RATE.min / 10;
+const STORY_RATE_MIN_HEIGHT = 32;
+const STORY_RATE_TOP_MIN_GAP = 6;
+const STORY_RATE_BOTTOM_MIN_GAP = 4;
+const STORY_LADDER_TOP_MIN_GAP = 4;
+const STORY_SECTION_MIN_GAP = 4;
+const STORY_TRACE_MIN_FLOOR = 28;
 
 type StoryFigureMaxima = {
     water: string;
@@ -350,6 +358,10 @@ function storyRows(width: number, fontScale: number): StoryRows {
         tag: dotoRowHeight(scaledSize(STORY_TAG_SIZE, width), fontScale)
             + STORY_TAG_PAD_Y * 2 * storyTextScale(width)
     };
+}
+
+function scaledFloor(value: number, width: number, floor: number): number {
+    return Math.max(floor, Math.round(value * storyTextScale(width)));
 }
 
 function tagWidth(tag: string, fontScale: number, width: number): number {
@@ -726,6 +738,24 @@ export function storySummaryBudget(
         ? [...shownTags, "+".repeat(STORY_TAG_MORE_CHARS)]
         : shownTags;
     const ladderRows = stages + (hasBypass ? 1 : 0);
+    const requested: StoryContentFacts = {
+        coffee:  hasCoffee,
+        rating:  hasRating,
+        tags:    tagCount > 0,
+        note:    hasSummaryNote,
+        details: figureExtraRows > 0,
+        flow:    hasRateChart
+    };
+    const traceFull = scaledFloor(STORY_TRACE_HEIGHT, width, STORY_TRACE_MIN_FLOOR);
+    const traceMin = Math.min(
+        traceFull,
+        scaledFloor(STORY_TRACE_MIN_HEIGHT, width, STORY_TRACE_MIN_FLOOR)
+    );
+    const rateFull = scaledFloor(RATE_HEIGHT, width, STORY_RATE_MIN_HEIGHT);
+    const rateTopGap = scaledFloor(RATE_TOP_GAP, width, STORY_RATE_TOP_MIN_GAP);
+    const rateBottomGap = scaledFloor(RATE_BOTTOM_GAP, width, STORY_RATE_BOTTOM_MIN_GAP);
+    const ladderTopGap = scaledFloor(STORY_LADDER_TOP_GAP, width, STORY_LADDER_TOP_MIN_GAP);
+    const sectionGapFloor = scaledFloor(STORY_GAP, width, STORY_SECTION_MIN_GAP);
     const canShowGrindRecipeBadge = figureExtraRows > 0
         && hasGrindRecipeBadge !== false
         && storyGrindRecipeBadgeFits(width, fontScale);
@@ -751,9 +781,9 @@ export function storySummaryBudget(
             showTags && tagLineCount !== null ? rows.tag * tagLineCount : 0
         ].filter((row) => row > 0);
         const surroundingRows = [rows.header, ...optionalRows];
-        const around = surroundingHeight(surroundingRows);
+        const around = surroundingHeight(surroundingRows, sectionGapFloor);
         const ladder = showStages
-            ? STORY_LADDER_TOP_GAP
+            ? ladderTopGap
                 + (stagesUnavailable
                     ? dotoRowHeight(11, fontScale)
                     : ladderRows * stageLadderRungMinHeight(fontScale, BAR_FLOOR, GAP_FLOOR))
@@ -767,7 +797,7 @@ export function storySummaryBudget(
         const summary = STORY_CAPTURE_PADDING * 2
             + rows.name
             + traceHeight
-            + (showRate ? RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP : 0)
+            + (showRate ? rateTopGap + rateFull + rateBottomGap : 0)
             + figureBlock
             + ladder;
         const budgetForFit = {
@@ -795,7 +825,7 @@ export function storySummaryBudget(
         };
     };
 
-    const attempts: {
+    type Attempt = {
         coffee: boolean;
         rating: boolean;
         tags: boolean;
@@ -804,35 +834,30 @@ export function storySummaryBudget(
         stages: boolean;
         note: boolean;
         details: boolean;
-    }[] = [
-        {coffee: hasCoffee, rating: hasRating, tags: tagCount > 0, rate: hasRateChart,
-         trace: STORY_TRACE_HEIGHT, stages: true,
-         note: hasSummaryNote, details: figureExtraRows > 0},
-        {coffee: hasCoffee, rating: hasRating, tags: false, rate: hasRateChart,
-         trace: STORY_TRACE_HEIGHT, stages: true,
-         note: hasSummaryNote, details: figureExtraRows > 0},
-        {coffee: hasCoffee, rating: false, tags: false, rate: hasRateChart,
-         trace: STORY_TRACE_HEIGHT, stages: true,
-         note: hasSummaryNote, details: figureExtraRows > 0},
-        {coffee: false, rating: false, tags: false, rate: hasRateChart,
-         trace: STORY_TRACE_HEIGHT, stages: true,
-         note: hasSummaryNote, details: figureExtraRows > 0},
-        {coffee: false, rating: false, tags: false, rate: false,
-         trace: STORY_TRACE_HEIGHT, stages: true,
-         note: hasSummaryNote, details: figureExtraRows > 0},
-        {coffee: false, rating: false, tags: false, rate: false,
-         trace: STORY_TRACE_MIN_HEIGHT, stages: true,
-         note: hasSummaryNote, details: figureExtraRows > 0},
-        {coffee: false, rating: false, tags: false, rate: false,
-         trace: STORY_TRACE_MIN_HEIGHT, stages: false,
-         note: hasSummaryNote, details: figureExtraRows > 0},
-        {coffee: false, rating: false, tags: false, rate: false,
-         trace: STORY_TRACE_MIN_HEIGHT, stages: false,
-         note: false, details: figureExtraRows > 0},
-        {coffee: false, rating: false, tags: false, rate: false,
-         trace: STORY_TRACE_MIN_HEIGHT, stages: false,
-         note: false, details: false}
-    ];
+    };
+    const baseAttempt: Attempt = {
+        coffee: requested.coffee,
+        rating: requested.rating,
+        tags: requested.tags,
+        rate: requested.flow,
+        trace: traceFull,
+        stages: true,
+        note: requested.note,
+        details: requested.details
+    };
+    const shrinkAttempt: Attempt = {...baseAttempt, trace: traceMin};
+    const attempts: Attempt[] = [baseAttempt, shrinkAttempt];
+    const declineOrder: (keyof Pick<
+        Attempt, "tags" | "rating" | "coffee" | "note" | "details" | "rate"
+    >)[] = ["tags", "rating", "coffee", "note", "details", "rate"];
+    const withoutStages: Attempt = {...shrinkAttempt, stages: false};
+    attempts.push(withoutStages);
+    let declining = withoutStages;
+    for (const key of declineOrder) {
+        if (!declining[key]) continue;
+        declining = {...declining, [key]: false};
+        attempts.push(declining);
+    }
 
     let chosen = attempts[attempts.length - 1];
     let measured = build(
@@ -862,7 +887,7 @@ export function storySummaryBudget(
     const afterBands = margin - bands.spent;
     const grown = growAllowances(afterBands, [
         {id: "trace", floor: chosen.trace, cap: STORY_TRACE_CAP, share: 1},
-        {id: "sectionGap", floor: STORY_GAP, cap: STORY_SECTION_GAP_CAP,
+        {id: "sectionGap", floor: sectionGapFloor, cap: STORY_SECTION_GAP_CAP,
          share: measured.gapSlots}
     ]);
     // If all caps are reached, the true remainder is deliberate breathing room
@@ -872,9 +897,10 @@ export function storySummaryBudget(
 
     return {
         contentHeight,
+        fontScale,
         surroundingHeight: surroundingHeight(
             measured.surroundingRows,
-            grown.values.get("sectionGap") ?? STORY_GAP
+            grown.values.get("sectionGap") ?? sectionGapFloor
         ),
         requiredHeight,
         traceHeight: grown.values.get("trace") ?? chosen.trace,
@@ -883,13 +909,13 @@ export function storySummaryBudget(
         // and is capped at 237, so an allowance behind it was measured as
         // reached in one cell of a 15,552 cell sweep, at a width above any
         // phone we draw on. It bought nothing and is gone.
-        rateHeight: chosen.rate ? RATE_HEIGHT : 0,
-        rateTopGap: chosen.rate ? RATE_TOP_GAP : 0,
-        rateBottomGap: chosen.rate ? RATE_BOTTOM_GAP : 0,
-        sectionGap: grown.values.get("sectionGap") ?? STORY_GAP,
+        rateHeight: chosen.rate ? rateFull : 0,
+        rateTopGap: chosen.rate ? rateTopGap : 0,
+        rateBottomGap: chosen.rate ? rateBottomGap : 0,
+        sectionGap: grown.values.get("sectionGap") ?? sectionGapFloor,
         gapSlots: measured.gapSlots,
         capturePadding: STORY_CAPTURE_PADDING,
-        ladderTopGap: chosen.stages ? STORY_LADDER_TOP_GAP : 0,
+        ladderTopGap: chosen.stages ? ladderTopGap : 0,
         barHeight: bands.barHeight,
         rungGap: bands.rungGap,
         showRateChart: chosen.rate,
@@ -903,6 +929,14 @@ export function storySummaryBudget(
         showDrawdownRateBadge: chosen.details && canShowDrawdownRateBadge,
         showBypassBadge: canShowBypassBadge,
         showStages: chosen.stages,
+        declinedContent: {
+            coffee:  requested.coffee && !chosen.coffee,
+            rating:  requested.rating && !chosen.rating,
+            tags:    requested.tags && !chosen.tags,
+            note:    requested.note && !chosen.note,
+            details: requested.details && !chosen.details,
+            flow:    requested.flow && !chosen.rate
+        },
         margin: contentHeight - requiredHeight
     };
 }

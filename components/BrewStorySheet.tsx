@@ -13,6 +13,7 @@ export type StoryToggleOption = {
     key: string;
     label: string;
     active: boolean;
+    unavailable?: boolean;
     onPress: () => void;
 };
 
@@ -24,7 +25,8 @@ type Props = {
     /** True while the share is in flight. */
     busy: boolean;
     onShare: () => void;
-    toggles?: StoryToggleOption[];
+    toggles?: StoryToggleOption[] | ((width: number) => StoryToggleOption[]);
+    layout?: (width: number) => {card: React.ReactNode; toggles?: StoryToggleOption[]};
     /**
      * The card, drawn at the width the sheet has measured for it.
      *
@@ -32,7 +34,7 @@ type Props = {
      * width, so the width has to be decided here, where the space is, and the
      * summary inside the card has to be told the same number.
      */
-    children: (width: number) => React.ReactNode;
+    children?: (width: number) => React.ReactNode;
 };
 
 function StoryToggleRow({toggles}: {toggles: StoryToggleOption[]}) {
@@ -45,16 +47,24 @@ function StoryToggleRow({toggles}: {toggles: StoryToggleOption[]}) {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.toggleContent}
         >
-            {toggles.map((toggle) => (
+            {toggles.map((toggle) => {
+                const label = toggle.unavailable
+                    ? `${toggle.label} unavailable, this will not fit`
+                    : toggle.label;
+                return (
                 <RailChip
                     key={toggle.key}
-                    testID={`story-toggle-${toggle.key}`}
-                    active={toggle.active}
+                    testID={`story-toggle-${toggle.key}${
+                        toggle.unavailable ? "-unavailable" : ""
+                    }`}
+                    active={toggle.active && !toggle.unavailable}
+                    unavailable={toggle.unavailable}
                     label={toggle.label}
-                    accessibilityLabel={toggle.label}
+                    accessibilityLabel={label}
                     onPress={toggle.onPress}
                 />
-            ))}
+                );
+            })}
         </ScrollView>
     );
 }
@@ -74,7 +84,7 @@ function StoryToggleRow({toggles}: {toggles: StoryToggleOption[]}) {
  * fit would be shared at the size it was shrunk to.
  */
 export default function BrewStorySheet({
-    open, onOpenChange, shotRef, busy, onShare, toggles = [], children
+    open, onOpenChange, shotRef, busy, onShare, toggles = [], layout, children
 }: Props) {
     // Measured from an onLayout event rather than derived from the window: the
     // sheet's own height is a share of the screen the sheet decides, and the
@@ -85,6 +95,13 @@ export default function BrewStorySheet({
         ? 0
         : Math.floor(Math.min(box.width, box.height / STORY_ASPECT));
     const frame = cardWidth > 0 ? storyFrame(cardWidth) : null;
+    const measuredLayout = cardWidth > 0 && layout !== undefined ? layout(cardWidth) : null;
+    const toggleItems = measuredLayout?.toggles ?? (
+        typeof toggles === "function"
+            ? cardWidth > 0 ? toggles(cardWidth) : []
+            : toggles
+    );
+    const card = measuredLayout?.card ?? (cardWidth > 0 ? children?.(cardWidth) : null);
 
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange} title="STORY CARD"
@@ -120,12 +137,12 @@ export default function BrewStorySheet({
                             }}
                         >
                             <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
-                                {children(cardWidth)}
+                                {card}
                             </ViewShot>
                         </View>
                     )}
                 </View>
-                <StoryToggleRow toggles={toggles}/>
+                <StoryToggleRow toggles={toggleItems}/>
                 <XStack paddingHorizontal={SCREEN_PADDING}>
                     <ExportButton label="Share the card" busy={busy}
                                   disabled={cardWidth === 0}

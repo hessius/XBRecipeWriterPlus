@@ -1,7 +1,7 @@
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
-import {Pressable, ScrollView, useWindowDimensions} from "react-native";
+import {PixelRatio, Pressable, ScrollView, useWindowDimensions} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
@@ -39,6 +39,7 @@ import {
     storyContentFacts,
     storyHiddenFromSetting,
     storyHiddenToSetting,
+    storySummaryBudget,
     storyTextScale,
     type StoryContentKey
 } from "@/library/brew/storyCard";
@@ -394,12 +395,6 @@ export default function BrewRecord({recipeLookup}: Props) {
         }
         setStoryCardHidden(storyHiddenToSetting(next));
     }
-    const storyToggles = offeredStoryContent(storyFacts).map((key) => ({
-        key,
-        label:  STORY_TOGGLE_LABELS[key],
-        active: storyContentRequested(key),
-        onPress: () => toggleStoryContent(key)
-    }));
     const storyCoffee = storyContentRequested("coffee") ? storyCoffeeLine(record) : null;
     const storyRating = storyContentRequested("rating") ? judgement.rating : 0;
     const storyTags = storyContentRequested("tags") ? record.tags ?? [] : [];
@@ -611,27 +606,42 @@ export default function BrewRecord({recipeLookup}: Props) {
             <BrewStorySheet open={storyOpen} onOpenChange={setStoryOpen}
                             shotRef={story.shotRef} busy={story.busy}
                             onShare={() => void story.shareImage()}
-                            toggles={storyToggles}>
-                {(cardWidth) => (
+                            layout={(cardWidth) => {
+                                const budget = storySummaryBudget({
+                                    width: cardWidth,
+                                    stages: stages.length,
+                                    hasRateChart: storyHasRateChart,
+                                    hasCoffee: storyCoffee !== null,
+                                    hasRating: storyRating > 0,
+                                    tags: storyTags,
+                                    hasBypass: summary.bypass !== undefined,
+                                    hasGrindRecipeBadge: storyHasDetails
+                                        && summary.grind?.kind === "dial"
+                                        && summary.grind.recipe !== null,
+                                    drawdownRate: storyHasDetails ? summary.drawdownRate : null,
+                                    hasSummaryNote: storyHasNote,
+                                    stagesUnavailable: summary.stagesUnavailable,
+                                    figureExtraRows: storyHasDetails ? 1 : 0,
+                                    fontScale: PixelRatio.getFontScale()
+                                });
+                                const toggles = offeredStoryContent(storyFacts).map((key) => ({
+                                    key,
+                                    label:       STORY_TOGGLE_LABELS[key],
+                                    active:      storyContentRequested(key),
+                                    unavailable: budget.declinedContent[key],
+                                    onPress:     () => toggleStoryContent(key)
+                                }));
+                                return {
+                                    toggles,
+                                    card: (
                     <BrewStoryCard
                         width={cardWidth}
+                        budget={budget}
                         when={`${formatBrewDate(record.startedAt)} · ${formatBrewTime(record.startedAt)}`}
                         accent={accent}
                         rating={storyRating}
                         coffee={storyCoffee}
                         tags={storyTags}
-                        stageCount={stages.length}
-                        hasRateChart={storyHasRateChart}
-                        hasBypass={summary.bypass !== undefined}
-                        hasGrindRecipeBadge={
-                            storyHasDetails
-                            && summary.grind?.kind === "dial"
-                            && summary.grind.recipe !== null
-                        }
-                        drawdownRate={storyHasDetails ? summary.drawdownRate : null}
-                        hasSummaryNote={storyHasNote}
-                        stagesUnavailable={summary.stagesUnavailable}
-                        figureExtraRows={storyHasDetails ? 1 : 0}
                         summary={(budget) => (
                             <BrewSummary
                                 {...summary}
@@ -672,8 +682,9 @@ export default function BrewRecord({recipeLookup}: Props) {
                             />
                         )}
                     />
-                )}
-            </BrewStorySheet>
+                                    )
+                                };
+                            }} />
             <CompareWithSheet
                 open={pickingComparison}
                 candidates={comparisonCandidates}

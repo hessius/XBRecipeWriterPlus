@@ -1,5 +1,5 @@
 import React from "react";
-import {PixelRatio, StyleSheet, View} from "react-native";
+import {StyleSheet, View} from "react-native";
 import {XStack, YStack} from "tamagui";
 
 import BrewStars from "@/components/BrewStars";
@@ -10,7 +10,6 @@ import {SCREEN_PADDING} from "@/constants/layout";
 import {
     storyFrame,
     storyHeaderLayout,
-    storySummaryBudget,
     storyTextScale,
     type StorySummaryBudget
 } from "@/library/brew/storyCard";
@@ -21,6 +20,8 @@ const MAX_SHOWN_TAGS = 4;
 type Props = {
     /** The width the card is drawn at; the height follows from the ratio. */
     width: number;
+    /** The one measured layout decision for this card width and font scale. */
+    budget: StorySummaryBudget;
     /**
      * The very same `BrewSummary` element the record screen draws.
      *
@@ -44,12 +45,6 @@ type Props = {
     coffee: string | null;
     /** The brew's tags, in the order they were given. */
     tags: string[];
-    hasBypass?: boolean;
-    hasGrindRecipeBadge?: boolean;
-    drawdownRate?: number | null;
-    figureExtraRows?: number;
-    hasSummaryNote?: boolean;
-    stagesUnavailable?: boolean;
 };
 
 /**
@@ -69,30 +64,11 @@ type Props = {
  * is a mark that damages the data.
  */
 export default function BrewStoryCard({
-    width, summary, stageCount = 2, when, accent, rating, coffee, tags,
-    hasRateChart = true, hasBypass = false, hasGrindRecipeBadge = undefined,
-    drawdownRate = undefined, figureExtraRows = 0, hasSummaryNote = false,
-    stagesUnavailable = false
+    width, budget, summary, when, accent, rating, coffee, tags
 }: Props) {
     const frame = storyFrame(width);
-    const fontScale = PixelRatio.getFontScale();
     const textScale = storyTextScale(width);
-    const header = storyHeaderLayout(width, fontScale, when);
-    const budget = storySummaryBudget({
-        width,
-        stages: stageCount,
-        hasRateChart,
-        hasCoffee: coffee !== null,
-        hasRating: rating > 0,
-        tags,
-        fontScale,
-        hasBypass,
-        hasGrindRecipeBadge,
-        drawdownRate,
-        figureExtraRows,
-        hasSummaryNote,
-        stagesUnavailable
-    });
+    const header = storyHeaderLayout(width, budget.fontScale, when);
     const shown = tags.slice(0, Math.min(MAX_SHOWN_TAGS, budget.shownTagCount));
     const extra = tags.length - shown.length;
     const summaryNode = typeof summary === "function" ? summary(budget) : summary;
