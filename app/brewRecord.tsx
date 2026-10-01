@@ -85,10 +85,11 @@ function storyGrindForBudget(
 }
 
 function RecordActionRows(
-    {pairs, halfWidth, fullWidth}: {
+    {pairs, halfWidth, fullWidth, accent}: {
         pairs: readonly RecordActionPair[];
         halfWidth: number;
         fullWidth: number;
+        accent: string;
     }
 ) {
     const rows: React.ReactNode[] = [];
@@ -101,8 +102,10 @@ function RecordActionRows(
                 <XStack key={`${action.key}-wide`} testID="record-action-row">
                     <YStack testID={`record-action-${action.key}`} width={fullWidth}>
                         <ExportButton
+                            testID={`record-action-${action.key}-button`}
                             label={action.label}
                             busy={action.busy}
+                            accent={accent}
                             accessibilityLabel={action.accessibilityLabel}
                             onPress={action.onPress}
                         />
@@ -120,8 +123,10 @@ function RecordActionRows(
                     <YStack key={action.key} testID={`record-action-${action.key}`}
                             width={halfWidth}>
                         <ExportButton
+                            testID={`record-action-${action.key}-button`}
                             label={action.label}
                             busy={action.busy}
+                            accent={accent}
                             accessibilityLabel={action.accessibilityLabel}
                             onPress={action.onPress}
                         />
@@ -403,12 +408,20 @@ export default function BrewRecord({recipeLookup}: Props) {
     const storyHasRateChart = hasStoryRateChart && storyContentRequested("flow");
     const actionFullWidth = Math.max(0, width - SCREEN_PADDING * 2);
     const actionHalfWidth = Math.max(0, (actionFullWidth - RECORD_ACTION_GAP) / 2);
-    // This pair can never render as [handoff, export]: the handoff label is
-    // wider than a half slot at every font scale, so EXPORT THE DATA sits alone
-    // under the full-width handoff by design.
-    // Doto Bold at 11 pt and the bounded 1.4 font scale measures SEND TO
-    // BEANCONQUEROR at 226.04 pt. On a 320 pt screen the two-up slot is
-    // 135.5 pt, so this button keeps its own row instead of pairing.
+    // COMPARE and the Beanconqueror handoff each keep a full width row, then
+    // the two short output actions pair. Doto Bold at 11 pt and the bounded
+    // 1.4 font scale measures SEND TO BEANCONQUEROR at 226.04 pt. On a 320 pt
+    // screen the two up slot is 135.5 pt, so the handoff cannot share a row.
+    // Missing full width actions are skipped, leaving EXPORT THE DATA and
+    // SHARE STORY together whenever both are present.
+    const compareAction: RecordAction | null = hasComparisonCandidate ? {
+        key:                "compare",
+        label:              "Compare",
+        busy:               false,
+        accessibilityLabel: "Compare with another brew",
+        wide:               true,
+        onPress:            openComparisonPicker
+    } : null;
     const handoffAction: RecordAction | null = showHandoff ? {
         key:   "handoff",
         label: handoffTarget.buttonLabel,
@@ -417,23 +430,15 @@ export default function BrewRecord({recipeLookup}: Props) {
         onPress: handoff.requestSend
     } : null;
     const actionPairs: RecordActionPair[] = [
+        [compareAction, null],
+        [handoffAction, null],
         [
-            handoffAction,
             {
                 key:   "export",
                 label: "Export the data",
                 busy,
                 onPress: () => void shareData()
-            }
-        ],
-        [
-            hasComparisonCandidate ? {
-                key:                "compare",
-                label:              "Compare",
-                busy:               false,
-                accessibilityLabel: "Compare with another brew",
-                onPress:            openComparisonPicker
-            } : null,
+            },
             {
                 key:                "story",
                 label:              "Share story",
@@ -562,7 +567,8 @@ export default function BrewRecord({recipeLookup}: Props) {
                     <YStack testID="record-actions" width={actionFullWidth} gap="$2">
                     <RecordActionRows pairs={actionPairs}
                                       halfWidth={actionHalfWidth}
-                                      fullWidth={actionFullWidth} />
+                                      fullWidth={actionFullWidth}
+                                      accent={accent} />
                     {handoff.sentAt > 0 && (
                         <Text fontSize={12} color={palette.dim}>
                             {HANDOFF_ALREADY_SENT(

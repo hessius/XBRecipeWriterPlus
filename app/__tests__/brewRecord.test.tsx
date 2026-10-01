@@ -190,6 +190,17 @@ function decodeHandoffUrl(url: string): HandoffEnvelope {
     ) as HandoffEnvelope;
 }
 
+const RECORD_ACTION_KEYS = ["compare", "handoff", "export", "story"] as const;
+type RecordActionKey = typeof RECORD_ACTION_KEYS[number];
+
+function recordActionRows(): RecordActionKey[][] {
+    return screen.getAllByTestId("record-action-row").map((row) =>
+        RECORD_ACTION_KEYS.filter((key) =>
+            within(row).queryByTestId(`record-action-${key}`) !== null
+        )
+    );
+}
+
 describe("brew record", () => {
     beforeEach(() => {
         mockPush.mockReset();
@@ -395,11 +406,74 @@ describe("brew record", () => {
         expect(screen.queryByLabelText("Copy the frame log")).toBeNull();
     });
 
-    it("keeps a lone action in its half-row slot when its pair is absent", async () => {
+    it("orders compare and handoff as full rows before the paired output actions", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(recordActionRows()).toEqual([
+            ["compare"],
+            ["handoff"],
+            ["export", "story"]
+        ]);
+        const compareStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-compare").props.style as StyleProp<ViewStyle>
+        );
+        const handoffStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-handoff").props.style as StyleProp<ViewStyle>
+        );
+        const exportStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
+        );
+        const actionStyle = StyleSheet.flatten(
+            screen.getByTestId("record-actions").props.style as StyleProp<ViewStyle>
+        );
+        const handoffWidth = handoffStyle?.width;
+        const compareWidth = compareStyle?.width;
+        const exportWidth = exportStyle?.width;
+        const actionWidth = actionStyle?.width;
+        expect(typeof compareWidth).toBe("number");
+        expect(typeof handoffWidth).toBe("number");
+        expect(typeof exportWidth).toBe("number");
+        expect(typeof actionWidth).toBe("number");
+
+        expect(compareWidth as number).toBe(actionWidth);
+        expect(handoffWidth as number).toBe(actionWidth);
+        expect(handoffWidth as number).toBeGreaterThan(exportWidth as number);
+    });
+
+    it("keeps export and story paired when compare is absent", async () => {
+        mockBrews = [record];
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(recordActionRows()).toEqual([
+            ["handoff"],
+            ["export", "story"]
+        ]);
+    });
+
+    it("keeps export and story paired when handoff is absent", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
+        sharedSettings().set("beanconquerorHandoff", false);
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(recordActionRows()).toEqual([
+            ["compare"],
+            ["export", "story"]
+        ]);
+    });
+
+    it("pairs export and story when they are the only actions", async () => {
         mockBrews = [record];
         sharedSettings().set("beanconquerorHandoff", false);
 
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(recordActionRows()).toEqual([["export", "story"]]);
         const exportStyle = StyleSheet.flatten(
             screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
         );
@@ -418,33 +492,24 @@ describe("brew record", () => {
 
         expect(exportWidth as number).toBe(storyWidth);
         expect(exportWidth as number).toBeLessThan(actionWidth as number);
-        expect(screen.getAllByTestId("record-action-row")).toHaveLength(2);
-        expect(screen.getByLabelText("Export the data")).toBeTruthy();
-        expect(screen.getByLabelText("Share this brew as a story card")).toBeTruthy();
     });
 
-    it("keeps the Beanconqueror handoff on a full-width row", async () => {
-        mockBrews = [record];
+    it("draws the record actions with the brew's snapshotted accent outline", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
 
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        const handoffStyle = StyleSheet.flatten(
-            screen.getByTestId("record-action-handoff").props.style as StyleProp<ViewStyle>
-        );
-        const exportStyle = StyleSheet.flatten(
-            screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
-        );
-        const actionStyle = StyleSheet.flatten(
-            screen.getByTestId("record-actions").props.style as StyleProp<ViewStyle>
-        );
-        const handoffWidth = handoffStyle?.width;
-        const exportWidth = exportStyle?.width;
-        const actionWidth = actionStyle?.width;
-        expect(typeof handoffWidth).toBe("number");
-        expect(typeof exportWidth).toBe("number");
-        expect(typeof actionWidth).toBe("number");
 
-        expect(handoffWidth as number).toBe(actionWidth);
-        expect(handoffWidth as number).toBeGreaterThan(exportWidth as number);
+        expect(screen.getByTestId("record-action-compare-button-surface"))
+            .toHaveStyle({borderColor: record.accent, backgroundColor: palette.base});
+        expect(screen.getByTestId("record-action-compare-button-label"))
+            .toHaveStyle({color: record.accent});
+        expect(screen.getByTestId("record-action-handoff-button-surface"))
+            .toHaveStyle({borderColor: record.accent, backgroundColor: palette.base});
+        expect(screen.getByTestId("record-action-export-button-surface"))
+            .toHaveStyle({borderColor: record.accent, backgroundColor: palette.base});
+        expect(screen.getByTestId("record-action-story-button-surface"))
+            .toHaveStyle({borderColor: record.accent, backgroundColor: palette.base});
     });
 
     it("does not offer comparison when this is the only brew of its recipe", async () => {

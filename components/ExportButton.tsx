@@ -13,7 +13,7 @@ import {palette} from "@/constants/colors";
  * takes long enough to look like nothing happened: a press with no
  * acknowledgement reads as a press that missed.
  */
-export default function ExportButton({label, busy, disabled = false, accessibilityLabel, onPress}: {
+type Props = {
     label: string;
     /** True while this export is in flight. */
     busy: boolean;
@@ -32,11 +32,24 @@ export default function ExportButton({label, busy, disabled = false, accessibili
      * the rows it acts on and bare read aloud with no rows in earshot.
      */
     accessibilityLabel?: string;
+    /** Recipe accent for the outlined record action treatment. */
+    accent?: string;
+    testID?: string;
     onPress: () => void;
-}) {
+};
+
+export default function ExportButton(
+    {label, busy, disabled = false, accessibilityLabel, accent, testID, onPress}: Props
+) {
     const inert = busy || disabled;
+    const borderColor = accent ?? palette.line;
+    const labelColor = accent ?? palette.dim;
+    const surfaceStyle = accent === undefined
+        ? {borderColor}
+        : {borderColor, backgroundColor: palette.base};
     return (
         <Pressable
+            testID={testID}
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel ?? label}
             accessibilityState={{disabled: inert}}
@@ -44,10 +57,13 @@ export default function ExportButton({label, busy, disabled = false, accessibili
             onPress={onPress}
             style={{flex: 1, opacity: inert ? 0.5 : 1}}
         >
-            <YStack alignItems="center" paddingVertical="$3" borderRadius="$4"
-                    borderWidth={1} borderColor={palette.line}>
+            <YStack testID={testID === undefined ? undefined : `${testID}-surface`}
+                    alignItems="center" paddingVertical="$3" borderRadius="$4"
+                    borderWidth={1}
+                    style={surfaceStyle}>
                 <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
-                               color={palette.dim}>
+                               testID={testID === undefined ? undefined : `${testID}-label`}
+                               color={labelColor}>
                     {busy ? "WORKING…" : label.toUpperCase()}
                 </DotMatrixText>
             </YStack>
