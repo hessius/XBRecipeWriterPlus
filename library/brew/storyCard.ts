@@ -86,6 +86,7 @@ export type StorySummaryBudget = {
     rateHeight: number;
     rateTopGap: number;
     rateBottomGap: number;
+    sectionGap: number;
     capturePadding: number;
     ladderTopGap: number;
     barHeight: number;
@@ -102,6 +103,26 @@ export type StorySummaryBudget = {
 export const STORY_CAPTURE_PADDING = 7;
 export const STORY_TRACE_HEIGHT = 90;
 export const STORY_TRACE_MIN_HEIGHT = 44;
+/**
+ * A story trace can honestly grow well beyond the old compact height, but not
+ * keep stretching. At 237 pt it is still under half the tallest tested content
+ * band, and the temperature labels and legend leave it reading as a chart
+ * rather than as a mostly empty poster.
+ */
+const STORY_TRACE_CAP = 237;
+/**
+ * The flow chart is a secondary chart with one label row and no stage detail.
+ * Five thirds of its shared 84 pt record-screen height keeps flat rates
+ * from being magnified into drama while still making the line easier to read.
+ */
+const STORY_RATE_CAP = 140;
+/**
+ * Section gaps spend what the two charts should not take. Ninety points is
+ * reserved for cases where the rate chart was dropped, matching the default
+ * trace's weight without exceeding it, so it still reads as row grouping rather
+ * than a blank band of its own.
+ */
+const STORY_SECTION_GAP_CAP = 90;
 export const STORY_LADDER_TOP_GAP = 8;
 export const STORY_GAP = 8;
 export const STORY_TEST_WIDTHS = [270, 281, 300, 320, 343, 360, 375, 393, 430];
@@ -172,8 +193,38 @@ function tagRows(tags: string[], width: number, fontScale: number): number {
     return rows;
 }
 
-function surroundingHeight(rows: number[]): number {
-    return rows.reduce((sum, row) => sum + row, 0) + STORY_GAP * rows.length;
+function surroundingHeight(rows: number[], sectionGap = STORY_GAP): number {
+    return rows.reduce((sum, row) => sum + row, 0) + sectionGap * rows.length;
+}
+
+type GrowableAllowance = {
+    id: string;
+    floor: number;
+    cap: number;
+    share: number;
+};
+
+function growAllowances(
+    slack: number,
+    allowances: GrowableAllowance[]
+): {values: Map<string, number>; spent: number} {
+    const values = new Map<string, number>();
+    let remaining = Math.max(0, slack);
+    let spent = 0;
+
+    for (const {id, floor, cap, share} of allowances) {
+        const usableShare = Math.max(1, share);
+        const growBy = Math.min(
+            Math.max(0, cap - floor),
+            Math.floor(remaining / usableShare)
+        );
+        values.set(id, floor + growBy);
+        const cost = growBy * usableShare;
+        spent += cost;
+        remaining -= cost;
+    }
+
+    return {values, spent};
 }
 
 function storyBands(
@@ -184,17 +235,15 @@ function storyBands(
         return {barHeight: BAR_FLOOR, rungGap: GAP_FLOOR, spent: 0};
     }
 
-    let slack = margin;
-    const barMore = Math.min(BAR_CAP - BAR_FLOOR, Math.floor(slack / ladderRows));
-    slack -= barMore * ladderRows;
-
-    const gapMore = Math.min(GAP_CAP - GAP_FLOOR, Math.floor(slack / ladderRows));
-    const spent = (barMore + gapMore) * ladderRows;
+    const grown = growAllowances(margin, [
+        {id: "bar", floor: BAR_FLOOR, cap: BAR_CAP, share: ladderRows},
+        {id: "gap", floor: GAP_FLOOR, cap: GAP_CAP, share: ladderRows}
+    ]);
 
     return {
-        barHeight: BAR_FLOOR + barMore,
-        rungGap:   GAP_FLOOR + gapMore,
-        spent
+        barHeight: grown.values.get("bar") ?? BAR_FLOOR,
+        rungGap:   grown.values.get("gap") ?? GAP_FLOOR,
+        spent:     grown.spent
     };
 }
 
@@ -230,7 +279,8 @@ export function storySummaryBudget(
             showRating ? rows.rating : 0,
             showTags ? rows.tag * tagLineCount : 0
         ].filter((row) => row > 0);
-        const around = surroundingHeight([rows.header, ...optionalRows]);
+        const surroundingRows = [rows.header, ...optionalRows];
+        const around = surroundingHeight(surroundingRows);
         const ladder = showStages
             ? STORY_LADDER_TOP_GAP
                 + (stagesUnavailable
@@ -253,7 +303,8 @@ export function storySummaryBudget(
             around,
             summary,
             required: around + summary,
-            tagLineCount
+            tagLineCount,
+            gapSlots: surroundingRows.length
         };
     };
 
@@ -301,16 +352,31 @@ export function storySummaryBudget(
     const bands = chosen.stages ? storyBands(margin, ladderRows) : {
         barHeight: BAR_FLOOR, rungGap: GAP_FLOOR, spent: 0
     };
-    const requiredHeight = measured.required + bands.spent;
+    const afterBands = margin - bands.spent;
+    const grown = growAllowances(afterBands, [
+        {id: "trace", floor: chosen.trace, cap: STORY_TRACE_CAP, share: 1},
+        ...(chosen.rate
+            ? [{id: "rate", floor: RATE_HEIGHT, cap: STORY_RATE_CAP, share: 1}]
+            : []),
+        {id: "sectionGap", floor: STORY_GAP, cap: STORY_SECTION_GAP_CAP,
+         share: measured.gapSlots}
+    ]);
+    // If all caps are reached, the true remainder is deliberate breathing room
+    // from the card's centred content stack. It must not enter the safe top or
+    // bottom bands, which are reserved for platform story furniture.
+    const requiredHeight = measured.required + bands.spent + grown.spent;
 
     return {
         contentHeight,
-        surroundingHeight: measured.around,
+        surroundingHeight: measured.around
+            + ((grown.values.get("sectionGap") ?? STORY_GAP) - STORY_GAP)
+              * measured.gapSlots,
         requiredHeight,
-        traceHeight: chosen.trace,
-        rateHeight: chosen.rate ? RATE_HEIGHT : 0,
+        traceHeight: grown.values.get("trace") ?? chosen.trace,
+        rateHeight: chosen.rate ? grown.values.get("rate") ?? RATE_HEIGHT : 0,
         rateTopGap: chosen.rate ? RATE_TOP_GAP : 0,
         rateBottomGap: chosen.rate ? RATE_BOTTOM_GAP : 0,
+        sectionGap: grown.values.get("sectionGap") ?? STORY_GAP,
         capturePadding: STORY_CAPTURE_PADDING,
         ladderTopGap: chosen.stages ? STORY_LADDER_TOP_GAP : 0,
         barHeight: bands.barHeight,

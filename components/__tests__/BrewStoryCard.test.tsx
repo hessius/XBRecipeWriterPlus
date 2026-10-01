@@ -1,5 +1,5 @@
 import React from "react";
-import {Text} from "react-native";
+import {StyleSheet, Text, type StyleProp, type ViewStyle} from "react-native";
 import {screen} from "@testing-library/react-native";
 
 import BrewStoryCard from "@/components/BrewStoryCard";
@@ -51,6 +51,26 @@ describe("the story card", () => {
         const calls = renderSummary.mock.calls as unknown as [[StorySummaryBudget]];
         const budget = calls[0][0];
         expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+    });
+
+    it("renders the section gap the story budget allocated", async () => {
+        const renderSummary = jest.fn(() => summary);
+        await show({
+            width: 600,
+            summary: renderSummary,
+            stageCount: 1,
+            coffee: "Huila · Washed",
+            rating: 4,
+            tags: ["filter", "washed", "morning"]
+        });
+
+        const calls = renderSummary.mock.calls as unknown as [[StorySummaryBudget]];
+        const budget = calls[0][0] as StorySummaryBudget & {sectionGap?: number};
+        expect(budget.sectionGap).toBeGreaterThan(8);
+        const style = StyleSheet.flatten(
+            screen.getByTestId("story-content").props.style as StyleProp<ViewStyle>
+        );
+        expect(style?.gap).toBe(budget.sectionGap);
     });
 
     it("stands the frame up at nine by sixteen", async () => {

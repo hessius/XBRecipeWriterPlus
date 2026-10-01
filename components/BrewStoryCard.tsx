@@ -89,7 +89,8 @@ export default function BrewStoryCard({
             style={[styles.frame, {width: frame.width, height: frame.height}]}
         >
             <View style={{height: frame.safeTop}} testID="story-safe-top"/>
-            <YStack flex={1} justifyContent="center" gap="$2">
+            <YStack testID="story-content" flex={1} justifyContent="center"
+                    gap={budget.sectionGap}>
                 <XStack paddingHorizontal={SCREEN_PADDING}
                         alignItems="center" justifyContent="space-between">
                     <Wordmark fontSize={16} plusColor={accent}/>

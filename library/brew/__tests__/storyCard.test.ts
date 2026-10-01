@@ -18,6 +18,29 @@ import {dotoRowHeight} from "@/library/dotoMetrics";
 const brew = (over: Partial<BrewRecord> = {}) =>
     ({id: "a", ...over}) as BrewRecord;
 
+function storySweepWorstSlack(): number {
+    let worst = 0;
+    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+        for (const fontScale of STORY_TEST_FONT_SCALES) {
+            for (const width of STORY_TEST_WIDTHS) {
+                const budget = storySummaryBudget({
+                    width,
+                    stages,
+                    hasRateChart: true,
+                    hasCoffee: true,
+                    hasRating: true,
+                    tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
+                    fontScale,
+                    hasBypass: true,
+                    figureExtraRows: 1
+                });
+                worst = Math.max(worst, budget.margin);
+            }
+        }
+    }
+    return worst;
+}
+
 describe("the frame", () => {
     it("is nine by sixteen", () => {
         const frame = storyFrame(1080);
@@ -111,6 +134,10 @@ describe("the frame", () => {
         }
     });
 
+    it("leaves only integer rounding slack after growing the story content", () => {
+        expect(storySweepWorstSlack()).toBeLessThanOrEqual(6);
+    });
+
     it("fits every story sheet width with no retained rate chart", () => {
         for (const width of STORY_TEST_WIDTHS) {
             for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
@@ -172,13 +199,6 @@ describe("the frame", () => {
     });
 
     it("budgets the rate chart's top gap, drawn height and bottom gap separately", () => {
-        const withoutRate = storySummaryBudget({
-            width: 600,
-            stages: 0,
-            hasRateChart: false,
-            hasCoffee: false,
-            hasRating: false
-        });
         const withRate = storySummaryBudget({
             width: 600,
             stages: 0,
@@ -187,11 +207,9 @@ describe("the frame", () => {
             hasRating: false
         });
 
-        expect(withRate.rateHeight).toBe(RATE_HEIGHT);
+        expect(withRate.rateHeight).toBeGreaterThanOrEqual(RATE_HEIGHT);
         expect(withRate.rateTopGap).toBe(RATE_TOP_GAP);
         expect(withRate.rateBottomGap).toBe(RATE_BOTTOM_GAP);
-        expect(withRate.requiredHeight - withoutRate.requiredHeight)
-            .toBe(RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP);
     });
 
     it("budgets one smaller figure row instead of the removed caption lines", () => {
