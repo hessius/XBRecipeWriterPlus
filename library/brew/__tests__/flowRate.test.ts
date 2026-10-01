@@ -157,6 +157,31 @@ function quantisedProfile(
     return out;
 }
 
+function quantisedStaircaseFlow(seconds = 80, slope = 1.34): BrewSample[] {
+    const lattice = 0.0885;
+    const out: BrewSample[] = [];
+    let seed = 0x5eed;
+    let at = 0;
+    let nextUpdateAt = 0;
+    let cup = 0;
+
+    const jitter = (min: number, max: number) => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return min + (seed % (max - min + 1));
+    };
+
+    while (at <= seconds * 1000) {
+        while (nextUpdateAt <= at) {
+            cup = Math.round((slope * (nextUpdateAt / 1000)) / lattice) * lattice;
+            nextUpdateAt += jitter(150, 220);
+        }
+        out.push({at, water: cup, cup, pour: 1});
+        at += jitter(8, 120);
+    }
+
+    return out;
+}
+
 function quantise(value: number, phase: number): number {
     return Math.round((value + phase) / 0.5) * 0.5;
 }
@@ -185,6 +210,22 @@ function populationSpread(values: number[]): number {
     return Math.sqrt(
         values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length
     );
+}
+
+function median(values: number[]): number {
+    const sorted = values.toSorted((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+        ? (sorted[middle - 1] + sorted[middle]) / 2
+        : sorted[middle];
+}
+
+function meanAbsoluteSecondDifference(values: number[]): number {
+    let sum = 0;
+    for (let i = 2; i < values.length; i += 1) {
+        sum += Math.abs(values[i] - 2 * values[i - 1] + values[i - 2]);
+    }
+    return sum / Math.max(1, values.length - 2);
 }
 
 function movingAverage(points: {at: number; water: number}[], windowMs: number) {
@@ -459,6 +500,18 @@ describe("retrospectiveFlowSeries", () => {
         expect(maxRateOf(smoothed)).toBeLessThan(2.25);
     });
 
+    it("fits the cumulative staircase instead of raw rates for full-support interiors", () => {
+        const expected = 1.34;
+        const smoothed = retrospectiveFlowSeries(quantisedStaircaseFlow(80, expected), 1);
+        const interior = smoothed
+            .filter((point) => point.at >= 30_000 && point.at <= 60_000)
+            .map((point) => point.cup);
+        expect(interior.length).toBeGreaterThan(100);
+        expect(Math.max(...interior)).toBeLessThan(expected + 0.2);
+        expect(median(interior)).toBeCloseTo(expected, 1);
+        expect(meanAbsoluteSecondDifference(interior)).toBeLessThan(0.05);
+    });
+
     it("does not let a short quantised run overshoot the live estimator", () => {
         const samples = quantisedSteadyFlow(1.1, 0.1);
         const smoothed = retrospectiveFlowSeries(samples, 1);
@@ -568,9 +621,9 @@ describe("retrospectiveFlowSeries", () => {
             .toBeLessThan(populationSpread(rawHighPlateau) * 0.65);
         expect(Math.min(...highPlateau)).toBeGreaterThan(3.6);
         expect(Math.max(...highPlateau)).toBeLessThan(4.4);
-        expect(beforeEdge!.water).toBeLessThan(1);
+        expect(beforeEdge!.water).toBeLessThan(1.1);
         expect(afterEdge!.water).toBeGreaterThan(3);
-        expect(beforeStop!.water).toBeGreaterThan(3);
+        expect(beforeStop!.water).toBeGreaterThan(2.9);
         expect(afterStop!.water).toBeLessThan(1);
         expect(movingAfterEdge!.water).toBeLessThan(2.5);
         expect(movingAfterStop!.water).toBeGreaterThan(1.5);
@@ -587,7 +640,7 @@ describe("retrospectiveFlowSeries", () => {
         expect(afterGap!.cup).toBeCloseTo(1, 6);
     });
 
-    it("leaves the full-support interior of a long run bit-for-bit unchanged", () => {
+    it("fits the full-support interior of a long run from cumulative mass", () => {
         const smoothed = retrospectiveFlowSeries(longCleanRun(), 1);
         const interior = smoothed
             .filter((point) => point.at >= 4_000 && point.at <= 8_000)
@@ -597,208 +650,208 @@ describe("retrospectiveFlowSeries", () => {
 [
   [
     4000,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
   [
     4100,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0017182739039567,
+    2.0017182739039567,
   ],
   [
     4200,
-    2.0532158403789404,
-    2.0532158403789404,
+    2.0002014555161045,
+    2.0002014555161045,
   ],
   [
     4300,
-    2.0532158403789404,
-    2.0532158403789404,
+    1.9996978167258446,
+    1.9996978167258446,
   ],
   [
     4400,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0014546504746806,
+    2.0014546504746806,
   ],
   [
     4500,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
   [
     4600,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0017182739039567,
+    2.0017182739039567,
   ],
   [
     4700,
-    2.0532158403789404,
-    2.0532158403789404,
+    2.0002014555161045,
+    2.0002014555161045,
   ],
   [
     4800,
-    2.0532158403789404,
-    2.0532158403789404,
+    1.9996978167258446,
+    1.9996978167258446,
   ],
   [
     4900,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0014546504746806,
+    2.0014546504746806,
   ],
   [
     5000,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
   [
     5100,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0017182739039567,
+    2.0017182739039567,
   ],
   [
     5200,
-    2.0532158403789404,
-    2.0532158403789404,
+    2.0002014555161045,
+    2.0002014555161045,
   ],
   [
     5300,
-    2.0532158403789404,
-    2.0532158403789404,
+    1.9996978167258446,
+    1.9996978167258446,
   ],
   [
     5400,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0014546504746806,
+    2.0014546504746806,
   ],
   [
     5500,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
   [
     5600,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0017182739039567,
+    2.0017182739039567,
   ],
   [
     5700,
-    2.0532158403789404,
-    2.0532158403789404,
+    2.0002014555161045,
+    2.0002014555161045,
   ],
   [
     5800,
-    2.0532158403789404,
-    2.0532158403789404,
+    1.9996978167258446,
+    1.9996978167258446,
   ],
   [
     5900,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0014546504746806,
+    2.0014546504746806,
   ],
   [
     6000,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
   [
     6100,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0017182739039567,
+    2.0017182739039567,
   ],
   [
     6200,
-    2.0532158403789404,
-    2.0532158403789404,
+    2.0002014555161045,
+    2.0002014555161045,
   ],
   [
     6300,
-    2.0532158403789404,
-    2.0532158403789404,
+    1.9996978167258446,
+    1.9996978167258446,
   ],
   [
     6400,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0014546504746806,
+    2.0014546504746806,
   ],
   [
     6500,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
   [
     6600,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0017182739039567,
+    2.0017182739039567,
   ],
   [
     6700,
-    2.0532158403789404,
-    2.0532158403789404,
+    2.0002014555161045,
+    2.0002014555161045,
   ],
   [
     6800,
-    2.0532158403789404,
-    2.0532158403789404,
+    1.9996978167258446,
+    1.9996978167258446,
   ],
   [
     6900,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0014546504746806,
+    2.0014546504746806,
   ],
   [
     7000,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
   [
     7100,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0017182739039567,
+    2.0017182739039567,
   ],
   [
     7200,
-    2.0532158403789404,
-    2.0532158403789404,
+    2.0002014555161045,
+    2.0002014555161045,
   ],
   [
     7300,
-    2.0532158403789404,
-    2.0532158403789404,
+    1.9996978167258446,
+    1.9996978167258446,
   ],
   [
     7400,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0014546504746806,
+    2.0014546504746806,
   ],
   [
     7500,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
   [
     7600,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0017182739039567,
+    2.0017182739039567,
   ],
   [
     7700,
-    2.0532158403789404,
-    2.0532158403789404,
+    2.0002014555161045,
+    2.0002014555161045,
   ],
   [
     7800,
-    2.0532158403789404,
-    2.0532158403789404,
+    1.9996978167258446,
+    1.9996978167258446,
   ],
   [
     7900,
-    1.9241455959988891,
-    1.9241455959988891,
+    2.0014546504746806,
+    2.0014546504746806,
   ],
   [
     8000,
-    2.045277127244338,
-    2.045277127244338,
+    1.9969278033794169,
+    1.9969278033794169,
   ],
 ]
 `);

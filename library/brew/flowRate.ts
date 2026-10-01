@@ -528,33 +528,28 @@ function retrospectiveFitAt(
     const last = window[window.length - 1];
     if (first === undefined || last === undefined) return null;
 
+    const cumulative = window.length < RETROSPECTIVE_FLOW_MIN_SAMPLES
+        ? cumulativeSlopeAt(window, pointAt, of)
+        : cumulativeQuadraticDerivativeAt(window, pointAt, windowMs, of);
+    if (cumulative === null) return null;
+
     const leftSupportMs = pointAt - first.fromAt;
     const rightSupportMs = last.at - pointAt;
     const halfWindowMs = windowMs / 2;
     if (
-        last.at - first.fromAt < windowMs ||
         leftSupportMs < halfWindowMs ||
         rightSupportMs < halfWindowMs
     ) {
-        // Endpoint windows have less support, so they get stricter fits. With
-        // fewer than the minimum samples, the cumulative path falls back to a
-        // linear slope because a quadratic fit would be invented. Otherwise it
-        // uses the quadratic cumulative derivative, blended back toward the
-        // linear slope by support squared so short endpoints cannot flatten
-        // into a shelf. The result is capped by the verified endpoint rate fit
-        // so cumulative curvature cannot claim flow before the first drop or
-        // after the run has ended. Finally, negative endpoint noise clamps to
-        // zero here, where the rate becomes a claim.
-        const cumulative = window.length < RETROSPECTIVE_FLOW_MIN_SAMPLES
-            ? cumulativeSlopeAt(window, pointAt, of)
-            : cumulativeQuadraticDerivativeAt(window, pointAt, windowMs, of);
-        if (cumulative === null) return null;
+        // The cumulative fit is support-blended inside
+        // cumulativeQuadraticDerivativeAt. The cap is endpoint-only: it stops
+        // edge curvature claiming flow before the first drop or after the run
+        // has ended, while full centred windows already have complete support.
         const rateFit = savitzkyGolayAt(window, pointAt, of);
         const fitted = rateFit === null ? cumulative : Math.min(cumulative, rateFit);
         return Math.max(0, fitted);
     }
 
-    return savitzkyGolayAt(window, pointAt, of);
+    return Math.max(0, cumulative);
 }
 
 function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
