@@ -522,23 +522,31 @@ function cumulativeQuadraticDerivativeAt(
 }
 
 function retrospectiveFitAt(
-    window: RawFlowPoint[], pointAt: number, windowMs: number, of: "cup" | "water"
+    run: RawFlowPoint[], window: RawFlowPoint[], pointAt: number, windowMs: number,
+    of: "cup" | "water"
 ): number | null {
+    const runFirst = run[0];
+    const runLast = run[run.length - 1];
     const first = window[0];
     const last = window[window.length - 1];
-    if (first === undefined || last === undefined) return null;
+    if (
+        runFirst === undefined ||
+        runLast === undefined ||
+        first === undefined ||
+        last === undefined
+    ) {
+        return null;
+    }
 
     const cumulative = window.length < RETROSPECTIVE_FLOW_MIN_SAMPLES
         ? cumulativeSlopeAt(window, pointAt, of)
         : cumulativeQuadraticDerivativeAt(window, pointAt, windowMs, of);
     if (cumulative === null) return null;
 
-    const leftSupportMs = pointAt - first.fromAt;
-    const rightSupportMs = last.at - pointAt;
     const halfWindowMs = windowMs / 2;
     if (
-        leftSupportMs < halfWindowMs ||
-        rightSupportMs < halfWindowMs
+        pointAt - halfWindowMs < runFirst.fromAt ||
+        pointAt + halfWindowMs > runLast.at
     ) {
         // The cumulative fit is support-blended inside
         // cumulativeQuadraticDerivativeAt. The cap is endpoint-only: it stops
@@ -560,8 +568,8 @@ function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
     const windowMs = retrospectiveWindowMs(run);
     return run.flatMap((point) => {
         const window = retrospectiveWindowFor(run, point.at, windowMs);
-        const cup = retrospectiveFitAt(window, point.at, windowMs, "cup");
-        const water = retrospectiveFitAt(window, point.at, windowMs, "water");
+        const cup = retrospectiveFitAt(run, window, point.at, windowMs, "cup");
+        const water = retrospectiveFitAt(run, window, point.at, windowMs, "water");
         if (cup === null || water === null) return [];
         return {
             at:    point.at,
@@ -591,15 +599,27 @@ function hasRetrospectiveSupport<T extends FlowPoint>(run: T[]): boolean {
 export function retrospectiveFlowSeries(
     samples: BrewSample[], stages: number
 ): FlowPoint[] {
-    const smoothedRuns = contiguousRateRuns(rawRateSeries(samples, stages))
-        .map((run) => {
-            const adjacentMs = rateAdjacentAllowance(run);
-            // For a non-first point in a split run, `fromAt` is the immediately
-            // preceding finite sample, so `at - fromAt` cannot exceed that
-            // run's splitting gap. This filter cannot punch a mid-run hole;
-            // the deliberately per-run allowance is narrower than a whole
-            // series allowance when dense drawdown sits inside a sparse brew.
-            return run.filter((point) => point.at - point.fromAt <= adjacentMs);
+    const runs = contiguousRateRuns(rawRateSeries(samples, stages));
+    const smoothedRuns = runs
+        .map((run, index) => {
+            const first = run[0];
+            const previousRun = runs[index - 1];
+            const previous = previousRun?.[previousRun.length - 1];
+            const firstGapMs = first === undefined ? 0 : first.at - first.fromAt;
+            if (first !== undefined && previous !== undefined && first.fromAt <= previous.at) {
+                // This point spans the split gap. The split has already said
+                // that interval is not contiguous evidence, so it cannot
+                // donate mass to either side's cumulative fit.
+                return run.slice(1);
+            }
+            if (firstGapMs > rateAdjacentAllowance(run)) {
+                // The first rate point has no prior point inside its run, so
+                // run splitting cannot judge this interval from point spacing.
+                // Treat an over-cadence first interval as a boundary gap only;
+                // every later point is kept so measured mass is conserved.
+                return run.slice(1);
+            }
+            return run;
         })
         .filter(hasRetrospectiveSupport)
         .map(smoothRetrospectiveRun);

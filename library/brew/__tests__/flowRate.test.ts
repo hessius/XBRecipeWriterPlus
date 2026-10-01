@@ -254,6 +254,40 @@ function consecutiveRates(samples: BrewSample[]) {
     return out;
 }
 
+function integrateCupRate(series: {at: number; cup: number}[]): number {
+    let total = 0;
+    for (let i = 1; i < series.length; i += 1) {
+        total += ((series[i].cup + series[i - 1].cup) / 2) *
+            ((series[i].at - series[i - 1].at) / 1000);
+    }
+    return total;
+}
+
+function quantisedVariableCadenceRun(): {samples: BrewSample[]; fromAt: number; mass: number} {
+    const samples: BrewSample[] = [];
+    let at = 0;
+    const lattice = 0.0885;
+
+    for (let i = 0; i < 950; i += 1) {
+        samples.push({at, water: 0, cup: 0, pour: 1});
+        at += 210;
+    }
+
+    at += 2_000;
+    const fromAt = at;
+    samples.push({at, water: 0, cup: 0, pour: 1});
+
+    for (let i = 0; i < 500; i += 1) {
+        const gap = i % 5 === 4 ? 200 : 50;
+        at += gap;
+        const exact = 2 * ((at - fromAt) / 1000);
+        const cup = Math.round(exact / lattice) * lattice;
+        samples.push({at, water: cup, cup, pour: 1});
+    }
+
+    return {samples, fromAt, mass: samples[samples.length - 1].cup};
+}
+
 /** A finished record with only the fields the rate arithmetic reads. */
 function record(over: Partial<BrewRecord> = {}): BrewRecord {
     return {
@@ -512,6 +546,26 @@ describe("retrospectiveFlowSeries", () => {
         expect(meanAbsoluteSecondDifference(interior)).toBeLessThan(0.05);
     });
 
+    it("conserves mass across variable cadence quantised runs", () => {
+        const {samples, fromAt, mass} = quantisedVariableCadenceRun();
+        const smoothed = retrospectiveFlowSeries(samples, 1)
+            .filter((point) => point.at >= fromAt);
+        const estimated = integrateCupRate(smoothed);
+
+        expect(estimated / mass).toBeGreaterThan(0.98);
+        expect(estimated / mass).toBeLessThan(1.02);
+        expect(smoothed.length).toBeGreaterThan(450);
+    });
+
+    it("uses the centred fit through the true interior of a quantised run", () => {
+        const {samples, fromAt} = quantisedVariableCadenceRun();
+        const interior = retrospectiveFlowSeries(samples, 1)
+            .filter((point) => point.at >= fromAt + 12_000 && point.at <= fromAt + 28_000);
+
+        expect(interior.length).toBeGreaterThan(180);
+        expect(meanAbsoluteSecondDifference(interior.map((point) => point.cup))).toBeLessThan(0.01);
+    });
+
     it("does not let a short quantised run overshoot the live estimator", () => {
         const samples = quantisedSteadyFlow(1.1, 0.1);
         const smoothed = retrospectiveFlowSeries(samples, 1);
@@ -638,6 +692,33 @@ describe("retrospectiveFlowSeries", () => {
         expect(afterGap).toBeDefined();
         expect(afterGap!.water).toBeCloseTo(1, 6);
         expect(afterGap!.cup).toBeCloseTo(1, 6);
+    });
+
+    it("keeps the first valid interval after a non-finite reading", () => {
+        const first = ramp(3, 2);
+        const recovered: BrewSample[] = [
+            {at: 4_000, water: Number.NaN, cup: Number.NaN, pour: 1},
+            {at: 8_000, water: 6, cup: 6, pour: 1},
+            ...ramp(12, 2, 6, 8_000).slice(1)
+        ];
+        const smoothed = retrospectiveFlowSeries([...first, ...recovered], 1);
+
+        expect(smoothed.find((point) => point.at === 8_100)).toBeDefined();
+        expect(smoothed.find((point) => point.at === 8_100)!.cup).toBeCloseTo(2, 6);
+    });
+
+    it("does not use a long post-reset interval as contiguous evidence", () => {
+        const first = ramp(3, 2);
+        const recovered: BrewSample[] = [
+            {at: 4_000, water: Number.NaN, cup: Number.NaN, pour: 1},
+            {at: 8_000, water: 6, cup: 6, pour: 1},
+            {at: 12_000, water: 14, cup: 14, pour: 1},
+            ...ramp(4, 2, 14, 12_000).slice(1)
+        ];
+        const smoothed = retrospectiveFlowSeries([...first, ...recovered], 1);
+
+        expect(smoothed.find((point) => point.at === 12_000)).toBeUndefined();
+        expect(smoothed.find((point) => point.at === 12_100)).toBeDefined();
     });
 
     it("fits the full-support interior of a long run from cumulative mass", () => {
