@@ -1,5 +1,5 @@
 import React from "react";
-import {PixelRatio, processColor} from "react-native";
+import {PixelRatio} from "react-native";
 
 import BrewRateChart from "@/components/BrewRateChart";
 import BrewTrace from "@/components/BrewTrace";
@@ -11,7 +11,6 @@ import {
     rateChartPlotTop
 } from "@/library/brew/rateChartGeometry";
 import {traceTimeExtent} from "@/library/brew/brewShape";
-import {timeFlowGradient} from "@/library/brew/timeFlowTail";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {retrospectiveFlowSeries, type FlowPoint} from "@/library/brew/flowRate";
 import Pour from "@/library/Pour";
@@ -71,12 +70,6 @@ function matrixTranslateY(value: number[]): number {
     return value[5];
 }
 
-function brushRef(value: unknown): string | undefined {
-    return typeof value === "object" && value !== null && "brushRef" in value
-        ? String((value as {brushRef: unknown}).brushRef)
-        : undefined;
-}
-
 function sample(at: number, water: number, cup: number, pour: number): BrewSample {
     return {at, water, cup, pour};
 }
@@ -106,70 +99,6 @@ describe("BrewRateChart", () => {
         expect(svgText(getByTestId("rate-chart-label"))).toBe("FLOW RATE");
         expect(getByTestId("rate-chart-cup")).toBeTruthy();
         expect(getByTestId("rate-chart-water")).toBeTruthy();
-    });
-
-    it("leaves the time-flow tail off by default", async () => {
-        const {getByTestId} = await renderWithProviders(
-            <BrewRateChart series={series} accent={ACCENT} width={WIDTH} maxT={5} />
-        );
-
-        expect(getByTestId("rate-chart-water").props.stroke).toEqual(
-            expect.objectContaining({payload: processColor(ACCENT)})
-        );
-        expect(getByTestId("rate-chart-cup").props.stroke).not.toHaveProperty("brushRef");
-    });
-
-    it("draws the time-flow tail faint at the start and full at the end", async () => {
-        const {getByTestId} = await renderWithProviders(
-            <BrewRateChart
-                series={series}
-                accent={ACCENT}
-                width={WIDTH}
-                maxT={5}
-                emphasizeTimeFlow
-            />
-        );
-
-        const gradient = timeFlowGradient(WIDTH);
-        expect(brushRef(getByTestId("rate-chart-water").props.stroke))
-            .toContain("rate-water-comet");
-        expect(gradient.gradientUnits).toBe("userSpaceOnUse");
-        expect(gradient.x1).toBe(0);
-        expect(gradient.x2).toBe(WIDTH);
-        expect(gradient.start.offset).toBe("0");
-        expect(gradient.end.offset).toBe("1");
-        expect(gradient.start.opacity).toBeGreaterThan(0);
-        expect(gradient.start.opacity).toBeLessThan(gradient.end.opacity);
-        expect(gradient.end.opacity).toBe(1);
-    });
-
-    it("gives two mounted rate charts different gradient ids", async () => {
-        const r = await renderWithProviders(
-            <>
-                <BrewRateChart
-                    series={series}
-                    accent={ACCENT}
-                    width={WIDTH}
-                    maxT={5}
-                    emphasizeTimeFlow
-                />
-                <BrewRateChart
-                    series={series}
-                    accent={palette.warn}
-                    width={WIDTH - 40}
-                    maxT={5}
-                    emphasizeTimeFlow
-                />
-            </>
-        );
-
-        const waterComets = r.getAllByTestId("rate-chart-water");
-        const cupComets = r.getAllByTestId("rate-chart-cup");
-
-        expect(brushRef(waterComets[0].props.stroke))
-            .not.toBe(brushRef(waterComets[1].props.stroke));
-        expect(brushRef(cupComets[0].props.stroke))
-            .not.toBe(brushRef(cupComets[1].props.stroke));
     });
 
     it("draws nothing at all when the stream did not survive", async () => {

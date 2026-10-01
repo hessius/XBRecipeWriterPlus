@@ -16,7 +16,6 @@ import {stageAtX, stageBounds} from "@/library/brew/stagePick";
 import {bandY, hasSetTemperature, temperatureBand,
         temperatureInBand, temperatureMarks} from "@/library/brew/tempBand";
 import {channelStyle, type Role} from "@/library/brew/traceStyle";
-import {timeFlowGradient} from "@/library/brew/timeFlowTail";
 import type Pour from "@/library/Pour";
 
 type Props = {
@@ -86,13 +85,6 @@ type Props = {
      * two screens do not disagree about what a bypass is.
      */
     bypass?: BypassView;
-    /**
-     * Paint observed strokes with a left-to-right opacity tail.
-     *
-     * Off by default because most screens are analytical records; the story
-     * card opts in when it wants the still image to read as elapsed time.
-     */
-    emphasizeTimeFlow?: boolean;
 };
 /** The gradient's opacity at the line and at the floor. */
 const FILL_TOP = 0.28;
@@ -195,13 +187,10 @@ export default function BrewTrace({
     axis,
     holding = false, role = "subject", planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
-    compact = false, stages, selectedIndex = null, onSelectStage, bypass,
-    emphasizeTimeFlow = false
+    compact = false, stages, selectedIndex = null, onSelectStage, bypass
 }: Props) {
     const id = useId().replace(/[^a-zA-Z0-9]/g, "");
     const waterFillId = `trace-water-fill-${id}`;
-    const waterCometId = `trace-water-comet-${id}`;
-    const cupCometId = `trace-cup-comet-${id}`;
     const plan = planPoints(pours);
     const water = livePoints(samples, "water");
     const cup = livePoints(samples, "cup");
@@ -237,11 +226,6 @@ export default function BrewTrace({
     const planStyle = channelStyle("plan", {
         accent, dashed: planDashed, planColour: planColor
     });
-    const waterStroke = emphasizeTimeFlow ? `url(#${waterCometId})` : waterStyle.stroke;
-    const cupStroke = emphasizeTimeFlow ? `url(#${cupCometId})` : cupStyle.stroke;
-    const waterStrokeStyle = {...waterStyle, stroke: waterStroke};
-    const cupStrokeStyle = {...cupStyle, stroke: cupStroke};
-    const comet = timeFlowGradient(box.width);
     // The stages a temperature belongs to. `stages ?? pours` is the same
     // fallback the tap bounds use: a summary passes `pours={[]}` and supplies
     // `stages`, so reading `pours` alone would draw nothing in history.
@@ -302,40 +286,6 @@ export default function BrewTrace({
         return (
             <Svg width={width} height={height} accessibilityRole="image"
                  accessibilityLabel={accessibilityLabel}>
-                {emphasizeTimeFlow && (
-                    <Defs>
-                        <LinearGradient
-                            id={waterCometId}
-                            gradientUnits={comet.gradientUnits}
-                            x1={comet.x1}
-                            y1={comet.y1}
-                            x2={comet.x2}
-                            y2={comet.y2}
-                        >
-                            <Stop offset={comet.start.offset}
-                                  stopColor={waterStyle.stroke}
-                                  stopOpacity={comet.start.opacity} />
-                            <Stop offset={comet.end.offset}
-                                  stopColor={waterStyle.stroke}
-                                  stopOpacity={comet.end.opacity} />
-                        </LinearGradient>
-                        <LinearGradient
-                            id={cupCometId}
-                            gradientUnits={comet.gradientUnits}
-                            x1={comet.x1}
-                            y1={comet.y1}
-                            x2={comet.x2}
-                            y2={comet.y2}
-                        >
-                            <Stop offset={comet.start.offset}
-                                  stopColor={cupStyle.stroke}
-                                  stopOpacity={comet.start.opacity} />
-                            <Stop offset={comet.end.offset}
-                                  stopColor={cupStyle.stroke}
-                                  stopOpacity={comet.end.opacity} />
-                        </LinearGradient>
-                    </Defs>
-                )}
                 {planPath !== "" && (
                     <Path
                         testID="trace-plan"
@@ -350,7 +300,7 @@ export default function BrewTrace({
                         testID="trace-cup"
                         d={cupPath}
                         fill="none"
-                        {...cupStrokeStyle}
+                        {...cupStyle}
                     />
                 )}
                 {waterPath !== "" && (
@@ -358,7 +308,7 @@ export default function BrewTrace({
                         testID="trace-water"
                         d={waterPath}
                         fill="none"
-                        {...waterStrokeStyle}
+                        {...waterStyle}
                     />
                 )}
             </Svg>
@@ -409,40 +359,6 @@ export default function BrewTrace({
                         <Stop offset="0" stopColor={accent} stopOpacity={FILL_TOP} />
                         <Stop offset="1" stopColor={accent} stopOpacity={FILL_BOTTOM} />
                     </LinearGradient>
-                    {emphasizeTimeFlow && (
-                        <>
-                            <LinearGradient
-                                id={waterCometId}
-                                gradientUnits={comet.gradientUnits}
-                                x1={comet.x1}
-                                y1={comet.y1}
-                                x2={comet.x2}
-                                y2={comet.y2}
-                            >
-                                <Stop offset={comet.start.offset}
-                                      stopColor={waterStyle.stroke}
-                                      stopOpacity={comet.start.opacity} />
-                                <Stop offset={comet.end.offset}
-                                      stopColor={waterStyle.stroke}
-                                      stopOpacity={comet.end.opacity} />
-                            </LinearGradient>
-                            <LinearGradient
-                                id={cupCometId}
-                                gradientUnits={comet.gradientUnits}
-                                x1={comet.x1}
-                                y1={comet.y1}
-                                x2={comet.x2}
-                                y2={comet.y2}
-                            >
-                                <Stop offset={comet.start.offset}
-                                      stopColor={cupStyle.stroke}
-                                      stopOpacity={comet.start.opacity} />
-                                <Stop offset={comet.end.offset}
-                                      stopColor={cupStyle.stroke}
-                                      stopOpacity={comet.end.opacity} />
-                            </LinearGradient>
-                        </>
-                    )}
                 </Defs>
                 {selectionBand && (
                     <Rect
@@ -549,7 +465,7 @@ export default function BrewTrace({
                         testID="trace-cup"
                         d={cupPath}
                         fill="none"
-                        {...cupStrokeStyle}
+                        {...cupStyle}
                     />
                 )}
                 {waterPath !== "" && (
@@ -557,7 +473,7 @@ export default function BrewTrace({
                         testID="trace-water"
                         d={waterPath}
                         fill="none"
-                        {...waterStrokeStyle}
+                        {...waterStyle}
                     />
                 )}
                 {bypassBox && (

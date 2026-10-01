@@ -663,7 +663,6 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 showRateChart={budget.showRateChart}
                                 showStages={budget.showStages}
                                 textScale={storyTextScale(cardWidth)}
-                                emphasizeTimeFlow
                                 // Always still: a capture taken mid-travel
                                 // freezes the name half-scrolled, and unlike
                                 // the screen's own summary there is no moment
