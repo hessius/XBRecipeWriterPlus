@@ -279,15 +279,20 @@ describe("the frame", () => {
         expectAllMasksFit(STORY_TEST_WIDTHS);
     });
 
+    /**
+     * The cell count is stated as a literal rather than derived from the same
+     * lists the sweep walks. Derived from them it would be a tautology: cutting
+     * STORY_TEST_WIDTHS to one entry shrinks both sides and still passes, which
+     * is how a sweep silently stops covering anything. These literals are the
+     * coverage this proof claims, so narrowing a list has to be deliberate.
+     */
     it("keeps every drawn story row inside the card width", () => {
         const sweep = storyHorizontalSweep();
 
-        expect(sweep.visited).toBe(
-            MACHINE_CARD_MAX_STAGES
-            * STORY_TEST_FONT_SCALES.length
-            * STORY_TEST_WIDTHS.length
-            * 128
-        );
+        expect(STORY_TEST_WIDTHS.length).toBe(13);
+        expect(STORY_TEST_FONT_SCALES.length).toBe(4);
+        expect(MACHINE_CARD_MAX_STAGES).toBe(10);
+        expect(sweep.visited).toBe(66_560);
     });
 
     it("uses an explicit horizontal fit tolerance", () => {
@@ -420,12 +425,7 @@ describe("the frame", () => {
     it("bounds slack after growing every story content mask", () => {
         const sweep = storySweepWorstSlack();
 
-        expect(sweep.visited).toBe(
-            MACHINE_CARD_MAX_STAGES
-            * STORY_TEST_FONT_SCALES.length
-            * STORY_TEST_WIDTHS.length
-            * 128
-        );
+        expect(sweep.visited).toBe(66_560);
         expect(sweep.cell).toMatchObject({
             width: 430,
             stages: 1,
