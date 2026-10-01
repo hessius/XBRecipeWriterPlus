@@ -37,6 +37,13 @@ import {tagKey} from "./tagKey";
 /** A record as it comes back out, with whether its stream survived retention. */
 export type StoredBrew = BrewRecord & {hasStream: boolean};
 
+/** The newest brew that still has a stored machine frame log. */
+export type StoredFrameLogSummary = {
+    brewId: string;
+    recipeName: string;
+    startedAt: number;
+};
+
 /** How a recipe has gone: how many cups, and what the evidence says. */
 export type BrewSummary = {
     /** Counted brews only: cups the user could drink. */
@@ -993,6 +1000,22 @@ class BrewDatabase {
             "SELECT frames FROM brew_frames WHERE brewId = ?;", [id]
         );
         return rows.length > 0 ? rows[0].frames : "";
+    }
+
+    /**
+     * The newest brew whose stored frame log can still be copied.
+     *
+     * Reads only the row needed to draw the door. The frames themselves are
+     * fetched by `frames` when the copy button is pressed.
+     */
+    public latestFrameLogSummary(): StoredFrameLogSummary | null {
+        const row = this.db.getFirstSync<StoredFrameLogSummary>(
+            `SELECT f.brewId, b.recipeName, b.startedAt
+             FROM brew_frames f JOIN brews b ON b.id = f.brewId
+             WHERE f.frames <> ''
+             ORDER BY b.startedAt DESC LIMIT 1;`
+        );
+        return row ?? null;
     }
 
     public remove(id: string): void {

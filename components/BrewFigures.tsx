@@ -258,6 +258,10 @@ export default function BrewFigures(
                             ) : (
                                 <Figure
                                     testID="figures-grind"
+                                    // GRIND SIZE is 80.4 pt at font scale 1.0
+                                    // and 106.83 pt at the bounded 1.4 scale,
+                                    // overflowing a 102.33 pt slot on a
+                                    // 393 pt screen.
                                     label="GRIND"
                                     value={grind.kind === "off" ? "OFF" : String(grind.dial)}
                                     color={palette.text}

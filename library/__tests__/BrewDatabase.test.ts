@@ -1123,6 +1123,22 @@ describe("the frame log of a brew", () => {
         expect(db.frames("old")).toBe("");
         expect(db.frames("new")).toBe(log);
     });
+
+    it("names the newest brew that still has a stored log without reading samples", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "old", recipeName: "Old brew", startedAt: 1}), stream, log);
+        db.insert(record({id: "empty", recipeName: "Empty brew", startedAt: 3}), stream);
+        db.insert(record({id: "new", recipeName: "New brew", startedAt: 2}), stream, log);
+
+        sampleReads = 0;
+
+        expect(db.latestFrameLogSummary()).toEqual({
+            brewId: "new",
+            recipeName: "New brew",
+            startedAt: 2
+        });
+        expect(sampleReads).toBe(0);
+    });
 });
 
 describe("a history restored from a backup", () => {

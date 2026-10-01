@@ -2,7 +2,6 @@
 import React from "react";
 import {Linking, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
-import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
 import {gunzipSync} from "fflate";
@@ -35,10 +34,6 @@ beforeEach(() => {
     sharedSettings().set("beanconquerorHandoff", true);
 });
 
-/**
- * `frames` is optional here only: the real `open()` always returns one, but a
- * test that is not about the frame log should not have to say so.
- */
 let mockOpened: BrewRecordOpenResult = null;
 
 // Settable per test — defaults to the `id` case; set to `{latest: "1"}` for
@@ -379,10 +374,68 @@ describe("brew record", () => {
         expect(screen.getByText(/that brew is no longer here/i)).toBeTruthy();
     });
 
-    it("offers both exports", async () => {
+    it("offers the pruned record actions", async () => {
+        mockOpened = {record, samples: []};
+
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        expect(screen.getByLabelText("Save as image")).toBeTruthy();
+
+        expect(screen.getByLabelText(HANDOFF_TARGETS[0].buttonLabel)).toBeTruthy();
         expect(screen.getByLabelText("Export the data")).toBeTruthy();
+        expect(screen.getByLabelText("Share this brew as a story card")).toBeTruthy();
+        expect(screen.queryByLabelText("Save as image")).toBeNull();
+        expect(screen.queryByLabelText("Copy the frame log")).toBeNull();
+    });
+
+    it("keeps a lone action in its half-row slot when its pair is absent", async () => {
+        mockBrews = [record];
+        sharedSettings().set("beanconquerorHandoff", false);
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        const exportStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
+        );
+        const storyStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-story").props.style as StyleProp<ViewStyle>
+        );
+        const actionStyle = StyleSheet.flatten(
+            screen.getByTestId("record-actions").props.style as StyleProp<ViewStyle>
+        );
+        const exportWidth = exportStyle?.width;
+        const storyWidth = storyStyle?.width;
+        const actionWidth = actionStyle?.width;
+        expect(typeof exportWidth).toBe("number");
+        expect(typeof storyWidth).toBe("number");
+        expect(typeof actionWidth).toBe("number");
+
+        expect(exportWidth as number).toBe(storyWidth);
+        expect(exportWidth as number).toBeLessThan(actionWidth as number);
+        expect(screen.getAllByTestId("record-action-row")).toHaveLength(2);
+        expect(screen.getByLabelText("Export the data")).toBeTruthy();
+        expect(screen.getByLabelText("Share this brew as a story card")).toBeTruthy();
+    });
+
+    it("keeps the Beanconqueror handoff on a full-width row", async () => {
+        mockBrews = [record];
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+        const handoffStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-handoff").props.style as StyleProp<ViewStyle>
+        );
+        const exportStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
+        );
+        const actionStyle = StyleSheet.flatten(
+            screen.getByTestId("record-actions").props.style as StyleProp<ViewStyle>
+        );
+        const handoffWidth = handoffStyle?.width;
+        const exportWidth = exportStyle?.width;
+        const actionWidth = actionStyle?.width;
+        expect(typeof handoffWidth).toBe("number");
+        expect(typeof exportWidth).toBe("number");
+        expect(typeof actionWidth).toBe("number");
+
+        expect(handoffWidth as number).toBe(actionWidth);
+        expect(handoffWidth as number).toBeGreaterThan(exportWidth as number);
     });
 
     it("does not offer comparison when this is the only brew of its recipe", async () => {
@@ -470,7 +523,7 @@ describe("brew record", () => {
 
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            expect(screen.getByLabelText("Save as image")).toBeTruthy();
+            expect(screen.getByLabelText("Export the data")).toBeTruthy();
             expect(screen.queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
         });
 
@@ -717,7 +770,7 @@ describe("brew record", () => {
             mockOpened = {record: {...record, outcome: "failed"}, samples: []};
             await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-            expect(screen.getByLabelText("Save as image")).toBeTruthy();
+            expect(screen.getByLabelText("Export the data")).toBeTruthy();
             expect(screen.queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
         });
     });
@@ -728,7 +781,6 @@ describe("brew record", () => {
         mockParams = {latest: "1"};
         mockBrews  = [record];
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        expect(screen.getByLabelText("Save as image")).toBeTruthy();
         expect(screen.getByLabelText("Export the data")).toBeTruthy();
         // The record was found — no "not found" message.
         expect(screen.queryByText(/that brew is no longer here/i)).toBeNull();
@@ -740,44 +792,6 @@ describe("brew record", () => {
         mockOpened = null;
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.getByText(/that brew is no longer here/i)).toBeTruthy();
-    });
-
-    // ── Finding 2: pressing the export buttons triggers the share ────────────
-
-    it("pressing Save as image calls capture and then shareAsync with the captured URI", async () => {
-        (Sharing.shareAsync as jest.Mock).mockClear();
-        const {getByLabelText} = await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        fireEvent.press(getByLabelText("Save as image"));
-        await waitFor(() =>
-            expect(Sharing.shareAsync).toHaveBeenCalledWith(
-                "file:///mock/brew.png",
-                expect.objectContaining({mimeType: "image/png"})
-            )
-        );
-    });
-
-    // ── Finding: what the exported PNG actually contains ─────────────────────
-
-    it("offers the image as a PNG the photo library will accept", async () => {
-        (Sharing.shareAsync as jest.Mock).mockClear();
-        const {getByLabelText} = await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        fireEvent.press(getByLabelText("Save as image"));
-        // Without a UTI, iOS offers Files but not Save Image.
-        await waitFor(() =>
-            expect(Sharing.shareAsync).toHaveBeenCalledWith(
-                "file:///mock/brew.png",
-                expect.objectContaining({UTI: "public.png"})
-            )
-        );
-    });
-
-    it("captures the stage ladder along with the trace and the figures", async () => {
-        await renderWithProviders(
-            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => twoPours)}} />
-        );
-        // "viewshot" is the mock's own testID: the capture boundary itself.
-        const capture = within(screen.getByTestId("viewshot"));
-        expect(capture.getByTestId("ladder")).toBeTruthy();
     });
 
     it("paints the captured area so the PNG is not a white sheet with no margin", async () => {
@@ -807,30 +821,6 @@ describe("brew record", () => {
     });
 
     // ── Finding 3: double-press while in flight ──────────────────────────────
-
-    it("a second press on Save as image while the first is in flight does nothing", async () => {
-        (Sharing.shareAsync as jest.Mock).mockClear();
-        // Block the first press inside isAvailableAsync so the guard stays set
-        // when the second press fires.
-        let releaseFirst!: (v: boolean) => void;
-        (Sharing.isAvailableAsync as jest.Mock).mockImplementationOnce(
-            () => new Promise<boolean>(r => { releaseFirst = r; })
-        );
-        const {getByLabelText} = await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        // First press — the guard is set synchronously; the share hangs inside
-        // isAvailableAsync and cannot complete until we call releaseFirst.
-        await fireEvent.press(getByLabelText("Save as image"));
-        // Second press — isSharingImageRef is still true, so this returns early.
-        await fireEvent.press(getByLabelText("Save as image"));
-        // Release the first press and let it finish. Awaited, because the
-        // export now clears the stage highlight and waits a paint before it
-        // reaches `isAvailableAsync` — so the resolver does not exist yet at
-        // the moment the presses return.
-        await waitFor(() => expect(releaseFirst).toBeDefined());
-        releaseFirst(true);
-        await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledTimes(1));
-        expect(Sharing.shareAsync).toHaveBeenCalledTimes(1);
-    });
 
     it("a second press on Export the data while the first is in flight does nothing", async () => {
         (Sharing.shareAsync as jest.Mock).mockClear();
@@ -891,7 +881,8 @@ describe("a verdict on a record", () => {
         mockOpened = {record: {...record, rating: 5, pinned: true}, samples: []};
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-        expect(screen.getByTestId("record-pinned")).toBeTruthy();
+        expect(screen.getByTestId("record-pinned")).toHaveTextContent("TRACE KEPT");
+        expect(screen.getByTestId("record-release")).toHaveTextContent("LET IT EXPIRE");
         await fireEvent.press(screen.getByTestId("record-release"));
 
         expect(mockJudgementStore.setPinned).toHaveBeenCalledWith("brew-1", false);
@@ -902,8 +893,6 @@ describe("a verdict on a record", () => {
 
     it("keeps the control out of the captured picture", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        expect(within(screen.getByTestId("viewshot")).queryByTestId("judgement-stars-1"))
-            .toBeNull();
         expect(screen.queryByTestId("judgement-stars-1")).not.toBeNull();
     });
 });
@@ -977,72 +966,6 @@ describe("brew record's stage detail", () => {
         expect(screen.getByText("STAGE 1")).toBeTruthy();
     });
 
-    it("takes the highlight off the screen before it photographs it", async () => {
-        // The band and the tint answer a tap, and a PNG cannot be tapped.
-        await renderWithProviders(<BrewRecord recipeLookup={lookup} />);
-        await fireEvent.press(screen.getByTestId("rung-1"));
-        expect(screen.getByTestId("trace-band")).toBeTruthy();
-
-        await fireEvent.press(screen.getByLabelText("Save as image"));
-        await waitFor(() => expect(screen.queryByTestId("trace-band")).toBeNull());
-        await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalled());
-    });
-});
-
-/**
- * The frame log is the only account of what the machine actually said, and it
- * is kept per brew because the machine's own is in memory and dies with a JS
- * reload. It is offered here rather than on the console because by the time
- * anyone knows a brew went wrong, the brew is over and this is the screen they
- * are looking at.
- */
-describe("the frame log of a brew", () => {
-    const log = "18:51:44.123  ←  58 02 07 4A 9E  event 40522 (1)";
-
-    beforeEach(() => {
-        mockParams = {id: "brew-1"};
-        (Clipboard.setStringAsync as jest.Mock).mockClear();
-        sharedSettings().set("machineConsoleAcknowledged", true);
-    });
-
-    afterEach(() => {
-        sharedSettings().set("machineConsoleAcknowledged", false);
-    });
-
-    it("copies what the machine said, for a brew that kept a log", async () => {
-        mockOpened = {record: {...record, outcome: "failed", failure: "noWater"},
-                      samples: [], frames: log};
-        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-
-        await fireEvent.press(screen.getByLabelText("Copy the frame log"));
-
-        expect(Clipboard.setStringAsync).toHaveBeenCalledWith(log);
-    });
-
-    /**
-     * Offering a copy that yields an empty clipboard reads as the app having
-     * lost the log rather than never having had one — a brew from before this
-     * existed, or one whose log the retention sweep has taken.
-     */
-    it("offers nothing to copy for a brew with no log", async () => {
-        mockOpened = {record, samples: [], frames: ""};
-        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-
-        expect(screen.queryByLabelText("Copy the frame log")).toBeNull();
-    });
-
-    /**
-     * A wall of hex means nothing to someone who is not debugging the machine,
-     * so it rides the same seven-tap gate as the console and the card
-     * diagnostics rather than sitting in every owner's way.
-     */
-    it("stays hidden until the machine console has been found", async () => {
-        sharedSettings().set("machineConsoleAcknowledged", false);
-        mockOpened = {record, samples: [], frames: log};
-        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-
-        expect(screen.queryByLabelText("Copy the frame log")).toBeNull();
-    });
 });
 
 describe("bypass on the record screen", () => {
@@ -1193,8 +1116,8 @@ describe("a brew the app did not watch", () => {
     it("offers neither export", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup}/>);
 
-        expect(screen.queryByText("Save as image")).toBeNull();
-        expect(screen.queryByText("Export the data")).toBeNull();
+        expect(screen.queryByLabelText("Export the data")).toBeNull();
+        expect(screen.queryByLabelText("Share this brew as a story card")).toBeNull();
     });
 });
 
@@ -1222,7 +1145,7 @@ describe("brew record's story card", () => {
         // Pressed once, not in a retry loop: the sheet hides the screen behind
         // it from a screen reader, so the button this press found is gone by
         // the time a second attempt would look for it.
-        fireEvent.press(screen.getByLabelText("Make a story card to share"));
+        fireEvent.press(screen.getByLabelText("Share this brew as a story card"));
         await waitFor(() => expect(screen.getByTestId("story-stage")).toBeTruthy());
         fireEvent(screen.getByTestId("story-stage"), "layout", {
             nativeEvent: {layout: {width, height: Math.ceil(width * 16 / 9) + 100, x: 0, y: 0}}
@@ -1232,7 +1155,8 @@ describe("brew record's story card", () => {
 
     it("offers a story card on a brew that was watched", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-        expect(screen.getByLabelText("Make a story card to share")).toBeTruthy();
+        expect(screen.getByLabelText("Share this brew as a story card")).toBeTruthy();
+        expect(screen.getByText("SHARE STORY")).toBeTruthy();
     });
 
     it("offers no story card for a brew nobody watched", async () => {
@@ -1241,7 +1165,7 @@ describe("brew record's story card", () => {
             samples: []
         };
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-        expect(screen.queryByLabelText("Make a story card to share")).toBeNull();
+        expect(screen.queryByLabelText("Share this brew as a story card")).toBeNull();
     });
 
     it("shows the card before it is shared", async () => {
@@ -1259,12 +1183,12 @@ describe("brew record's story card", () => {
             expect(card.getByTestId("ladder")).toBeTruthy();
         });
 
-    it("leaves the in-place capture alone, so the export still photographs the screen",
+    it("leaves the in-place capture alone while the story sheet is open",
         async () => {
             await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
             await openCard();
             // Two summaries are mounted, and exactly one of them is the node
-            // the existing export captures. Hidden elements included: the
+            // kept as the in-place capture. Hidden elements included: the
             // sheet has taken the screen behind it out of the tree a query
             // walks by default, and the capture target is down there.
             expect(screen.getAllByTestId("brew-capture", {includeHiddenElements: true}))

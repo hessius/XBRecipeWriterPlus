@@ -10,7 +10,6 @@ export type HistoryStore = {
     all: () => StoredBrew[];
     get: (id: string) => StoredBrew | null;
     samples: (id: string) => BrewSample[];
-    frames: (id: string) => string;
     remove: (id: string) => void;
     clear: () => void;
     insert: (record: BrewRecord, samples: BrewSample[], frames?: string) => void;
@@ -200,11 +199,11 @@ export function useBrewHistory(store?: HistoryStore) {
 
     function open(
         id: string
-    ): {record: StoredBrew; samples: BrewSample[]; frames: string} | null {
+    ): {record: StoredBrew; samples: BrewSample[]} | null {
         const found = database.get(id);
         // The mini-bar and a deep link can both outlive the record they name.
         if (found === null) return null;
-        return {record: found, samples: database.samples(id), frames: database.frames(id)};
+        return {record: found, samples: database.samples(id)};
     }
 
     function remove(id: string): void {

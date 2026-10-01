@@ -70,7 +70,7 @@ describe("brew record handoff gate", () => {
 
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-        expect(screen.getByLabelText("Save as image")).toBeTruthy();
+        expect(screen.getByLabelText("Export the data")).toBeTruthy();
         expect(screen.queryByLabelText(handoffTarget.buttonLabel)).toBeNull();
     });
 });

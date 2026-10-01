@@ -14,6 +14,8 @@ import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
+import BrewDatabase, {type StoredFrameLogSummary} from "@/library/BrewDatabase";
+import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {COMMANDS, type Command, frameFor, type Tier} from "@/library/machine/commands";
 import {
     frameLogText, readingOf, stateName, toHex
@@ -107,6 +109,10 @@ function stateText(state: MachineStateReading | null): string {
     if (state === null) return "Machine state: none yet";
     const hex = `0x${state.value.toString(16).padStart(2, "0")}`;
     return `Machine state: ${hex} ${stateName(state.value)} · ${state.changed ? "changed" : "repeated"} ${state.at}`;
+}
+
+function storedLogWhen(log: StoredFrameLogSummary): string {
+    return `${formatBrewDate(log.startedAt)} · ${formatBrewTime(log.startedAt)}`;
 }
 
 function appendLog(
@@ -263,6 +269,7 @@ function CommandRow({command, onSend}: CommandRowProps) {
  */
 export default function MachineConsole() {
     const {machine, status, connect} = useMachine();
+    const [brewDatabase] = useState(() => new BrewDatabase());
     const [acknowledged, setAcknowledged] = useSetting("machineConsoleAcknowledged");
     const [confirmations, setConfirmations] = useSetting("machineConsoleConfirmations");
     const [bypassTempEncoding, setBypassTempEncoding] = useSetting("bypassTempEncoding");
@@ -354,16 +361,35 @@ export default function MachineConsole() {
         // live log only holds what arrived while this screen was mounted, but a
         // brew is watched from the brew sheet with the console closed, so its
         // frames are only here. The weight stream is absent by design (see
-        // `retainFrame`); everything diagnostic — states, events, the recipe
-        // send, anything unknown — is present and spans the whole session.
+        // `retainFrame`); everything diagnostic, states, events, the recipe
+        // send and anything unknown, is present and spans the whole session.
         const block = [
+            "This session machine log",
+            "",
             ...connectionLines,
             "",
             frameLogText(machine.frameHistory)
         ].join("\n");
         void Clipboard.setStringAsync(block).then(() => notify({
             tone:    "success",
-            message: "Log copied"
+            message: "Session log copied"
+        }));
+    }
+
+    function copyStoredLog(summary: StoredFrameLogSummary) {
+        const frames = brewDatabase.frames(summary.brewId);
+        if (frames.length === 0) return;
+        const block = [
+            "Last recorded brew frame log",
+            `Brew: ${summary.recipeName}`,
+            `When: ${storedLogWhen(summary)}`,
+            `Record: ${summary.brewId}`,
+            "",
+            frames
+        ].join("\n");
+        void Clipboard.setStringAsync(block).then(() => notify({
+            tone:    "success",
+            message: "Stored brew log copied"
         }));
     }
 
@@ -383,6 +409,8 @@ export default function MachineConsole() {
             </YStack>
         );
     }
+
+    const storedLog = brewDatabase.latestFrameLogSummary();
 
     return (
         <YStack flex={1} backgroundColor={palette.base}>
@@ -485,16 +513,16 @@ export default function MachineConsole() {
                     </YStack>
                 </SettingsSection>
 
-                <SettingsSection title="Log">
+                <SettingsSection title="Session log">
                     <YStack gap="$2" paddingVertical="$3" paddingHorizontal="$4">
-                        <Button size="$3" accessibilityRole="button" accessibilityLabel="Copy log"
+                        <Button size="$3" accessibilityRole="button" accessibilityLabel="Copy session log"
                                 borderColor={palette.line} borderWidth={1}
                                 backgroundColor={palette.raised} color={palette.text}
                                 onPress={copyLog}>
-                            Copy log
+                            Copy session log
                         </Button>
                         {log.length === 0 ? (
-                            <Text fontSize={12} color={palette.dim}>Nothing sent or received yet.</Text>
+                            <Text fontSize={12} color={palette.dim}>Nothing sent or received this session.</Text>
                         ) : (
                             <TextInput multiline editable={false}
                                        accessibilityLabel="Frame log"
@@ -505,6 +533,27 @@ export default function MachineConsole() {
                         )}
                     </YStack>
                 </SettingsSection>
+
+                {storedLog !== null && (
+                    <SettingsSection title="Stored brew log">
+                        <YStack gap="$2" paddingVertical="$3" paddingHorizontal="$4">
+                            <Text fontSize={12} color={palette.dim}>
+                                This copies saved frames from the last recorded brew. The log above
+                                is only this session.
+                            </Text>
+                            <Text fontSize={12} color={palette.dim}>
+                                {`${storedLog.recipeName} · ${storedLogWhen(storedLog)}`}
+                            </Text>
+                            <Button size="$3" accessibilityRole="button"
+                                    accessibilityLabel="Copy last recorded brew log"
+                                    borderColor={palette.line} borderWidth={1}
+                                    backgroundColor={palette.raised} color={palette.text}
+                                    onPress={() => copyStoredLog(storedLog)}>
+                                Copy last recorded brew log
+                            </Button>
+                        </YStack>
+                    </SettingsSection>
+                )}
             </ScrollView>
 
             <XbrwSheet open={pending !== null} onOpenChange={(next) => {if (!next) setPending(null);}}

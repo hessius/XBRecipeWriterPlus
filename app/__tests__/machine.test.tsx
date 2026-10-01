@@ -4,10 +4,13 @@ import * as Clipboard from "expo-clipboard";
 
 import Console from "@/app/machine";
 import {sharedSettings} from "@/hooks/useSetting";
+import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {renderWithProviders} from "@/test-utils/render";
 
 // Prefixed with `mock` so babel-jest lets the hoisted factory reference them.
 const mockSend = jest.fn();
+const mockLatestFrameLogSummary = jest.fn();
+const mockStoredFrames = jest.fn();
 let frameListener: ((
     direction: "sent" | "received", frame: Uint8Array, parsed: unknown, source?: string
 ) => void) | null = null;
@@ -77,9 +80,21 @@ jest.mock("expo-clipboard", () => ({
     setStringAsync: jest.fn().mockResolvedValue(true)
 }));
 
+jest.mock("@/library/BrewDatabase", () => ({
+    __esModule: true,
+    default: jest.fn().mockImplementation(() => ({
+        latestFrameLogSummary: mockLatestFrameLogSummary,
+        frames: mockStoredFrames
+    }))
+}));
+
 describe("the machine console", () => {
     beforeEach(() => {
         send.mockClear();
+        mockLatestFrameLogSummary.mockReset();
+        mockLatestFrameLogSummary.mockReturnValue(null);
+        mockStoredFrames.mockReset();
+        mockStoredFrames.mockReturnValue("");
         frameListener = null;
         sharedSettings().set("machineConsoleAcknowledged", false);
         sharedSettings().set("machineConsoleConfirmations", true);
@@ -131,6 +146,24 @@ describe("the machine console", () => {
         await renderWithProviders(<Console/>);
         expect(screen.getByText(/nothing here is verified/i)).toBeTruthy();
         expect(screen.queryByLabelText(/send/i)).toBeNull();
+    });
+
+    it("does not offer the stored brew log before the diagnostics gate opens", async () => {
+        mockLatestFrameLogSummary.mockReturnValue({
+            brewId: "brew-1", recipeName: "Ethiopia Guji", startedAt: 1_000_000
+        });
+
+        await renderWithProviders(<Console/>);
+
+        expect(screen.queryByRole("button", {name: "Copy last recorded brew log"})).toBeNull();
+    });
+
+    it("does not offer a stored brew log when no stored log exists", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+
+        await renderWithProviders(<Console/>);
+
+        expect(screen.queryByRole("button", {name: "Copy last recorded brew log"})).toBeNull();
     });
 
     it("sends an inert command without asking twice", async () => {
@@ -333,10 +366,54 @@ describe("the machine console", () => {
         });
         await renderWithProviders(<Console/>);
 
-        await fireEvent.press(screen.getByLabelText("Copy log"));
+        await fireEvent.press(screen.getByLabelText("Copy session log"));
 
         const copied = (Clipboard.setStringAsync as jest.Mock).mock.calls[0][0];
+        expect(copied).toContain("This session machine log");
         expect(copied).toContain("13:00:00.000  ←  58 02 07 57  state 0x22 starting");
+    });
+
+    it("copies the stored brew log instead of the session log", async () => {
+        (Clipboard.setStringAsync as jest.Mock).mockClear();
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        mockLatestFrameLogSummary.mockReturnValue({
+            brewId: "brew-1", recipeName: "Ethiopia Guji", startedAt: 1_000_000
+        });
+        mockStoredFrames.mockReturnValue(
+            "stored 18:51:44.123  ←  58 02 07 0C  state 0x0c no_water"
+        );
+        mockMachine.frameHistory.push({
+            at:        Date.parse("2026-09-06T13:00:00.000Z"),
+            direction: "received",
+            frame:     Uint8Array.from([0x58, 0x02, 0x07, 0x57]),
+            parsed:    {kind: "status", state: 0x22}
+        });
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByRole("button", {name: "Copy last recorded brew log"}));
+
+        const copied = (Clipboard.setStringAsync as jest.Mock).mock.calls[0][0];
+        expect(mockStoredFrames).toHaveBeenCalledWith("brew-1");
+        expect(copied).toContain("stored 18:51:44.123");
+        expect(copied).not.toContain("13:00:00.000");
+    });
+
+    it("names the brew that supplied the stored log", async () => {
+        (Clipboard.setStringAsync as jest.Mock).mockClear();
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        const startedAt = Date.parse("2026-09-06T13:05:00.000");
+        mockLatestFrameLogSummary.mockReturnValue({
+            brewId: "brew-9", recipeName: "Colombia Pink Bourbon", startedAt
+        });
+        mockStoredFrames.mockReturnValue("stored frames");
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByRole("button", {name: "Copy last recorded brew log"}));
+
+        const copied = (Clipboard.setStringAsync as jest.Mock).mock.calls[0][0];
+        expect(copied).toContain("Brew: Colombia Pink Bourbon");
+        expect(copied).toContain(`When: ${formatBrewDate(startedAt)} · ${formatBrewTime(startedAt)}`);
+        expect(copied).toContain("Record: brew-9");
     });
 
     it("shows no machine state until a status frame arrives, then decodes the state name", async () => {
