@@ -21,6 +21,7 @@ export const RATE_LABEL_SIZE = 9;
 export const RATE_ADJACENT_MS = 150;
 const RATE_ADJACENT_MULTIPLE = 3;
 const RATE_MAX_ADJACENT_MS = 5_000;
+const RATE_RUNS = new WeakMap<readonly FlowPoint[], readonly FlowPoint[][]>();
 
 export function medianRateGap<T extends FlowPoint>(series: T[]): number {
     const gaps: number[] = [];
@@ -60,8 +61,17 @@ export function contiguousRateRuns<T extends FlowPoint>(series: T[]): T[][] {
     return runs;
 }
 
+export function rememberRateRuns<T extends FlowPoint>(series: T[], runs: T[][]): T[] {
+    RATE_RUNS.set(series, runs);
+    return series;
+}
+
+export function rateRunsOf<T extends FlowPoint>(series: T[]): T[][] {
+    return (RATE_RUNS.get(series) as T[][] | undefined) ?? contiguousRateRuns(series);
+}
+
 export function hasDrawableRateRun(series: FlowPoint[]): boolean {
-    return contiguousRateRuns(series).some((run) => run.length >= 2);
+    return rateRunsOf(series).some((run) => run.length >= 2);
 }
 
 export function rateChartLabelRowHeight(fontScale: number): number {

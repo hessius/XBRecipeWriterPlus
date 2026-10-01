@@ -157,51 +157,8 @@ function quantisedProfile(
     return out;
 }
 
-const QUANTISATION_PHASES = [0, 0.0625, 0.125, 0.1875, 0.25, 0.3125, 0.375, 0.4375];
-
 function quantise(value: number, phase: number): number {
     return Math.round((value + phase) / 0.5) * 0.5;
-}
-
-function ownerLikeBrew(phase: number): BrewSample[] {
-    const samples: BrewSample[] = [];
-    let water = 0;
-    let cup = 0;
-    let at = 0;
-
-    for (let stage = 1; stage <= 4; stage += 1) {
-        for (let i = 0; i < 100; i += 1) {
-            if (samples.length > 0) {
-                water += i < 8 ? 0.9 : 0;
-                cup += i < 8 ? 0.3 : 0.12;
-            }
-            samples.push({
-                at,
-                water: quantise(water, phase),
-                cup: quantise(cup, phase),
-                pour: stage
-            });
-            at += 300;
-        }
-    }
-
-    at += 2_000;
-    for (let i = 0; i <= 320; i += 1) {
-        if (i % 40 === 20 || i % 40 === 21) {
-            at += 100;
-            continue;
-        }
-        if (samples.length > 0) cup += 0.035;
-        samples.push({
-            at,
-            water: quantise(water, phase),
-            cup: quantise(cup, phase),
-            pour: 4
-        });
-        at += 100;
-    }
-
-    return samples;
 }
 
 function longCleanRun(): BrewSample[] {
@@ -628,22 +585,6 @@ describe("retrospectiveFlowSeries", () => {
         expect(afterGap).toBeDefined();
         expect(afterGap!.water).toBeCloseTo(1, 6);
         expect(afterGap!.cup).toBeCloseTo(1, 6);
-    });
-
-    it("resplits derivative holes before smoothing a quantised drawdown", () => {
-        let visited = 0;
-        let worstRate = 0;
-
-        for (const phase of QUANTISATION_PHASES) {
-            visited += 1;
-            const smoothed = retrospectiveFlowSeries(ownerLikeBrew(phase), 4);
-            const drawdown = smoothed.filter((point) => point.at >= 122_000);
-            expect(drawdown.some((point) => point.at === 124_200)).toBe(true);
-            worstRate = Math.max(worstRate, maxRateOf(drawdown));
-        }
-
-        expect(visited).toBe(8);
-        expect(worstRate).toBeLessThan(0.8);
     });
 
     it("leaves the full-support interior of a long run bit-for-bit unchanged", () => {

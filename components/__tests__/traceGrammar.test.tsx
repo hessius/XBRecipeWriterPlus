@@ -6,6 +6,7 @@ import CompareTrace from "@/components/CompareTrace";
 import FlowSparkline from "@/components/FlowSparkline";
 import type {FlowPoint} from "@/library/brew/flowRate";
 import type {BrewSample} from "@/library/brew/BrewRecord";
+import {channelStyle} from "@/library/brew/traceStyle";
 import Pour from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -51,6 +52,18 @@ const GRAMMAR = [
 
 function styleOf(node: {props: Record<string, unknown>}) {
     return Object.fromEntries(GRAMMAR.map((key) => [key, node.props[key]]));
+}
+
+function firstDashLength(value: unknown): number {
+    if (typeof value !== "string") return 0;
+    if (Array.isArray(value)) return Number(value[0]);
+    return Number(value.split(" ")[0]);
+}
+
+function firstMarkLength(value: unknown): number {
+    if (typeof value !== "string") return 0;
+    const match = /l\s*([-\d.]+)\s+0/.exec(value);
+    return match ? Number(match[1]) : 0;
 }
 
 describe("the two charts draw the same channels the same way", () => {
@@ -143,7 +156,7 @@ describe("the rate chart draws the shared grammar", () => {
             .toEqual(styleOf(trace.getByTestId("trace-water")));
     });
 
-    it("keeps the cup colour and dot size while spacing rate dots by time", async () => {
+    it("keeps the cup colour and rendered mark length while spacing rate dots by time", async () => {
         const trace = await renderWithProviders(
             <BrewTrace pours={POURS} samples={SAMPLES} accent={ACCENT}
                        width={300} height={160} plannedSeconds={30} compact />
@@ -153,11 +166,15 @@ describe("the rate chart draws the shared grammar", () => {
         );
         const traceCup = styleOf(trace.getByTestId("trace-cup"));
         const rateCup = styleOf(rate.getByTestId("rate-chart-cup"));
+        const sharedCup = channelStyle("cup", {accent: ACCENT});
 
         expect(rateCup).toEqual({
             ...traceCup,
             strokeDasharray: undefined,
             strokeLinejoin:  undefined
         });
+        expect(firstMarkLength(rate.getByTestId("rate-chart-cup").props.d)
+            + Number(rateCup.strokeWidth))
+            .toBe(firstDashLength(sharedCup.strokeDasharray) + sharedCup.strokeWidth);
     });
 });

@@ -1,5 +1,10 @@
 import {drawdownSeconds, type BrewRecord, type BrewSample} from "./BrewRecord";
-import {medianRateGap, rateAdjacentAllowance} from "./rateChartGeometry";
+import {
+    contiguousRateRuns,
+    medianRateGap,
+    rateAdjacentAllowance,
+    rememberRateRuns
+} from "./rateChartGeometry";
 
 /**
  * How much of the stream one reading of the rate is fitted over.
@@ -571,23 +576,7 @@ function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
     });
 }
 
-function splitRateRuns<T extends FlowPoint>(series: T[], adjacentMs: number): T[][] {
-    const runs: T[][] = [];
-    let current: T[] = [];
-
-    for (const point of series) {
-        const previous = current[current.length - 1];
-        if (previous !== undefined && point.at - previous.at > adjacentMs) {
-            runs.push(current);
-            current = [];
-        }
-        current.push(point);
-    }
-    if (current.length > 0) runs.push(current);
-    return runs;
-}
-
-function hasRetrospectiveSupport(run: RawFlowPoint[]): boolean {
+function hasRetrospectiveSupport<T extends FlowPoint>(run: T[]): boolean {
     const first = run[0];
     const last = run[run.length - 1];
     return first !== undefined && last !== undefined &&
@@ -607,13 +596,19 @@ function hasRetrospectiveSupport(run: RawFlowPoint[]): boolean {
 export function retrospectiveFlowSeries(
     samples: BrewSample[], stages: number
 ): FlowPoint[] {
-    const raw = rawRateSeries(samples, stages);
-    const adjacentMs = rateAdjacentAllowance(raw);
-    return splitRateRuns(raw, adjacentMs)
-        .map((run) => run.filter((point) => point.at - point.fromAt <= adjacentMs))
-        .flatMap((run) => splitRateRuns(run, adjacentMs))
+    const smoothedRuns = contiguousRateRuns(rawRateSeries(samples, stages))
+        .map((run) => {
+            const adjacentMs = rateAdjacentAllowance(run);
+            // For a non-first point in a split run, `fromAt` is the immediately
+            // preceding finite sample, so `at - fromAt` cannot exceed that
+            // run's splitting gap. This filter cannot punch a mid-run hole;
+            // the deliberately per-run allowance is narrower than a whole
+            // series allowance when dense drawdown sits inside a sparse brew.
+            return run.filter((point) => point.at - point.fromAt <= adjacentMs);
+        })
         .filter(hasRetrospectiveSupport)
-        .flatMap(smoothRetrospectiveRun);
+        .map(smoothRetrospectiveRun);
+    return rememberRateRuns(smoothedRuns.flat(), smoothedRuns);
 }
 
 /**

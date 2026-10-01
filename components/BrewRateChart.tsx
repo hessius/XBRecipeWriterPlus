@@ -7,12 +7,12 @@ import {palette} from "@/constants/colors";
 import {type Box, type Point, toMonotonePath} from "@/library/brew/brewShape";
 import {maxRateOf, type FlowPoint} from "@/library/brew/flowRate";
 import {
-    contiguousRateRuns,
     hasDrawableRateRun,
     RATE_HEIGHT,
     RATE_LABEL_SIZE,
     rateChartLabelRowHeight,
-    rateChartPlotTop
+    rateChartPlotTop,
+    rateRunsOf
 } from "@/library/brew/rateChartGeometry";
 import {channelStyle, type Role} from "@/library/brew/traceStyle";
 
@@ -26,6 +26,7 @@ import {channelStyle, type Role} from "@/library/brew/traceStyle";
 /** Never scale a nearly flat brew up into a mountain range. */
 const MIN_AXIS = 4;
 const CUP_DOT_PERIOD = 4;
+const CUP_DOT_MARK = 1;
 export {RATE_HEIGHT};
 
 type Props = {
@@ -64,6 +65,10 @@ function chartPoint(point: Point, box: Box): {x: number; y: number} {
 
 function cupDotPath(runs: FlowPoint[][], box: Box): string {
     const dots: string[] = [];
+    const addDot = ({x, y}: {x: number; y: number}) => {
+        dots.push(`M${Math.round((x - CUP_DOT_MARK / 2) * 10) / 10} ${y} l${CUP_DOT_MARK} 0`);
+    };
+
     for (const run of runs) {
         const points = channelPoints(run, "cup");
         const first = points[0];
@@ -72,10 +77,11 @@ function cupDotPath(runs: FlowPoint[][], box: Box): string {
 
         const firstX = chartPoint(first, box).x;
         const lastX = chartPoint(last, box).x;
+        addDot(chartPoint(first, box));
         let segment = 1;
         for (
-            let x = Math.ceil(firstX / CUP_DOT_PERIOD) * CUP_DOT_PERIOD;
-            x <= lastX;
+            let x = firstX + CUP_DOT_PERIOD;
+            x < lastX;
             x += CUP_DOT_PERIOD
         ) {
             const t = (x / box.width) * box.maxT;
@@ -90,8 +96,9 @@ function cupDotPath(runs: FlowPoint[][], box: Box): string {
                 v: before.v + (after.v - before.v) * progress
             };
             const drawn = chartPoint(point, box);
-            dots.push(`M${drawn.x} ${drawn.y} l0 0`);
+            addDot(drawn);
         }
+        if (lastX !== firstX) addDot(chartPoint(last, box));
     }
     return dots.join(" ");
 }
@@ -123,7 +130,7 @@ export default function BrewRateChart({
     };
     if (box.width <= 0 || box.height <= 0 || box.maxT <= 0) return null;
 
-    const runs = contiguousRateRuns(series);
+    const runs = rateRunsOf(series);
     const waterPath = channelPath(runs, "water", box);
     const cupPath = cupDotPath(runs, box);
     const cupDotStyle = {

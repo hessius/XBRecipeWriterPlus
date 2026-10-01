@@ -6,6 +6,7 @@ import BrewTrace from "@/components/BrewTrace";
 import {palette} from "@/constants/colors";
 import {
     RATE_HEIGHT,
+    rememberRateRuns,
     rateChartLabelRowHeight,
     rateChartPlotTop
 } from "@/library/brew/rateChartGeometry";
@@ -43,8 +44,16 @@ function pathPoints(path: string): {x: number; y: number}[] {
 }
 
 function dotXs(path: string): number[] {
-    return [...path.matchAll(/M\s*([-\d.]+)\s+[-\d.]+\s*l\s*0\s+0/g)]
-        .map((match) => Number(match[1]));
+    return [...path.matchAll(/M\s*([-\d.]+)\s+[-\d.]+\s*l\s*1\s+0/g)]
+        .map((match) => Number(match[1]) + 0.5);
+}
+
+function largestGap(values: number[]): number {
+    let largest = 0;
+    for (let i = 1; i < values.length; i += 1) {
+        largest = Math.max(largest, Math.round((values[i] - values[i - 1]) * 10) / 10);
+    }
+    return largest;
 }
 
 function svgText(node: {props: {children?: unknown}}): string | undefined {
@@ -166,6 +175,45 @@ describe("BrewRateChart", () => {
         expect(d.match(/M/g)).toHaveLength(2);
     });
 
+    it.each([
+        [300, 180, 1_000, 1.7, 2],
+        [300, 180, 2_000, 3.3, 2],
+        [240, 180, 3_000, 4, 2]
+    ])(
+        "draws cup endpoints for a %d px chart with a %d second axis and %d ms run",
+        async (width, maxT, span, runWidth, dots) => {
+            const short: FlowPoint[] = [
+                {at: 0, cup: 1, water: 2},
+                {at: span, cup: 1.2, water: 2.2}
+            ];
+
+            const {getByTestId} = await renderWithProviders(
+                <BrewRateChart series={short} accent={ACCENT} width={width} maxT={maxT} />
+            );
+
+            expect(dotXs(getByTestId("rate-chart-cup").props.d as string)).toHaveLength(dots);
+            expect(getByTestId("rate-chart-water")).toBeTruthy();
+            expect(runWidth).toBeCloseTo((span / 1000 / maxT) * width, 1);
+        }
+    );
+
+    it("uses the rate runs carried by the library instead of measuring again", async () => {
+        const carried: FlowPoint[] = [
+            {at: 0, cup: 1, water: 2},
+            {at: 600, cup: 1.1, water: 2.1},
+            {at: 1_200, cup: 1.2, water: 2.2},
+            {at: 1_800, cup: 1.3, water: 2.3}
+        ];
+        rememberRateRuns(carried, [carried.slice(0, 2), carried.slice(2)]);
+
+        const {getByTestId} = await renderWithProviders(
+            <BrewRateChart series={carried} accent={ACCENT} width={WIDTH} maxT={2} />
+        );
+
+        const d = getByTestId("rate-chart-water").props.d as string;
+        expect(d.match(/M/g)).toHaveLength(2);
+    });
+
     it("places cup dots at a fixed time-axis rhythm without filling real gaps", async () => {
         const gapped: FlowPoint[] = [
             ...Array.from({length: 11}, (_, i) => ({
@@ -195,6 +243,28 @@ describe("BrewRateChart", () => {
         expect(xs).toHaveLength(52);
         expect(new Set(measuredGaps)).toEqual(new Set([4]));
         expect(xs.some((x) => x > 100 && x < 300)).toBe(false);
+    });
+
+    it.each([
+        [200, 1],
+        [400, 2]
+    ])("interrupts the dot rhythm across a %d ms carried run gap", async (gap, dotGap) => {
+        const gapped: FlowPoint[] = [
+            {at: 0, cup: 1, water: 2},
+            {at: 10_000, cup: 1.2, water: 2.2},
+            {at: 10_000 + gap, cup: 1.3, water: 2.3},
+            {at: 20_000 + gap, cup: 1.4, water: 2.4}
+        ];
+        rememberRateRuns(gapped, [gapped.slice(0, 2), gapped.slice(2)]);
+
+        const {getByTestId} = await renderWithProviders(
+            <BrewRateChart series={gapped} accent={ACCENT} width={300} maxT={60} maxRate={4} />
+        );
+
+        const xs = dotXs(getByTestId("rate-chart-cup").props.d as string);
+        const gaps = xs.slice(1).map((x, i) => Math.round((x - xs[i]) * 10) / 10);
+        expect(gaps).toContain(dotGap);
+        expect(largestGap(xs)).toBe(4);
     });
 
     it("uses the same x for a known second as BrewTrace", async () => {
