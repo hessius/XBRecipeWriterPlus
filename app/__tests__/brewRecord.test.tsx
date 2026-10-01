@@ -1333,6 +1333,26 @@ describe("brew record's story card", () => {
         }));
     });
 
+    it("drops story note and detail figures from the rendered summary when the budget needs room",
+        async () => {
+            mockOpened = {
+                record:  recordWithDrawdownRate({
+                    plan:    planFromPours(twoPours.pours),
+                    outcome: "endedOnMachine"
+                }),
+                samples: samplesForRate()
+            };
+
+            await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+            await openCard(185);
+
+            expect(summaryProps.note).toBeUndefined();
+            expect(summaryProps.drawdown).toBeNull();
+            expect(summaryProps.drawdownRate).toBeNull();
+            expect(summaryProps.delay).toBeNull();
+            expect(summaryProps.grind).toBeNull();
+        });
+
     it("hides the screen from a screen reader while the card is up", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
         await openCard();

@@ -614,11 +614,16 @@ export default function BrewRecord({recipeLookup}: Props) {
                         summary={(budget) => (
                             <BrewSummary
                                 {...summary}
-                                note={storyHasNote ? summary.note : undefined}
-                                drawdown={storyHasDetails ? summary.drawdown : null}
-                                drawdownRate={storyHasDetails ? summary.drawdownRate : null}
-                                delay={storyHasDetails ? summary.delay : null}
-                                grind={storyHasDetails ? summary.grind : null}
+                                note={storyHasNote && budget.showSummaryNote
+                                    ? summary.note : undefined}
+                                drawdown={storyHasDetails && budget.showFigureDetails
+                                    ? summary.drawdown : null}
+                                drawdownRate={storyHasDetails && budget.showFigureDetails
+                                    ? summary.drawdownRate : null}
+                                delay={storyHasDetails && budget.showFigureDetails
+                                    ? summary.delay : null}
+                                grind={storyHasDetails && budget.showFigureDetails
+                                    ? summary.grind : null}
                                 width={cardWidth}
                                 testID="story-capture"
                                 traceHeight={budget.traceHeight}

@@ -1,5 +1,7 @@
 import {
     STORY_ASPECT, STORY_SAFE_BOTTOM, STORY_SAFE_TOP,
+    STORY_CAPTURE_PADDING,
+    STORY_LADDER_TOP_GAP,
     STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
     offeredStoryContent,
     storyCoffeeLine,
@@ -16,13 +18,78 @@ import {
     BREW_FIGURE_DETAIL_VALUE_SIZE,
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
-    BREW_FIGURE_ROW_GAP
+    BREW_FIGURE_ROW_GAP,
+    BREW_FIGURE_VALUE_SIZE
 } from "../figureGeometry";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
 import {dotoRowHeight} from "@/library/dotoMetrics";
+import {stageLadderRungMinHeight} from "../stageLadderGeometry";
 
 const brew = (over: Partial<BrewRecord> = {}) =>
     ({id: "a", ...over}) as BrewRecord;
+
+const STORY_NAME_SIZE = 13;
+const STORY_NAME_MARGIN = 12;
+
+type SweepInput = Parameters<typeof storySummaryBudget>[0];
+
+function storyMaskInputs(width: number, stages: number, fontScale: number): SweepInput[] {
+    return Array.from({length: 64}, (_, mask) => ({
+        width,
+        stages,
+        hasCoffee:      (mask & 1) !== 0,
+        hasRating:      (mask & 2) !== 0,
+        tags:           (mask & 4) !== 0
+            ? ["Ethiopia", "washed", "late drawdown", "long tag wraps"]
+            : [],
+        hasSummaryNote: (mask & 8) !== 0,
+        figureExtraRows: (mask & 16) !== 0 ? 1 : 0,
+        hasRateChart:   (mask & 32) !== 0,
+        hasBypass:      true,
+        fontScale
+    }));
+}
+
+function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySummaryBudget>) {
+    const fontScale = input.fontScale ?? 1;
+    const nameHeight = dotoRowHeight(STORY_NAME_SIZE, fontScale) + STORY_NAME_MARGIN;
+    const baseFigures = dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+        + BREW_FIGURE_INTERNAL_GAP
+        + dotoRowHeight(BREW_FIGURE_VALUE_SIZE, fontScale);
+    const detailFigures = budget.showFigureDetails !== false
+        ? Math.max(0, input.figureExtraRows ?? 0) * (
+            BREW_FIGURE_ROW_GAP
+            + dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+            + BREW_FIGURE_INTERNAL_GAP
+            + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale)
+        )
+        : 0;
+    const noteHeight = budget.showSummaryNote !== false && input.hasSummaryNote === true
+        ? dotoRowHeight(11, fontScale) + 8
+        : 0;
+    const ladderRows = input.stages + (input.hasBypass === true ? 1 : 0);
+    const ladderHeight = budget.showStages
+        ? STORY_LADDER_TOP_GAP
+            + (input.stagesUnavailable === true
+                ? dotoRowHeight(11, fontScale)
+                : ladderRows * stageLadderRungMinHeight(
+                    fontScale, budget.barHeight, budget.rungGap
+                ))
+        : 0;
+    const rateHeight = budget.showRateChart
+        ? budget.rateTopGap + budget.rateHeight + budget.rateBottomGap
+        : 0;
+
+    return budget.surroundingHeight
+        + STORY_CAPTURE_PADDING * 2
+        + nameHeight
+        + budget.traceHeight
+        + rateHeight
+        + baseFigures
+        + detailFigures
+        + noteHeight
+        + ladderHeight;
+}
 
 function storySweepWorstSlack(): number {
     let worst = 0;
@@ -45,6 +112,21 @@ function storySweepWorstSlack(): number {
         }
     }
     return worst;
+}
+
+function expectAllMasksFit(widths: number[]) {
+    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+        for (const fontScale of STORY_TEST_FONT_SCALES) {
+            for (const width of widths) {
+                for (const input of storyMaskInputs(width, stages, fontScale)) {
+                    const budget = storySummaryBudget(input);
+
+                    expect(trueDrawnHeight(input, budget))
+                        .toBeLessThanOrEqual(budget.contentHeight);
+                }
+            }
+        }
+    }
 }
 
 describe("the frame", () => {
@@ -114,6 +196,8 @@ describe("the frame", () => {
             Number(budget.showCoffee)
             + Number(budget.showRating)
             + Number(budget.shownTagCount > 0)
+            + Number(budget.showSummaryNote === true)
+            + Number(budget.showFigureDetails === true)
             + Number(budget.showRateChart)
             + Number(budget.showStages);
 
@@ -138,6 +222,33 @@ describe("the frame", () => {
                 }
             }
         }
+    });
+
+    it("keeps the budget's section gap slots in step with the rendered card", () => {
+        for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+            for (const fontScale of STORY_TEST_FONT_SCALES) {
+                for (const width of STORY_TEST_WIDTHS) {
+                    for (const input of storyMaskInputs(width, stages, fontScale)) {
+                        const budget = storySummaryBudget(input);
+                        const optionalRows = [
+                            budget.showCoffee,
+                            budget.showRating,
+                            budget.shownTagCount > 0
+                        ].filter(Boolean).length;
+
+                        expect(budget.gapSlots).toBe(1 + optionalRows);
+                    }
+                }
+            }
+        }
+    });
+
+    it("keeps the height the story card really draws inside the safe band", () => {
+        expectAllMasksFit(STORY_TEST_WIDTHS);
+    });
+
+    it("keeps the real narrow-phone story width band inside the safe band", () => {
+        expectAllMasksFit([185, 200, 220, 240]);
     });
 
     it("leaves only integer rounding slack after growing the story content", () => {
@@ -213,9 +324,19 @@ describe("the frame", () => {
             hasRating: false
         });
 
-        expect(withRate.rateHeight).toBeGreaterThanOrEqual(RATE_HEIGHT);
+        expect(withRate.rateHeight).toBe(RATE_HEIGHT);
         expect(withRate.rateTopGap).toBe(RATE_TOP_GAP);
         expect(withRate.rateBottomGap).toBe(RATE_BOTTOM_GAP);
+
+        const withoutRate = storySummaryBudget({
+            width: 600,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false
+        });
+        expect(withRate.requiredHeight - withoutRate.requiredHeight)
+            .toBe(RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP);
     });
 
     it("budgets one smaller figure row instead of the removed caption lines", () => {
@@ -309,5 +430,9 @@ describe("the story content chooser", () => {
     it("ignores unknown hidden sections from an old or edited setting", () => {
         expect([...storyHiddenFromSetting("[\"coffee\",\"likes\",\"tags\"]")])
             .toEqual(["coffee", "tags"]);
+    });
+
+    it("ignores a stored hidden-section setting that is not JSON", () => {
+        expect([...storyHiddenFromSetting("not json")]).toEqual([]);
     });
 });
