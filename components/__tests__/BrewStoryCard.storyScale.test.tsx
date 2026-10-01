@@ -52,7 +52,7 @@ describe("BrewStoryCard story scaling", () => {
                 accent="#8ab4f8"
                 rating={0}
                 coffee="Huila · Washed"
-                tags={["filter"]}
+                tags={["filter", "sweet", "balanced", "washed", "extra", "hidden"]}
                 hasRateChart={false}
             />
         );
@@ -61,6 +61,8 @@ describe("BrewStoryCard story scaling", () => {
         expect(textStyleOf("Huila · Washed").letterSpacing).toBeCloseTo(1.4 * scale, 6);
         expect(textStyleOf("filter").fontSize).toBeCloseTo(10 * scale, 6);
         expect(textStyleOf("filter").letterSpacing).toBeCloseTo(1.2 * scale, 6);
+        expect(textStyleOf("+2").fontSize).toBeCloseTo(10 * scale, 6);
+        expect(textStyleOf("+2").letterSpacing).toBeCloseTo(1.2 * scale, 6);
         expect(viewStyleOf("story-tag-filter").paddingLeft).toBeCloseTo(8 * scale, 6);
         expect(viewStyleOf("story-tag-filter").paddingTop).toBeCloseTo(4 * scale, 6);
     });

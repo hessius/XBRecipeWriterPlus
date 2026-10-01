@@ -28,7 +28,7 @@ import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {brewFigures} from "@/library/brew/brewFigures";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
-import {dialNote} from "@/library/brew/dialAfterBrew";
+import {dialNote, type GrindFigure} from "@/library/brew/dialAfterBrew";
 import {drawdownFigures, retrospectiveFlowSeries} from "@/library/brew/flowRate";
 import {hasDrawableRateRun} from "@/library/brew/rateChartGeometry";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
@@ -75,6 +75,14 @@ const STORY_TOGGLE_LABELS: Record<StoryContentKey, string> = {
     details: "DETAILS",
     flow:    "FLOW"
 };
+
+function storyGrindForBudget(
+    grind: GrindFigure | null,
+    showRecipeBadge: boolean
+): GrindFigure | null {
+    if (showRecipeBadge || grind === null || grind.kind !== "dial") return grind;
+    return {...grind, recipe: null};
+}
 
 function RecordActionRows(
     {pairs, halfWidth, fullWidth}: {
@@ -609,6 +617,12 @@ export default function BrewRecord({recipeLookup}: Props) {
                         stageCount={stages.length}
                         hasRateChart={storyHasRateChart}
                         hasBypass={summary.bypass !== undefined}
+                        hasGrindRecipeBadge={
+                            storyHasDetails
+                            && summary.grind?.kind === "dial"
+                            && summary.grind.recipe !== null
+                        }
+                        drawdownRate={storyHasDetails ? summary.drawdownRate : null}
                         hasSummaryNote={storyHasNote}
                         stagesUnavailable={summary.stagesUnavailable}
                         figureExtraRows={storyHasDetails ? 1 : 0}
@@ -620,11 +634,14 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 drawdown={storyHasDetails && budget.showFigureDetails
                                     ? summary.drawdown : null}
                                 drawdownRate={storyHasDetails && budget.showFigureDetails
-                                    ? summary.drawdownRate : null}
+                                    && budget.showDrawdownRateBadge ? summary.drawdownRate : null}
                                 delay={storyHasDetails && budget.showFigureDetails
                                     ? summary.delay : null}
                                 grind={storyHasDetails && budget.showFigureDetails
-                                    ? summary.grind : null}
+                                    ? storyGrindForBudget(
+                                        summary.grind,
+                                        budget.showGrindRecipeBadge
+                                    ) : null}
                                 width={cardWidth}
                                 testID="story-capture"
                                 traceHeight={budget.traceHeight}

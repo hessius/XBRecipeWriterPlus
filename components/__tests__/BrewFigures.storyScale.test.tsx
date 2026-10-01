@@ -105,9 +105,15 @@ describe("BrewFigures story scaling", () => {
         expect(fontSizeOf("+5")).toBeCloseTo(BREW_FIGURE_DETAIL_VALUE_SIZE * 0.5, 6);
         expect(fontSizeOf("0:32")).toBeCloseTo(BREW_FIGURE_DETAIL_VALUE_SIZE * 0.5, 6);
         expect(fontSizeOf("2.1 G/S")).toBeCloseTo(BREW_FIGURE_BADGE_FONT_SIZE * 0.5, 6);
+        expect(fontSizeOf("RECIPE 60")).toBeCloseTo(BREW_FIGURE_BADGE_FONT_SIZE * 0.5, 6);
+        expect(textStyleOf("RECIPE 60").letterSpacing)
+            .toBeCloseTo(BREW_FIGURE_BADGE_TRACKING * 0.5, 6);
         expect(viewStyleOf("figures-detail-row").gap)
             .toBeCloseTo(BREW_FIGURE_COLUMN_GAP * 0.5, 6);
         expect(screen.getByTestId("figures-drawdown-value-row")).toHaveStyle({
+            gap: BREW_FIGURE_BADGE_GAP * 0.5
+        });
+        expect(screen.getByTestId("figures-grind-value-row")).toHaveStyle({
             gap: BREW_FIGURE_BADGE_GAP * 0.5
         });
     });

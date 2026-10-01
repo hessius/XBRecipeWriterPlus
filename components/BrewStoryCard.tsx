@@ -45,6 +45,8 @@ type Props = {
     /** The brew's tags, in the order they were given. */
     tags: string[];
     hasBypass?: boolean;
+    hasGrindRecipeBadge?: boolean;
+    drawdownRate?: number | null;
     figureExtraRows?: number;
     hasSummaryNote?: boolean;
     stagesUnavailable?: boolean;
@@ -68,8 +70,9 @@ type Props = {
  */
 export default function BrewStoryCard({
     width, summary, stageCount = 2, when, accent, rating, coffee, tags,
-    hasRateChart = true, hasBypass = false, figureExtraRows = 0,
-    hasSummaryNote = false, stagesUnavailable = false
+    hasRateChart = true, hasBypass = false, hasGrindRecipeBadge = undefined,
+    drawdownRate = undefined, figureExtraRows = 0, hasSummaryNote = false,
+    stagesUnavailable = false
 }: Props) {
     const frame = storyFrame(width);
     const fontScale = PixelRatio.getFontScale();
@@ -84,6 +87,8 @@ export default function BrewStoryCard({
         tags,
         fontScale,
         hasBypass,
+        hasGrindRecipeBadge,
+        drawdownRate,
         figureExtraRows,
         hasSummaryNote,
         stagesUnavailable

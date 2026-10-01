@@ -56,6 +56,10 @@ describe("BrewSummary story scaling", () => {
                 stalls={[]}
                 stagesUnavailable={true}
                 showStages={false}
+                drawdown={32}
+                drawdownRate={2.1}
+                delay={5}
+                grind={{kind: "dial", dial: 53, recipe: 60}}
                 textScale={0.5}
             />
         );
@@ -64,5 +68,7 @@ describe("BrewSummary story scaling", () => {
         expect(style.fontSize).toBeCloseTo(6.5, 6);
         expect(style.letterSpacing).toBeCloseTo(0.7, 6);
         expect(style.marginBottom).toBeCloseTo(6, 6);
+        expect(textStyleOf("RECIPE 60").fontSize).toBeCloseTo(5.5, 6);
+        expect(textStyleOf("RECIPE 60").letterSpacing).toBeCloseTo(0.25, 6);
     });
 });

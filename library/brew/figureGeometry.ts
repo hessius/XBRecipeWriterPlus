@@ -1,4 +1,4 @@
-import {dotoTextWidth} from "@/library/dotoMetrics";
+import {dotoTextWidth, DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
 
 export const BREW_FIGURE_LABEL_SIZE = 10;
 export const BREW_FIGURE_VALUE_SIZE = 28;
@@ -64,6 +64,12 @@ export function brewFigureBadgeWidth(
     scale = 1
 ): number {
     const badge = brewFigureBadgeGeometry(scale);
-    return dotoTextWidth(text, badge.fontSize, fontScale, badge.tracking, 0)
+    return dotoTextWidth(
+        text,
+        badge.fontSize,
+        fontScale,
+        badge.tracking,
+        DOTO_MIN_FONT_SIZE * scale
+    )
         + (badge.paddingHorizontal + badge.borderWidth) * 2;
 }

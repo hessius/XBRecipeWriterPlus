@@ -717,6 +717,14 @@ describe("drawdownRate", () => {
         expect(drawdownRate(withBypass)).toBeCloseTo(2, 6);
     });
 
+    it("drops rates above the displayable drawdown ceiling", () => {
+        expect(drawdownRate(record({
+            cupTotal: 200,
+            cupAtDrawdown: 100,
+            drawdownAt: 139_100
+        }))).toBeNull();
+    });
+
     it("is null, never 0, whenever a term is missing", () => {
         expect(drawdownRate(record({cupAtDrawdown: undefined}))).toBeNull();
         expect(drawdownRate(record({drawdownAt: 0}))).toBeNull();

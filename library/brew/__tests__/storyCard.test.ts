@@ -2,6 +2,7 @@ import {
     STORY_ASPECT, STORY_SAFE_BOTTOM, STORY_SAFE_TOP,
     STORY_CAPTURE_PADDING,
     STORY_CONTENT_KEYS,
+    STORY_FIT_MARGIN,
     STORY_LADDER_TOP_GAP,
     STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
     offeredStoryContent,
@@ -23,11 +24,13 @@ import {
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
-    BREW_FIGURE_VALUE_SIZE
+    BREW_FIGURE_VALUE_SIZE,
+    brewFigureBadgeGeometry,
+    brewFigureBadgeWidth
 } from "../figureGeometry";
 import {formatBrewDate, formatBrewTime} from "../brewFormat";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
-import {dotoRowHeight, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
+import {dotoRowHeight, dotoTextWidth, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
 import {stageLadderRungMinHeight} from "../stageLadderGeometry";
 
 const brew = (over: Partial<BrewRecord> = {}) =>
@@ -51,6 +54,8 @@ function storyMaskInputs(width: number, stages: number, fontScale: number): Swee
         figureExtraRows: (mask & 16) !== 0 ? 1 : 0,
         hasRateChart:   (mask & 32) !== 0,
         hasBypass:      (mask & 64) !== 0,
+        hasGrindRecipeBadge: (mask & 16) !== 0,
+        drawdownRate:   (mask & 16) !== 0 ? 2.1 : null,
         fontScale
     }));
 }
@@ -285,6 +290,31 @@ describe("the frame", () => {
         );
     });
 
+    it("uses an explicit horizontal fit tolerance", () => {
+        expect(STORY_FIT_MARGIN).toBeGreaterThan(0);
+    });
+
+    it("keeps the horizontal drawdown badge decision out of the vertical ladder", () => {
+        const budget = storySummaryBudget({
+            width: 430,
+            stages: 3,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
+            hasSummaryNote: true,
+            figureExtraRows: 1,
+            hasBypass: true,
+            drawdownRate: 2.1,
+            fontScale: 1.2
+        });
+
+        expect(budget.showFigureDetails).toBe(true);
+        expect(budget.showStages).toBe(true);
+        expect(budget.showSummaryNote).toBe(true);
+        expect(budget.showDrawdownRateBadge).toBe(false);
+    });
+
     it("counts the bypass badge beside the water figure", () => {
         const input = {
             width: 185,
@@ -326,7 +356,7 @@ describe("the frame", () => {
             widest: "drawdown value and rate"
         }));
         expect(fit.width).toBeGreaterThan(80);
-        expect(fit.width).toBeLessThanOrEqual(fit.limit);
+        expect(fit.width + STORY_FIT_MARGIN).toBeLessThanOrEqual(fit.limit);
     });
 
     it("does not hand React Native an invalid reduced date font multiplier", () => {
@@ -334,6 +364,31 @@ describe("the frame", () => {
 
         expect(header.dateMaxFontSizeMultiplier).toBe(DOTO_MAX_FONT_SCALE);
         expect(header.dateWidth).toBeLessThanOrEqual(185 - 36);
+    });
+
+    it("budgets figure badges with the same sub-one Doto floor the card draws", () => {
+        const scale = storyTextScale(220);
+        const badge = brewFigureBadgeGeometry(scale);
+        const withoutFloor = dotoTextWidth(
+            "RECIPE 80",
+            badge.fontSize,
+            0.85,
+            badge.tracking,
+            0
+        ) + (badge.paddingHorizontal + badge.borderWidth) * 2;
+
+        expect(brewFigureBadgeWidth("RECIPE 80", 0.85, scale)).toBeGreaterThan(withoutFloor);
+    });
+
+    it("reserves the date row height at the multiplier it can draw", () => {
+        const header = storyHeaderLayout(185, 1);
+
+        expect(header.stacked).toBe(true);
+        expect(header.height).toBe(
+            dotoRowHeight(header.markSize, 1)
+            + 2
+            + dotoRowHeight(header.dateSize, 1)
+        );
     });
 
     it("keeps the default story date length tied to the real date formatters", () => {
@@ -374,20 +429,18 @@ describe("the frame", () => {
         expect(sweep.cell).toMatchObject({
             width: 430,
             stages: 1,
-            fontScale: 1.2,
+            fontScale: 0.85,
             hasCoffee: false,
             hasRating: false,
             tags: [],
             hasSummaryNote: false,
-            figureExtraRows: 1,
+            figureExtraRows: 0,
             hasRateChart: false,
             hasBypass: false
         });
-        // The 83 pt bound is the all-caps-saturated case. Trace and section
-        // gap have hit their composition caps, so the rest is centered-card
-        // breathing room rather than a fit failure. It rose when the wider
-        // drawdown-rate badge made the chooser drop the detail row at 1.2x.
-        expect(sweep.worst).toBeLessThanOrEqual(83);
+        // Trace and section gap have hit their composition caps, so the rest
+        // is centered-card breathing room rather than a fit failure.
+        expect(sweep.worst).toBeLessThanOrEqual(51);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {
