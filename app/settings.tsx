@@ -139,6 +139,8 @@ export default function SettingsScreen({settings}: Props) {
     const [askForRatings, setAskForRatings] = useSetting("askForRatings", settings);
     const [brewTraceRetention, setBrewTraceRetention] =
         useSetting("brewTraceRetention", settings);
+    // Read only so backups carry the user's story-card sharing preference.
+    const [storyCardHidden] = useSetting("storyCardHidden", settings);
     // Owned by the library rail, not shown as rows here. Read anyway, because a
     // backup carries every preference and these are four.
     const [librarySort, setLibrarySort] = useSetting("librarySort", settings);
@@ -193,7 +195,7 @@ export default function SettingsScreen({settings}: Props) {
             bypassTempEncoding,
             firstBrewDone, machineConsoleAcknowledged, machineConsoleConfirmations,
             machineModel, machineAutoStart, animateBrewChart, askForRatings,
-            brewTraceRetention,
+            brewTraceRetention, storyCardHidden,
             librarySort, librarySortDirection, libraryFavouritesFirst,
             libraryView, invertAutoShelves, hiddenShelves, myShelves
         };

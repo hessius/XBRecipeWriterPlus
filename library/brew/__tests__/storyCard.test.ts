@@ -1,7 +1,13 @@
 import {
     STORY_ASPECT, STORY_SAFE_BOTTOM, STORY_SAFE_TOP,
     STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
-    storyCoffeeLine, storyFrame, storySummaryBudget
+    offeredStoryContent,
+    storyCoffeeLine,
+    storyContentFacts,
+    storyFrame,
+    storyHiddenFromSetting,
+    storyHiddenToSetting,
+    storySummaryBudget
 } from "../storyCard";
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
@@ -276,5 +282,32 @@ describe("the coffee line", () => {
 
     it("ignores a field that is only whitespace", () => {
         expect(storyCoffeeLine(brew({origin: "   "}))).toBeNull();
+    });
+});
+
+describe("the story content chooser", () => {
+    it("offers only the content the budget input says exists", () => {
+        const facts = storyContentFacts({
+            hasRateChart: true,
+            hasCoffee: false,
+            hasRating: true,
+            tags: [],
+            hasSummaryNote: false,
+            figureExtraRows: 1
+        });
+
+        expect(offeredStoryContent(facts)).toEqual(["rating", "details", "flow"]);
+    });
+
+    it("round trips the hidden sections through one setting string", () => {
+        const setting = storyHiddenToSetting(["note", "coffee", "flow"]);
+
+        expect(setting).toBe("[\"coffee\",\"note\",\"flow\"]");
+        expect([...storyHiddenFromSetting(setting)]).toEqual(["coffee", "note", "flow"]);
+    });
+
+    it("ignores unknown hidden sections from an old or edited setting", () => {
+        expect([...storyHiddenFromSetting("[\"coffee\",\"likes\",\"tags\"]")])
+            .toEqual(["coffee", "tags"]);
     });
 });

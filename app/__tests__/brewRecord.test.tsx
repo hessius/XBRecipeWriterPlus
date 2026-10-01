@@ -32,6 +32,7 @@ const mockSetOptions = jest.fn();
 // brewRecordHandoffGate.test.tsx covers the shipped default.
 beforeEach(() => {
     sharedSettings().set("beanconquerorHandoff", true);
+    sharedSettings().set("storyCardHidden", "");
 });
 
 let mockOpened: BrewRecordOpenResult = null;
@@ -1145,12 +1146,21 @@ describe("brew record's story card", () => {
         // Pressed once, not in a retry loop: the sheet hides the screen behind
         // it from a screen reader, so the button this press found is gone by
         // the time a second attempt would look for it.
-        fireEvent.press(screen.getByLabelText("Share this brew as a story card"));
+        await fireEvent.press(screen.getByLabelText("Share this brew as a story card"));
         await waitFor(() => expect(screen.getByTestId("story-stage")).toBeTruthy());
-        fireEvent(screen.getByTestId("story-stage"), "layout", {
+        await fireEvent(screen.getByTestId("story-stage"), "layout", {
             nativeEvent: {layout: {width, height: Math.ceil(width * 16 / 9) + 100, x: 0, y: 0}}
         });
         await waitFor(() => expect(screen.getByTestId("brew-story-card")).toBeTruthy());
+    }
+
+    async function pressStoryToggle(label: string): Promise<void> {
+        await waitFor(
+            async () => {
+                await fireEvent.press(screen.getByLabelText(label));
+            },
+            {timeout: SHEET_PRESS_TIMEOUT}
+        );
     }
 
     it("offers a story card on a brew that was watched", async () => {
@@ -1202,6 +1212,51 @@ describe("brew record's story card", () => {
         expect(card.getByTestId("story-coffee")).toHaveTextContent(/Huila/);
         expect(card.getByTestId("story-rating")).toBeTruthy();
         expect(card.getByTestId("story-tags")).toHaveTextContent(/filter/);
+    });
+
+    it("offers story toggles only for content this brew has", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(600);
+
+        expect(screen.getByLabelText("COFFEE")).toBeTruthy();
+        expect(screen.getByLabelText("RATING")).toBeTruthy();
+        expect(screen.getByLabelText("TAGS")).toBeTruthy();
+        expect(screen.queryByLabelText("NOTE")).toBeNull();
+        expect(screen.queryByLabelText("DETAILS")).toBeNull();
+        expect(screen.queryByLabelText("FLOW")).toBeNull();
+    });
+
+    it("offers note, detail and flow toggles when the story can draw them", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating:  4,
+                origin:  "Huila",
+                roast:   "Medium",
+                tags:    ["filter", "washed"],
+                plan:    planFromPours(twoPours.pours),
+                outcome: "endedOnMachine"
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(600);
+
+        expect(screen.getByLabelText("NOTE")).toBeTruthy();
+        expect(screen.getByLabelText("DETAILS")).toBeTruthy();
+        expect(screen.getByLabelText("FLOW")).toBeTruthy();
+    });
+
+    it("turns a requested section off by masking the story budget inputs", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(600);
+
+        await pressStoryToggle("COFFEE");
+
+        const card = within(screen.getByTestId("brew-story-card"));
+        expect(card.queryByTestId("story-coffee")).toBeNull();
+        expect(screen.getByLabelText("COFFEE").props.accessibilityState)
+            .toEqual(expect.objectContaining({selected: false}));
     });
 
     it("drops the story rate chart when the fixed frame needs the room", async () => {

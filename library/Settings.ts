@@ -190,6 +190,14 @@ export const DEFAULTS = {
      */
     brewTraceRetention: 50,
     /**
+     * Story-card sections the user usually leaves out before sharing.
+     *
+     * Stored as a JSON array in one setting because the chooser is one
+     * per-export decision surface, not six independent app features. Empty
+     * means the card asks for everything the brew actually has.
+     */
+    storyCardHidden: "",
+    /**
      * How the library is ordered, and which way.
      *
      * Global rather than per shelf, on purpose: a per-shelf order would change

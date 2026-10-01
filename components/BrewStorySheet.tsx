@@ -1,12 +1,20 @@
 import React, {useState} from "react";
-import {View} from "react-native";
+import {ScrollView, StyleSheet, View} from "react-native";
 import ViewShot, {type ViewShotRef} from "react-native-view-shot";
 import {XStack, YStack} from "tamagui";
 
 import ExportButton from "@/components/ExportButton";
+import RailChip from "@/components/RailChip";
 import XbrwSheet from "@/components/XbrwSheet";
 import {SCREEN_PADDING} from "@/constants/layout";
 import {STORY_ASPECT} from "@/library/brew/storyCard";
+
+export type StoryToggleOption = {
+    key: string;
+    label: string;
+    active: boolean;
+    onPress: () => void;
+};
 
 type Props = {
     open: boolean;
@@ -16,6 +24,7 @@ type Props = {
     /** True while the share is in flight. */
     busy: boolean;
     onShare: () => void;
+    toggles?: StoryToggleOption[];
     /**
      * The card, drawn at the width the sheet has measured for it.
      *
@@ -25,6 +34,30 @@ type Props = {
      */
     children: (width: number) => React.ReactNode;
 };
+
+function StoryToggleRow({toggles}: {toggles: StoryToggleOption[]}) {
+    if (toggles.length === 0) return null;
+
+    return (
+        <ScrollView
+            testID="story-toggle-row"
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.toggleContent}
+        >
+            {toggles.map((toggle) => (
+                <RailChip
+                    key={toggle.key}
+                    testID={`story-toggle-${toggle.key}`}
+                    active={toggle.active}
+                    label={toggle.label}
+                    accessibilityLabel={toggle.label}
+                    onPress={toggle.onPress}
+                />
+            ))}
+        </ScrollView>
+    );
+}
 
 /**
  * The story card, shown before it is shared.
@@ -41,7 +74,7 @@ type Props = {
  * fit would be shared at the size it was shrunk to.
  */
 export default function BrewStorySheet({
-    open, onOpenChange, shotRef, busy, onShare, children
+    open, onOpenChange, shotRef, busy, onShare, toggles = [], children
 }: Props) {
     // Measured from an onLayout event rather than derived from the window: the
     // sheet's own height is a share of the screen the sheet decides, and the
@@ -70,6 +103,7 @@ export default function BrewStorySheet({
                         </ViewShot>
                     )}
                 </View>
+                <StoryToggleRow toggles={toggles}/>
                 <XStack paddingHorizontal={SCREEN_PADDING}>
                     <ExportButton label="Share the card" busy={busy}
                                   disabled={cardWidth === 0}
@@ -79,3 +113,10 @@ export default function BrewStorySheet({
         </XbrwSheet>
     );
 }
+
+const styles = StyleSheet.create({
+    toggleContent: {
+        gap:               8,
+        paddingHorizontal: SCREEN_PADDING
+    }
+});

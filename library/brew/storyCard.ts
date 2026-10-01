@@ -78,6 +78,61 @@ export type StorySummaryBudgetInput = {
     fontScale?: number;
 };
 
+export const STORY_CONTENT_KEYS = [
+    "coffee", "rating", "tags", "note", "details", "flow"
+] as const;
+
+export type StoryContentKey = (typeof STORY_CONTENT_KEYS)[number];
+
+export type StoryContentFacts = Record<StoryContentKey, boolean>;
+
+const STORY_CONTENT_SET = new Set<string>(STORY_CONTENT_KEYS);
+
+export function storyContentFacts({
+    hasRateChart, hasCoffee, hasRating, tags = [], tagCount = tags.length,
+    figureExtraRows = 0, hasSummaryNote = false
+}: Pick<
+    StorySummaryBudgetInput,
+    "hasRateChart" | "hasCoffee" | "hasRating" | "tags" | "tagCount" |
+    "figureExtraRows" | "hasSummaryNote"
+>): StoryContentFacts {
+    return {
+        coffee:  hasCoffee,
+        rating:  hasRating,
+        tags:    tagCount > 0,
+        note:    hasSummaryNote,
+        details: figureExtraRows > 0,
+        flow:    hasRateChart
+    };
+}
+
+export function offeredStoryContent(facts: StoryContentFacts): StoryContentKey[] {
+    return STORY_CONTENT_KEYS.filter((key) => facts[key]);
+}
+
+export function storyHiddenFromSetting(value: string): Set<StoryContentKey> {
+    if (value.trim() === "") return new Set();
+    try {
+        const parsed = JSON.parse(value) as unknown;
+        if (!Array.isArray(parsed)) return new Set();
+        return new Set(parsed.filter((key): key is StoryContentKey =>
+            typeof key === "string" && STORY_CONTENT_SET.has(key)
+        ));
+    } catch {
+        return new Set();
+    }
+}
+
+export function storyHiddenToSetting(hidden: Iterable<StoryContentKey>): string {
+    const ordered = STORY_CONTENT_KEYS.filter((key) => {
+        for (const hiddenKey of hidden) {
+            if (hiddenKey === key) return true;
+        }
+        return false;
+    });
+    return ordered.length === 0 ? "" : JSON.stringify(ordered);
+}
+
 export type StorySummaryBudget = {
     contentHeight: number;
     surroundingHeight: number;
