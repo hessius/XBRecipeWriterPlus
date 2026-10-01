@@ -12,14 +12,16 @@ export const RATE_LABEL_SIZE = 9;
  * notification, so the real spacing is whatever the BLE link delivered.
  *
  * The floor is the original 150 ms rule, so a dense 100 ms stream still
- * splits on a single missing point exactly as before. Slower streams get three
- * median gaps of allowance: enough to absorb normal sparse cadence jitter and
- * occasional late packets, but still short compared with a stage pause. The
- * five second ceiling is the honesty guard. A gap nobody measured across must
- * stay a gap rather than becoming a line that claims a rate through silence.
+ * splits on a single missing point exactly as before. Slower streams get four
+ * median gaps of allowance: measured scale gap jitter reaches just over three
+ * times its median, so a three-gap allowance can split a continuous pour and
+ * turn the new run's endpoint fit into a false flow-rate spike. Four gaps is
+ * still short compared with a stage pause. The five second ceiling is the
+ * honesty guard. A gap nobody measured across must stay a gap rather than
+ * becoming a line that claims a rate through silence.
  */
 export const RATE_ADJACENT_MS = 150;
-const RATE_ADJACENT_MULTIPLE = 3;
+const RATE_ADJACENT_MULTIPLE = 4;
 const RATE_MAX_ADJACENT_MS = 5_000;
 const RATE_RUNS = new WeakMap<readonly FlowPoint[], readonly FlowPoint[][]>();
 

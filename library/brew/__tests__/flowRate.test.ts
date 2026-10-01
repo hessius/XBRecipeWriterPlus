@@ -157,6 +157,38 @@ function quantisedProfile(
     return out;
 }
 
+function steadyPourWithRealScaleGap(): BrewSample[] {
+    const prelude: BrewSample[] = [];
+    for (let i = 0; i < 90; i += 1) {
+        const at = i * 210;
+        const value = 3.2 * (at / 1000);
+        prelude.push({at, water: value, cup: value, pour: 1});
+    }
+
+    const points = [
+        [165_058, 211.1875], [165_358, 211.9625], [165_630, 213.125],
+        [165_898, 213.9], [166_198, 214.675], [166_439, 215.45],
+        [166_678, 216.225], [166_950, 217.3875], [167_188, 218.1625],
+        [167_430, 218.9375], [167_668, 219.7125], [167_968, 220.4875],
+        [168_208, 221.2625], [168_478, 222.0375], [168_718, 222.8125],
+        [168_958, 223.5875], [169_258, 224.75], [169_498, 225.525],
+        [169_768, 226.3], [170_008, 227.075], [170_647, 228.625],
+        [170_788, 229.4], [171_143, 230.5625], [171_298, 231.3375],
+        [171_540, 232.1125], [171_913, 232.8875], [172_159, 233.6625],
+        [172_407, 234.4375], [172_653, 235.2125], [172_906, 236.375],
+        [173_160, 237.15], [173_408, 237.925], [173_651, 238.7],
+        [173_853, 240]
+    ];
+    const [firstAt, firstWater] = points[0];
+    const segment = points.map(([at, water]) => ({
+        at: 40_000 + at - firstAt,
+        water: water - firstWater,
+        cup: water - firstWater,
+        pour: 1
+    }));
+    return [...prelude, ...segment];
+}
+
 function quantisedStaircaseFlow(seconds = 80, slope = 1.34): BrewSample[] {
     const lattice = 0.0885;
     const out: BrewSample[] = [];
@@ -705,6 +737,15 @@ describe("retrospectiveFlowSeries", () => {
 
         expect(smoothed.find((point) => point.at === 8_100)).toBeDefined();
         expect(smoothed.find((point) => point.at === 8_100)!.cup).toBeCloseTo(2, 6);
+    });
+
+    it("keeps a steady real-cadence pour with one 639 ms scale gap near the true rate", () => {
+        const smoothed = retrospectiveFlowSeries(steadyPourWithRealScaleGap(), 1);
+        const afterGapWater = smoothed
+            .filter((point) => point.at >= 45_500 && point.at <= 46_500)
+            .map((point) => point.water);
+
+        expect(Math.max(...afterGapWater)).toBeLessThan(3.27);
     });
 
     it("does not use a long post-reset interval as contiguous evidence", () => {
