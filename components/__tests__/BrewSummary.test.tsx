@@ -3,6 +3,7 @@ import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, within} from "@testing-library/react-native";
 
 import BrewSummary from "@/components/BrewSummary";
+import {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
@@ -24,7 +25,7 @@ jest.mock("@/components/MarqueeText", () => {
 });
 
 // The real ladder, wrapped so a test can see the band widths the summary hands
-// it. RNTL performs no layout, so the thickness is only ever a prop here — but
+// it. RNTL performs no layout, so the thickness is only ever a prop here, but
 // it is the prop that regressed: the summary drew #88's thin pre-caps.
 let ladderProps: {
     barHeight?: unknown; rungGap?: unknown; accentDone?: unknown;
@@ -120,8 +121,8 @@ describe("BrewSummary", () => {
     });
 
     it("draws the ladder with the thick, content-sized bands, not the old thin literals", async () => {
-        // The bug: the summary drew barHeight 11 / rungGap 8 — the pre-#88
-        // values — so a brew watched live with thick bars reopened from history
+        // The bug: the summary drew barHeight 11 / rungGap 8, the pre-#88
+        // values, so a brew watched live with thick bars reopened from history
         // thin. Pinned as integer literals: asserting against SUMMARY_BANDS
         // would still pass if the caps it derives from went to zero.
         await draw({stagesUnavailable: false});
@@ -268,6 +269,23 @@ describe("BrewSummary", () => {
         // The trace's legend row is text, so it needs more air above the
         // rate chart than the figures need below it.
         expect(style?.marginTop).toBe(18);
+    });
+
+    it("draws the story trace and rate chart at the heights it was handed", async () => {
+        const traceHeight = 118;
+        const rateHeight = 101;
+        await draw({
+            traceHeight,
+            rateHeight,
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        expect(screen.getByLabelText("Brew trace, 93 then 93 then 93 degrees")
+            .props.height).toBe(traceHeight - rowHeight(LEGEND_SIZE));
+        expect(screen.getByLabelText("Brew rate chart").props.height).toBe(rateHeight);
     });
 
     it("passes delay and grind figures into the captured summary", async () => {

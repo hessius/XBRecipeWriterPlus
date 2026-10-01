@@ -1,7 +1,16 @@
 import {
     STORY_ASPECT, STORY_SAFE_BOTTOM, STORY_SAFE_TOP,
+    STORY_CAPTURE_PADDING,
+    STORY_CONTENT_KEYS,
+    STORY_LADDER_TOP_GAP,
     STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
-    storyCoffeeLine, storyFrame, storySummaryBudget
+    offeredStoryContent,
+    storyCoffeeLine,
+    storyContentFacts,
+    storyFrame,
+    storyHiddenFromSetting,
+    storyHiddenToSetting,
+    storySummaryBudget
 } from "../storyCard";
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
@@ -10,13 +19,115 @@ import {
     BREW_FIGURE_DETAIL_VALUE_SIZE,
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
-    BREW_FIGURE_ROW_GAP
+    BREW_FIGURE_ROW_GAP,
+    BREW_FIGURE_VALUE_SIZE
 } from "../figureGeometry";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
 import {dotoRowHeight} from "@/library/dotoMetrics";
+import {stageLadderRungMinHeight} from "../stageLadderGeometry";
 
 const brew = (over: Partial<BrewRecord> = {}) =>
     ({id: "a", ...over}) as BrewRecord;
+
+const STORY_NAME_SIZE = 13;
+const STORY_NAME_MARGIN = 12;
+
+type SweepInput = Parameters<typeof storySummaryBudget>[0];
+
+function storyMaskInputs(width: number, stages: number, fontScale: number): SweepInput[] {
+    return Array.from({length: 128}, (_, mask) => ({
+        width,
+        stages,
+        hasCoffee:      (mask & 1) !== 0,
+        hasRating:      (mask & 2) !== 0,
+        tags:           (mask & 4) !== 0
+            ? ["Ethiopia", "washed", "late drawdown", "long tag wraps"]
+            : [],
+        hasSummaryNote: (mask & 8) !== 0,
+        figureExtraRows: (mask & 16) !== 0 ? 1 : 0,
+        hasRateChart:   (mask & 32) !== 0,
+        hasBypass:      (mask & 64) !== 0,
+        fontScale
+    }));
+}
+
+function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySummaryBudget>) {
+    const fontScale = input.fontScale ?? 1;
+    const nameHeight = dotoRowHeight(STORY_NAME_SIZE, fontScale) + STORY_NAME_MARGIN;
+    const baseFigures = dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+        + BREW_FIGURE_INTERNAL_GAP
+        + dotoRowHeight(BREW_FIGURE_VALUE_SIZE, fontScale);
+    const detailFigures = budget.showFigureDetails !== false
+        ? Math.max(0, input.figureExtraRows ?? 0) * (
+            BREW_FIGURE_ROW_GAP
+            + dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+            + BREW_FIGURE_INTERNAL_GAP
+            + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale)
+        )
+        : 0;
+    const noteHeight = budget.showSummaryNote !== false && input.hasSummaryNote === true
+        ? dotoRowHeight(11, fontScale) + 8
+        : 0;
+    const ladderRows = input.stages + (input.hasBypass === true ? 1 : 0);
+    const ladderHeight = budget.showStages
+        ? STORY_LADDER_TOP_GAP
+            + (input.stagesUnavailable === true
+                ? dotoRowHeight(11, fontScale)
+                : ladderRows * stageLadderRungMinHeight(
+                    fontScale, budget.barHeight, budget.rungGap
+                ))
+        : 0;
+    const rateHeight = budget.showRateChart
+        ? budget.rateTopGap + budget.rateHeight + budget.rateBottomGap
+        : 0;
+
+    return budget.surroundingHeight
+        + STORY_CAPTURE_PADDING * 2
+        + nameHeight
+        + budget.traceHeight
+        + rateHeight
+        + baseFigures
+        + detailFigures
+        + noteHeight
+        + ladderHeight;
+}
+
+function storySweepWorstSlack(): {worst: number; cell: SweepInput; visited: number} {
+    let worst = -1;
+    let cell: SweepInput | null = null;
+    let visited = 0;
+    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+        for (const fontScale of STORY_TEST_FONT_SCALES) {
+            for (const width of STORY_TEST_WIDTHS) {
+                for (const input of storyMaskInputs(width, stages, fontScale)) {
+                    visited += 1;
+                    const budget = storySummaryBudget(input);
+                    if (budget.margin > worst) {
+                        worst = budget.margin;
+                        cell = input;
+                    }
+                }
+            }
+        }
+    }
+    if (cell === null) throw new Error("story slack sweep visited no cells");
+    return {worst, cell, visited};
+}
+
+function expectAllMasksFit(widths: number[]) {
+    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+        for (const fontScale of STORY_TEST_FONT_SCALES) {
+            for (const width of widths) {
+                for (const input of storyMaskInputs(width, stages, fontScale)) {
+                    const budget = storySummaryBudget(input);
+
+                    expect(trueDrawnHeight(input, budget))
+                        .toBeLessThanOrEqual(budget.contentHeight);
+                }
+            }
+        }
+    }
+}
 
 describe("the frame", () => {
     it("is nine by sixteen", () => {
@@ -85,6 +196,8 @@ describe("the frame", () => {
             Number(budget.showCoffee)
             + Number(budget.showRating)
             + Number(budget.shownTagCount > 0)
+            + Number(budget.showSummaryNote === true)
+            + Number(budget.showFigureDetails === true)
             + Number(budget.showRateChart)
             + Number(budget.showStages);
 
@@ -109,6 +222,62 @@ describe("the frame", () => {
                 }
             }
         }
+    });
+
+    it("keeps the budget's section gap slots in step with the rendered card", () => {
+        for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+            for (const fontScale of STORY_TEST_FONT_SCALES) {
+                for (const width of STORY_TEST_WIDTHS) {
+                    for (const input of storyMaskInputs(width, stages, fontScale)) {
+                        const budget = storySummaryBudget(input);
+                        const optionalRows = [
+                            budget.showCoffee,
+                            budget.showRating,
+                            budget.shownTagCount > 0
+                        ].filter(Boolean).length;
+
+                        expect(budget.gapSlots).toBe(1 + optionalRows);
+                        expect(budget.requiredHeight)
+                            .toBeGreaterThanOrEqual(trueDrawnHeight(input, budget));
+                    }
+                }
+            }
+        }
+    });
+
+    it("keeps the height the story card really draws inside the safe band", () => {
+        expectAllMasksFit(STORY_TEST_WIDTHS);
+    });
+
+    it("keeps the real narrow-phone story width band inside the safe band", () => {
+        expectAllMasksFit([185, 200, 220, 240]);
+    });
+
+    it("bounds slack after growing every story content mask", () => {
+        const sweep = storySweepWorstSlack();
+
+        expect(sweep.visited).toBe(
+            MACHINE_CARD_MAX_STAGES
+            * STORY_TEST_FONT_SCALES.length
+            * STORY_TEST_WIDTHS.length
+            * 128
+        );
+        expect(sweep.cell).toMatchObject({
+            width: 430,
+            stages: 1,
+            fontScale: 1,
+            hasCoffee: false,
+            hasRating: false,
+            tags: [],
+            hasSummaryNote: false,
+            figureExtraRows: 0,
+            hasRateChart: false,
+            hasBypass: false
+        });
+        // The 38 pt bound is the all-caps-saturated case. Trace and section
+        // gap have hit their composition caps, so the rest is centered-card
+        // breathing room rather than a fit failure.
+        expect(sweep.worst).toBeLessThanOrEqual(38);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {
@@ -172,13 +341,6 @@ describe("the frame", () => {
     });
 
     it("budgets the rate chart's top gap, drawn height and bottom gap separately", () => {
-        const withoutRate = storySummaryBudget({
-            width: 600,
-            stages: 0,
-            hasRateChart: false,
-            hasCoffee: false,
-            hasRating: false
-        });
         const withRate = storySummaryBudget({
             width: 600,
             stages: 0,
@@ -190,6 +352,14 @@ describe("the frame", () => {
         expect(withRate.rateHeight).toBe(RATE_HEIGHT);
         expect(withRate.rateTopGap).toBe(RATE_TOP_GAP);
         expect(withRate.rateBottomGap).toBe(RATE_BOTTOM_GAP);
+
+        const withoutRate = storySummaryBudget({
+            width: 600,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false
+        });
         expect(withRate.requiredHeight - withoutRate.requiredHeight)
             .toBe(RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP);
     });
@@ -258,5 +428,51 @@ describe("the coffee line", () => {
 
     it("ignores a field that is only whitespace", () => {
         expect(storyCoffeeLine(brew({origin: "   "}))).toBeNull();
+    });
+});
+
+describe("the story content chooser", () => {
+    it("offers only the content the budget input says exists", () => {
+        const facts = storyContentFacts({
+            hasRateChart: true,
+            hasCoffee: false,
+            hasRating: true,
+            tags: [],
+            hasSummaryNote: false,
+            figureExtraRows: 1
+        });
+
+        expect(offeredStoryContent(facts)).toEqual(["rating", "details", "flow"]);
+    });
+
+    it("round trips the hidden sections through one setting string", () => {
+        const setting = storyHiddenToSetting(["note", "coffee", "flow"]);
+
+        expect(setting).toBe("[\"coffee\",\"note\",\"flow\"]");
+        expect([...storyHiddenFromSetting(setting)]).toEqual(["coffee", "note", "flow"]);
+    });
+
+    it("serializes every hidden section from a one-shot iterator", () => {
+        function* hiddenSections() {
+            yield "rating" as const;
+            yield "details" as const;
+            yield "flow" as const;
+            yield "coffee" as const;
+            yield "tags" as const;
+            yield "note" as const;
+        }
+
+        const setting = storyHiddenToSetting(hiddenSections());
+
+        expect(JSON.parse(setting)).toEqual([...STORY_CONTENT_KEYS]);
+    });
+
+    it("ignores unknown hidden sections from an old or edited setting", () => {
+        expect([...storyHiddenFromSetting("[\"coffee\",\"likes\",\"tags\"]")])
+            .toEqual(["coffee", "tags"]);
+    });
+
+    it("ignores a stored hidden-section setting that is not JSON", () => {
+        expect([...storyHiddenFromSetting("not json")]).toEqual([]);
     });
 });

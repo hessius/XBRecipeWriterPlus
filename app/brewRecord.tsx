@@ -33,7 +33,14 @@ import {drawdownFigures, retrospectiveFlowSeries} from "@/library/brew/flowRate"
 import {hasDrawableRateRun} from "@/library/brew/rateChartGeometry";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {ladderFrontier} from "@/library/brew/ladderState";
-import {storyCoffeeLine} from "@/library/brew/storyCard";
+import {
+    offeredStoryContent,
+    storyCoffeeLine,
+    storyContentFacts,
+    storyHiddenFromSetting,
+    storyHiddenToSetting,
+    type StoryContentKey
+} from "@/library/brew/storyCard";
 import {plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
@@ -58,6 +65,15 @@ type RecordAction = {
 };
 
 type RecordActionPair = readonly [RecordAction | null, RecordAction | null];
+
+const STORY_TOGGLE_LABELS: Record<StoryContentKey, string> = {
+    coffee:  "COFFEE",
+    rating:  "RATING",
+    tags:    "TAGS",
+    note:    "NOTE",
+    details: "DETAILS",
+    flow:    "FLOW"
+};
 
 function RecordActionRows(
     {pairs, halfWidth, fullWidth}: {
@@ -163,6 +179,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     const [recordHeight, setRecordHeight] = useState(0);
 
     const [handoffEnabled] = useSetting("beanconquerorHandoff");
+    const [storyCardHidden, setStoryCardHidden] = useSetting("storyCardHidden");
     const {ratingNoteOpen} = useLiveBrew();
 
     const {shareData, busy} = useBrewExport(() => opened);
@@ -336,6 +353,45 @@ export default function BrewRecord({recipeLookup}: Props) {
         ),
         grind:             dialNote(record)
     };
+    const hasStoryRateChart = hasDrawableRateRun(summary.rateSeries);
+    const hasStoryDetails = [
+        summary.drawdown !== null,
+        summary.delay !== null,
+        summary.grind !== null
+    ].some(Boolean);
+    const storyFacts = storyContentFacts({
+        hasRateChart:   hasStoryRateChart,
+        hasCoffee:      storyCoffeeLine(record) !== null,
+        hasRating:      judgement.rating > 0,
+        tags:           record.tags ?? [],
+        hasSummaryNote: summary.note !== undefined,
+        figureExtraRows: hasStoryDetails ? 1 : 0
+    });
+    const storyHidden = storyHiddenFromSetting(storyCardHidden);
+    function storyContentRequested(key: StoryContentKey): boolean {
+        return !storyHidden.has(key);
+    }
+    function toggleStoryContent(key: StoryContentKey) {
+        const next = storyHiddenFromSetting(storyCardHidden);
+        if (next.has(key)) {
+            next.delete(key);
+        } else {
+            next.add(key);
+        }
+        setStoryCardHidden(storyHiddenToSetting(next));
+    }
+    const storyToggles = offeredStoryContent(storyFacts).map((key) => ({
+        key,
+        label:  STORY_TOGGLE_LABELS[key],
+        active: storyContentRequested(key),
+        onPress: () => toggleStoryContent(key)
+    }));
+    const storyCoffee = storyContentRequested("coffee") ? storyCoffeeLine(record) : null;
+    const storyRating = storyContentRequested("rating") ? judgement.rating : 0;
+    const storyTags = storyContentRequested("tags") ? record.tags ?? [] : [];
+    const storyHasNote = summary.note !== undefined && storyContentRequested("note");
+    const storyHasDetails = hasStoryDetails && storyContentRequested("details");
+    const storyHasRateChart = hasStoryRateChart && storyContentRequested("flow");
     const actionFullWidth = Math.max(0, width - SCREEN_PADDING * 2);
     const actionHalfWidth = Math.max(0, (actionFullWidth - RECORD_ACTION_GAP) / 2);
     // This pair can never render as [handoff, export]: the handoff label is
@@ -539,28 +595,35 @@ export default function BrewRecord({recipeLookup}: Props) {
                 }/>
             <BrewStorySheet open={storyOpen} onOpenChange={setStoryOpen}
                             shotRef={story.shotRef} busy={story.busy}
-                            onShare={() => void story.shareImage()}>
+                            onShare={() => void story.shareImage()}
+                            toggles={storyToggles}>
                 {(cardWidth) => (
                     <BrewStoryCard
                         width={cardWidth}
                         when={`${formatBrewDate(record.startedAt)} · ${formatBrewTime(record.startedAt)}`}
                         accent={accent}
-                        rating={judgement.rating}
-                        coffee={storyCoffeeLine(record)}
-                        tags={record.tags ?? []}
+                        rating={storyRating}
+                        coffee={storyCoffee}
+                        tags={storyTags}
                         stageCount={stages.length}
-                        hasRateChart={hasDrawableRateRun(summary.rateSeries)}
+                        hasRateChart={storyHasRateChart}
                         hasBypass={summary.bypass !== undefined}
-                        hasSummaryNote={summary.note !== undefined}
+                        hasSummaryNote={storyHasNote}
                         stagesUnavailable={summary.stagesUnavailable}
-                        figureExtraRows={[
-                            summary.drawdown !== null,
-                            summary.delay !== null,
-                            summary.grind !== null
-                        ].some(Boolean) ? 1 : 0}
+                        figureExtraRows={storyHasDetails ? 1 : 0}
                         summary={(budget) => (
                             <BrewSummary
                                 {...summary}
+                                note={storyHasNote && budget.showSummaryNote
+                                    ? summary.note : undefined}
+                                drawdown={storyHasDetails && budget.showFigureDetails
+                                    ? summary.drawdown : null}
+                                drawdownRate={storyHasDetails && budget.showFigureDetails
+                                    ? summary.drawdownRate : null}
+                                delay={storyHasDetails && budget.showFigureDetails
+                                    ? summary.delay : null}
+                                grind={storyHasDetails && budget.showFigureDetails
+                                    ? summary.grind : null}
                                 width={cardWidth}
                                 testID="story-capture"
                                 traceHeight={budget.traceHeight}
