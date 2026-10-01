@@ -31,7 +31,7 @@ export const MIN_SPAN = 15;
 /** Breathing room either side of the recipe's own extremes. */
 const PAD = 2;
 
-/** Bands land on fives, so the printed edge labels are numbers a person uses. */
+/** Bands land on fives, so the adaptive scale uses numbers a person uses. */
 const STEP = 5;
 
 export type TempBand = {min: number; max: number};
@@ -46,7 +46,8 @@ export function hasSetTemperature(temp: number): boolean {
  * Adaptive rather than fixed because an honest axis over 39..99 draws every
  * coffee recipe as a flat line: a 94/92/90 spread lands under three pixels
  * apart. The cost of adapting is that heights are not comparable between two
- * recipes, which is why the caller must always print both edges.
+ * recipes; the caller prints each mark's own temperature because the chart no
+ * longer carries scale endpoints.
  */
 export function temperatureBand(temps: number[]): TempBand | undefined {
     // `Pour.temperature` defaults to -1, meaning unset. An unset stage is not a
