@@ -237,6 +237,8 @@ describe("the frame", () => {
                         ].filter(Boolean).length;
 
                         expect(budget.gapSlots).toBe(1 + optionalRows);
+                        expect(budget.requiredHeight)
+                            .toBeGreaterThanOrEqual(trueDrawnHeight(input, budget));
                     }
                 }
             }
