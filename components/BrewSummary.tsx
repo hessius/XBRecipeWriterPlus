@@ -131,6 +131,8 @@ type Props = {
     showRateChart?: boolean;
     showStages?: boolean;
     textScale?: number;
+    /** Opts the trace and rate strokes into a static time-axis opacity tail. */
+    emphasizeTimeFlow?: boolean;
 };
 
 /*
@@ -161,6 +163,7 @@ export default function BrewSummary({
     capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
     storyBands, showRateChart = true, showStages = true,
     textScale = 1,
+    emphasizeTimeFlow = false,
     testID = "brew-capture"
 }: Props) {
     // The drawable width inside the capture's own padding.
@@ -216,6 +219,7 @@ export default function BrewSummary({
                     onSelectStage={onSelectStage}
                     bypass={bypass}
                     axis={traceAxis}
+                    emphasizeTimeFlow={emphasizeTimeFlow}
                 />
             ) : (
                 <YStack height={traceHeight} alignItems="center"
@@ -240,6 +244,7 @@ export default function BrewSummary({
                     width={traceWidth}
                     maxT={traceAxis.maxT}
                     height={rateHeight}
+                    emphasizeTimeFlow={emphasizeTimeFlow}
                 />
                 </View>
             )}

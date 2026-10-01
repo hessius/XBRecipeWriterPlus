@@ -1,6 +1,6 @@
-import React from "react";
+import React, {useId} from "react";
 import {PixelRatio, View} from "react-native";
-import Svg, {G, Path, Text as SvgText} from "react-native-svg";
+import Svg, {Defs, G, LinearGradient, Path, Stop, Text as SvgText} from "react-native-svg";
 
 import {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import {palette} from "@/constants/colors";
@@ -15,6 +15,7 @@ import {
     rateRunsOf
 } from "@/library/brew/rateChartGeometry";
 import {channelStyle, type Role} from "@/library/brew/traceStyle";
+import {timeFlowGradient} from "@/library/brew/timeFlowTail";
 
 /**
  * Both channels' rate against real seconds, drawn under the volume trace.
@@ -38,6 +39,13 @@ type Props = {
     maxRate?: number;
     height?: number;
     role?: Role;
+    /**
+     * Paint rate strokes with a left-to-right opacity tail.
+     *
+     * Off by default so analytical screens keep their flat chart grammar; the
+     * story card opts in for a still image that should suggest elapsed time.
+     */
+    emphasizeTimeFlow?: boolean;
 };
 
 function channelPoints(run: FlowPoint[], of: "cup" | "water"): Point[] {
@@ -111,8 +119,12 @@ function cupDotPath(runs: FlowPoint[][], box: Box): string {
  * where the bed never flowed rather than a chart the stream cannot support.
  */
 export default function BrewRateChart({
-    series, accent, width, maxT, maxRate, height = RATE_HEIGHT, role = "subject"
+    series, accent, width, maxT, maxRate, height = RATE_HEIGHT, role = "subject",
+    emphasizeTimeFlow = false
 }: Props) {
+    const id = useId().replace(/[^a-zA-Z0-9]/g, "");
+    const waterCometId = `rate-water-comet-${id}`;
+    const cupCometId = `rate-cup-comet-${id}`;
     if (!hasDrawableRateRun(series)) return null;
 
     const waterStyle = channelStyle("water", {accent, role});
@@ -138,6 +150,15 @@ export default function BrewRateChart({
         strokeDasharray: undefined,
         strokeLinejoin:  undefined
     };
+    const waterStrokeStyle = {
+        ...waterStyle,
+        stroke: emphasizeTimeFlow ? `url(#${waterCometId})` : waterStyle.stroke
+    };
+    const cupStrokeStyle = {
+        ...cupDotStyle,
+        stroke: emphasizeTimeFlow ? `url(#${cupCometId})` : cupDotStyle.stroke
+    };
+    const comet = timeFlowGradient(box.width);
 
     return (
         <View testID="rate-chart" pointerEvents="none">
@@ -148,6 +169,40 @@ export default function BrewRateChart({
                 accessibilityRole="image"
                 accessibilityLabel="Brew rate chart"
             >
+                {emphasizeTimeFlow && (
+                    <Defs>
+                        <LinearGradient
+                            id={waterCometId}
+                            gradientUnits={comet.gradientUnits}
+                            x1={comet.x1}
+                            y1={comet.y1}
+                            x2={comet.x2}
+                            y2={comet.y2}
+                        >
+                            <Stop offset={comet.start.offset}
+                                  stopColor={waterStyle.stroke}
+                                  stopOpacity={comet.start.opacity} />
+                            <Stop offset={comet.end.offset}
+                                  stopColor={waterStyle.stroke}
+                                  stopOpacity={comet.end.opacity} />
+                        </LinearGradient>
+                        <LinearGradient
+                            id={cupCometId}
+                            gradientUnits={comet.gradientUnits}
+                            x1={comet.x1}
+                            y1={comet.y1}
+                            x2={comet.x2}
+                            y2={comet.y2}
+                        >
+                            <Stop offset={comet.start.offset}
+                                  stopColor={cupDotStyle.stroke}
+                                  stopOpacity={comet.start.opacity} />
+                            <Stop offset={comet.end.offset}
+                                  stopColor={cupDotStyle.stroke}
+                                  stopOpacity={comet.end.opacity} />
+                        </LinearGradient>
+                    </Defs>
+                )}
                 <SvgText
                     testID="rate-chart-label"
                     x={0}
@@ -163,7 +218,7 @@ export default function BrewRateChart({
                             testID="rate-chart-water"
                             d={waterPath}
                             fill="none"
-                            {...waterStyle}
+                            {...waterStrokeStyle}
                         />
                     )}
                     {cupPath !== "" && (
@@ -171,7 +226,7 @@ export default function BrewRateChart({
                             testID="rate-chart-cup"
                             d={cupPath}
                             fill="none"
-                            {...cupDotStyle}
+                            {...cupStrokeStyle}
                         />
                     )}
                 </G>

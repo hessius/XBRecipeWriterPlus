@@ -1406,7 +1406,8 @@ describe("brew record's story card", () => {
                 rungGap: expect.any(Number)
             }),
             showRateChart: expect.any(Boolean),
-            showStages: expect.any(Boolean)
+            showStages: expect.any(Boolean),
+            emphasizeTimeFlow: true
         }));
     });
 

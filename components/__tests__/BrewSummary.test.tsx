@@ -80,6 +80,12 @@ function pathPoints(path: string): {x: number; y: number}[] {
         .map((match) => ({x: Number(match[1]), y: Number(match[2])}));
 }
 
+function brushRef(value: unknown): string | undefined {
+    return typeof value === "object" && value !== null && "brushRef" in value
+        ? String((value as {brushRef: unknown}).brushRef)
+        : undefined;
+}
+
 describe("BrewSummary", () => {
     it("draws the trace when the brew kept a stream", async () => {
         const {getByLabelText} = await draw({hasStream: true});
@@ -237,6 +243,33 @@ describe("BrewSummary", () => {
         const traceX = pathPoints(screen.getByTestId("trace-water").props.d as string)[1].x;
         const rateX = pathPoints(screen.getByTestId("rate-chart-water").props.d as string)[1].x;
         expect(rateX).toBeCloseTo(traceX, 1);
+    });
+
+    it("leaves time-flow tails off unless a caller opts in", async () => {
+        await draw({
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        expect(brushRef(screen.getByTestId("trace-water").props.stroke)).toBeUndefined();
+        expect(brushRef(screen.getByTestId("rate-chart-water").props.stroke)).toBeUndefined();
+    });
+
+    it("passes the time-flow tail opt-in to the trace and the rate chart", async () => {
+        await draw({
+            emphasizeTimeFlow: true,
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        expect(brushRef(screen.getByTestId("trace-water").props.stroke))
+            .toContain("trace-water-comet");
+        expect(brushRef(screen.getByTestId("rate-chart-water").props.stroke))
+            .toContain("rate-water-comet");
     });
 
     it("gives a drawable rate chart the shared bottom gap", async () => {

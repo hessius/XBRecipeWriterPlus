@@ -6,6 +6,7 @@ import BrewTrace from "@/components/BrewTrace";
 import {drawnFontSize} from "@/components/DotMatrixText";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import {BAND_FLOOR, BAND_TOP} from "@/library/brew/tempBand";
+import {timeFlowGradient} from "@/library/brew/timeFlowTail";
 import Pour from "@/library/Pour";
 import {accents, cupLineFor, palette} from "@/constants/colors";
 
@@ -49,6 +50,12 @@ function svgTextContent(node: {props: {children?: unknown}}): string | undefined
 
 function svgScalar(value: number | number[]): number {
     return Array.isArray(value) ? value[0] : value;
+}
+
+function brushRef(value: unknown): string | undefined {
+    return typeof value === "object" && value !== null && "brushRef" in value
+        ? String((value as {brushRef: unknown}).brushRef)
+        : undefined;
 }
 
 function lastPathPoint(path: string): {x: number; y: number} {
@@ -170,6 +177,72 @@ describe("BrewTrace", () => {
         expect(getByTestId("trace-water").props.stroke).toEqual(
             expect.objectContaining({payload: processColor(palette.warn)})
         );
+    });
+
+    it("leaves the time-flow tail off by default", async () => {
+        const {getByTestId} = await draw({
+            samples: samples([0, 0, 0], [5000, 20, 12])
+        });
+
+        expect(getByTestId("trace-water").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(TEST_ACCENT)})
+        );
+        expect(getByTestId("trace-cup").props.stroke).toEqual(
+            expect.objectContaining({payload: processColor(cupLineFor(TEST_ACCENT))})
+        );
+    });
+
+    it("draws the time-flow tail faint at the start and full at the end", async () => {
+        const {getByTestId} = await draw({
+            samples: samples([0, 0, 0], [5000, 20, 12]),
+            emphasizeTimeFlow: true
+        });
+
+        const gradient = timeFlowGradient(300);
+        expect(brushRef(getByTestId("trace-water").props.stroke)).toContain("trace-water-comet");
+        expect(gradient.gradientUnits).toBe("userSpaceOnUse");
+        expect(gradient.x1).toBe(0);
+        expect(gradient.x2).toBe(300);
+        expect(gradient.start.offset).toBe("0");
+        expect(gradient.end.offset).toBe("1");
+        expect(gradient.start.opacity).toBeGreaterThan(0);
+        expect(gradient.start.opacity).toBeLessThan(gradient.end.opacity);
+        expect(gradient.end.opacity).toBe(1);
+    });
+
+    it("gives two mounted traces different gradient ids", async () => {
+        const r = await renderWithProviders(
+            <>
+                <BrewTrace
+                    pours={pours}
+                    samples={samples([0, 0, 0], [5000, 20, 12])}
+                    accent={TEST_ACCENT}
+                    width={300}
+                    height={140}
+                    plannedSeconds={70}
+                    emphasizeTimeFlow
+                />
+                <BrewTrace
+                    pours={pours}
+                    samples={samples([0, 0, 0], [5000, 20, 12])}
+                    accent={palette.brand}
+                    width={220}
+                    height={140}
+                    plannedSeconds={70}
+                    emphasizeTimeFlow
+                />
+            </>
+        );
+
+        const waterComets = r.getAllByTestId("trace-water");
+        const cupComets = r.getAllByTestId("trace-cup");
+        const fills = r.getAllByTestId("trace-water-fill");
+
+        expect(brushRef(waterComets[0].props.stroke))
+            .not.toBe(brushRef(waterComets[1].props.stroke));
+        expect(brushRef(cupComets[0].props.stroke))
+            .not.toBe(brushRef(cupComets[1].props.stroke));
+        expect(brushRef(fills[0].props.fill)).not.toBe(brushRef(fills[1].props.fill));
     });
 
     it("survives a recipe with no pours", async () => {
