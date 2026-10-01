@@ -62,8 +62,8 @@ type DotMatrixStyle = Omit<TextStyle, "fontSize" | "fontFamily" | "fontWeight">;
  * as about 9. Only downward scaling needs compensating — scaling up never
  * crosses the floor.
  */
-function requestedSize(fontSize: number): number {
-    return dotoRequestedSize(fontSize, PixelRatio.getFontScale());
+function requestedSize(fontSize: number, minFontSize = DOTO_MIN_FONT_SIZE): number {
+    return dotoRequestedSize(fontSize, PixelRatio.getFontScale(), minFontSize);
 }
 
 /**
@@ -139,6 +139,9 @@ type Props = {
     children: string | number;
     /** Clamped up to `DOTO_MIN_FONT_SIZE`. */
     fontSize?: number;
+    /** Override the Doto floor for text that is deliberately scaled as artwork. */
+    minFontSize?: number;
+    maxFontSizeMultiplier?: number;
     /**
      * A size that changes over time, driving the same clamp on the UI thread.
      *
@@ -200,27 +203,32 @@ export default function DotMatrixText(props: Props) {
         return <AnimatedDotMatrixText {...props} animatedFontSize={props.animatedFontSize}/>;
     }
     const {
-        children, fontSize = 14, weight = "bold", color = palette.text,
+        children, fontSize = 14, minFontSize = DOTO_MIN_FONT_SIZE,
+        maxFontSizeMultiplier = DOTO_MAX_FONT_SCALE,
+        weight = "bold", color = palette.text,
         letterSpacing = 0.5, numberOfLines, style, testID
     } = props;
     return (
         <Text
             testID={testID}
             numberOfLines={numberOfLines}
-            maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
-            style={staticStyle({color, letterSpacing, style, weight, fontSize})}>
+            maxFontSizeMultiplier={maxFontSizeMultiplier}
+            style={staticStyle({
+                color, letterSpacing, style, weight, fontSize, minFontSize
+            })}>
             {children}
         </Text>
     );
 }
 
 /** The style stack shared by both paths. Order is load-bearing; see below. */
-function staticStyle({color, letterSpacing, style, weight, fontSize}: {
+function staticStyle({color, letterSpacing, style, weight, fontSize, minFontSize}: {
     color: string;
     letterSpacing: number;
     style: StyleProp<DotMatrixStyle>;
     weight: DotoWeight;
     fontSize: number;
+    minFontSize: number;
 }) {
     return [
         {color, letterSpacing},
@@ -230,7 +238,7 @@ function staticStyle({color, letterSpacing, style, weight, fontSize}: {
         // that make this component the single enforcement point.
         {
             fontFamily: DOTO_FAMILIES[weight],
-            fontSize:   requestedSize(fontSize)
+            fontSize:   requestedSize(fontSize, minFontSize)
         }
     ];
 }
@@ -239,6 +247,8 @@ function staticStyle({color, letterSpacing, style, weight, fontSize}: {
 function AnimatedDotMatrixText({
     children,
     fontSize = 14,
+    minFontSize = DOTO_MIN_FONT_SIZE,
+    maxFontSizeMultiplier = DOTO_MAX_FONT_SCALE,
     animatedFontSize,
     weight = "bold",
     color = palette.text,
@@ -249,7 +259,7 @@ function AnimatedDotMatrixText({
 }: Props & {animatedFontSize: SharedValue<number>}) {
     // `PixelRatio` cannot be read from the UI thread, so the floor is worked
     // out here and the worklet closes over the number.
-    const floor = DOTO_MIN_FONT_SIZE / Math.min(PixelRatio.getFontScale(), 1);
+    const floor = minFontSize / Math.min(PixelRatio.getFontScale(), 1);
     const animatedStyle = useAnimatedStyle(() => ({
         fontSize: Math.max(animatedFontSize.value, floor)
     }));
@@ -258,9 +268,11 @@ function AnimatedDotMatrixText({
         <Animated.Text
             testID={testID}
             numberOfLines={numberOfLines}
-            maxFontSizeMultiplier={DOTO_MAX_FONT_SCALE}
+            maxFontSizeMultiplier={maxFontSizeMultiplier}
             style={[
-                ...staticStyle({color, letterSpacing, style, weight, fontSize}),
+                ...staticStyle({
+                    color, letterSpacing, style, weight, fontSize, minFontSize
+                }),
                 // Last of all, so the animated size wins over the static one it
                 // was laid out at.
                 animatedStyle

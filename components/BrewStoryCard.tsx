@@ -107,9 +107,9 @@ export default function BrewStoryCard({
                             <DotMatrixText testID="story-when" fontSize={header.dateSize}
                                            weight="bold"
                                            letterSpacing={header.dateTracking}
-                                           style={{
-                                               transform: [{scale: header.dateVisualScale}]
-                                           }}
+                                           maxFontSizeMultiplier={
+                                               header.dateMaxFontSizeMultiplier
+                                           }
                                            numberOfLines={1} color={palette.dim}>
                                 {when}
                             </DotMatrixText>
@@ -121,9 +121,9 @@ export default function BrewStoryCard({
                         <Wordmark fontSize={header.markSize} plusColor={accent}/>
                         <DotMatrixText testID="story-when" fontSize={header.dateSize}
                                        weight="bold" letterSpacing={header.dateTracking}
-                                       style={{
-                                           transform: [{scale: header.dateVisualScale}]
-                                       }}
+                                       maxFontSizeMultiplier={
+                                           header.dateMaxFontSizeMultiplier
+                                       }
                                        numberOfLines={1} color={palette.dim}>
                             {when}
                         </DotMatrixText>

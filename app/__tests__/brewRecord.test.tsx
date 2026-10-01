@@ -1,6 +1,12 @@
 // app/__tests__/brewRecord.test.tsx
 import React from "react";
-import {Linking, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
+import {
+    Linking,
+    StyleSheet,
+    type StyleProp,
+    type TextStyle,
+    type ViewStyle
+} from "react-native";
 import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
@@ -22,6 +28,8 @@ import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {planFromPours} from "@/library/brew/BrewRecord";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import type {HandoffEnvelope} from "@/library/brew/handoff/envelope";
+import {BREW_FIGURE_VALUE_SIZE} from "@/library/brew/figureGeometry";
+import {storyTextScale} from "@/library/brew/storyCard";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
@@ -1335,6 +1343,18 @@ describe("brew record's story card", () => {
             showRateChart: expect.any(Boolean),
             showStages: expect.any(Boolean)
         }));
+    });
+
+    it("renders story figures at the card's text scale", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(185);
+
+        expect(summaryProps.textScale).toBeCloseTo(storyTextScale(185), 6);
+        const card = within(screen.getByTestId("brew-story-card"));
+        const waterStyle = StyleSheet.flatten(
+            card.getByText("250").props.style as StyleProp<TextStyle>
+        );
+        expect(waterStyle?.fontSize).toBeLessThan(BREW_FIGURE_VALUE_SIZE);
     });
 
     it("drops story note and detail figures from the rendered summary when the budget needs room",

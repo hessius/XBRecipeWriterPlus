@@ -13,6 +13,8 @@ import {
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
     BREW_FIGURE_VALUE_SIZE,
+    brewFigureBadgeGeometry,
+    brewFigureBadgeWidth,
     brewFigureTextGeometry
 } from "@/library/brew/figureGeometry";
 import {
@@ -230,10 +232,34 @@ export type StoryHeaderLayout = {
     dateSize: number;
     markTracking: number;
     dateTracking: number;
-    dateVisualScale: number;
+    dateMaxFontSizeMultiplier: number;
     markWidth: number;
     dateWidth: number;
 };
+
+function boundedDateFontScale(
+    when: string,
+    dateSize: number,
+    tracking: number,
+    fontScale: number,
+    limit: number
+): number {
+    if (limit <= 0 || fontScale <= 1) return fontScale;
+    if (dotoTextWidth(when, dateSize, fontScale, tracking) <= limit) return fontScale;
+    if (dotoTextWidth(when, dateSize, 1, tracking) >= limit) return 1;
+
+    let low = 1;
+    let high = fontScale;
+    for (let i = 0; i < 12; i += 1) {
+        const mid = (low + high) / 2;
+        if (dotoTextWidth(when, dateSize, mid, tracking) <= limit) {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+    return low;
+}
 
 export function storyHeaderLayout(
     width: number,
@@ -246,13 +272,13 @@ export function storyHeaderLayout(
     const dateTracking = scaledTracking(1.4, width);
     const innerWidth = Math.max(0, width - 36);
     const markWidth = dotoTextWidth("XBRW++", markSize, fontScale, markTracking);
-    const dateWidth = dotoTextWidth(when, dateSize, fontScale, dateTracking);
+    const dateMaxFontSizeMultiplier = boundedDateFontScale(
+        when, dateSize, dateTracking, fontScale, innerWidth
+    );
+    const dateWidth = dotoTextWidth(when, dateSize, dateMaxFontSizeMultiplier, dateTracking);
     const markHeight = dotoRowHeight(markSize, fontScale);
-    const dateHeight = dotoRowHeight(dateSize, fontScale);
+    const dateHeight = dotoRowHeight(dateSize, dateMaxFontSizeMultiplier);
     const stacked = markWidth + dateWidth > innerWidth;
-    const dateVisualScale = dateWidth <= innerWidth || innerWidth === 0
-        ? 1
-        : innerWidth / dateWidth;
 
     return {
         stacked,
@@ -261,7 +287,7 @@ export function storyHeaderLayout(
         dateSize,
         markTracking,
         dateTracking,
-        dateVisualScale,
+        dateMaxFontSizeMultiplier,
         markWidth,
         dateWidth
     };
@@ -346,10 +372,18 @@ function storyFigureColumnWidth(width: number): number {
     );
 }
 
-function storyFiguresFit(width: number, fontScale: number): StoryHorizontalFit {
+function storyFiguresFit(
+    width: number,
+    fontScale: number,
+    hasBypass: boolean
+): StoryHorizontalFit {
     const figures = brewFigureTextGeometry(storyTextScale(width));
+    const badge = brewFigureBadgeGeometry(storyTextScale(width));
     const column = storyFigureColumnWidth(width);
-    return fitResult([
+    const waterWithBypass = dotoTextWidth(
+        "240", figures.valueSize, fontScale, figures.valueTracking
+    ) + badge.gap + brewFigureBadgeWidth("+60", fontScale, storyTextScale(width));
+    const rows = [
         {
             id:    "water label",
             width: dotoTextWidth("WATER", figures.labelSize, fontScale, figures.labelTracking),
@@ -380,12 +414,24 @@ function storyFiguresFit(width: number, fontScale: number): StoryHorizontalFit {
             width: dotoTextWidth("3:26", figures.valueSize, fontScale, figures.valueTracking),
             limit: column
         }
-    ]);
+    ];
+    if (hasBypass) {
+        rows.push({
+            id:    "water value and bypass",
+            width: waterWithBypass,
+            limit: column
+        });
+    }
+    return fitResult(rows);
 }
 
 function storyDetailsFit(width: number, fontScale: number): StoryHorizontalFit {
     const figures = brewFigureTextGeometry(storyTextScale(width));
+    const badge = brewFigureBadgeGeometry(storyTextScale(width));
     const column = storyFigureColumnWidth(width);
+    const grindWithRecipe = dotoTextWidth(
+        "80", figures.detailValueSize, fontScale, figures.valueTracking
+    ) + badge.gap + brewFigureBadgeWidth("RECIPE 80", fontScale, storyTextScale(width));
     return fitResult([
         {
             id:    "grind label",
@@ -395,6 +441,11 @@ function storyDetailsFit(width: number, fontScale: number): StoryHorizontalFit {
         {
             id:    "grind value",
             width: dotoTextWidth("OFF", figures.detailValueSize, fontScale, figures.valueTracking),
+            limit: column
+        },
+        {
+            id:    "grind value and recipe",
+            width: grindWithRecipe,
             limit: column
         },
         {
@@ -426,35 +477,12 @@ export function storyHorizontalFit(
 ): StoryHorizontalFit {
     const width = input.width;
     const fontScale = input.fontScale ?? 1;
-    const header = storyHeaderLayout(width, fontScale);
-    const inner = Math.max(0, width - 36);
-    const headerRows = header.stacked
-        ? [
-            {
-                id:    "header mark",
-                width: dotoTextWidth("XBRW++", header.markSize, fontScale, header.markTracking),
-                limit: inner
-            },
-            {
-                id:    "header date",
-                width: header.dateWidth * header.dateVisualScale,
-                limit: inner
-            }
-        ]
-        : [
-            {
-                id:    "header row",
-                width: header.markWidth + header.dateWidth * header.dateVisualScale,
-                limit: inner
-            }
-        ];
-    const mainFigures = storyFiguresFit(width, fontScale);
+    const mainFigures = storyFiguresFit(width, fontScale, input.hasBypass === true);
     const details = budget.showFigureDetails
         ? storyDetailsFit(width, fontScale)
         : {fits: true, widest: "none", width: 0, limit: Number.POSITIVE_INFINITY};
 
     return fitResult([
-        ...headerRows,
         {id: mainFigures.widest, width: mainFigures.width, limit: mainFigures.limit},
         {id: details.widest, width: details.width, limit: details.limit}
     ]);

@@ -14,6 +14,7 @@ import {
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
+    brewFigureBadgeGeometry,
     brewFigureTextGeometry
 } from "@/library/brew/figureGeometry";
 import {formatFlowRate} from "@/library/brew/flowRate";
@@ -109,13 +110,21 @@ type Props = {
     textScale?: number;
 };
 
-function FigureBadge({children, testID}: {children: string | number; testID?: string}) {
+function FigureBadge({children, testID, textScale = 1}: {
+    children: string | number;
+    testID?: string;
+    textScale?: number;
+}) {
+    const badge = brewFigureBadgeGeometry(textScale);
     return (
         <XStack testID={testID}
-                paddingHorizontal={4} paddingVertical={1}
-                borderRadius="$2" borderWidth={1} borderStyle="dashed"
+                paddingHorizontal={badge.paddingHorizontal}
+                paddingVertical={badge.paddingVertical}
+                borderRadius={badge.borderRadius}
+                borderWidth={badge.borderWidth} borderStyle="dashed"
                 borderColor={palette.line}>
-            <DotMatrixText fontSize={11} weight="bold" color={palette.dim}>
+            <DotMatrixText fontSize={badge.fontSize} weight="bold" color={palette.dim}
+                           letterSpacing={badge.tracking} minFontSize={0}>
                 {children}
             </DotMatrixText>
         </XStack>
@@ -123,13 +132,14 @@ function FigureBadge({children, testID}: {children: string | number; testID?: st
 }
 
 function Figure({
-    label, value, color, badge, fontSize, labelSize, labelTracking, valueTracking,
+    label, value, color, badge, badgeGap, fontSize, labelSize, labelTracking, valueTracking,
     testID, accessibilityLabel
 }: {
     label: string;
     value: string;
     color: string;
     badge?: React.ReactNode;
+    badgeGap?: number;
     fontSize: number;
     labelSize?: number;
     labelTracking?: number;
@@ -147,7 +157,7 @@ function Figure({
                            letterSpacing={labelTracking ?? 1.6} color={palette.dim}>
                 {label}
             </DotMatrixText>
-            <XStack alignItems="center" gap="$1.5">
+            <XStack alignItems="center" gap={badgeGap ?? brewFigureBadgeGeometry().gap}>
                 <DotMatrixText fontSize={fontSize} weight="bold" color={color}
                                letterSpacing={valueTracking ?? 0.5}
                                numberOfLines={1}>
@@ -177,8 +187,11 @@ export default function BrewFigures(
     }: Props
 ) {
     const figureText = brewFigureTextGeometry(textScale);
+    const badgeGeometry = brewFigureBadgeGeometry(textScale);
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
-        <FigureBadge testID="figures-bypass">{`+${Math.round(bypass)}`}</FigureBadge>
+        <FigureBadge testID="figures-bypass" textScale={textScale}>
+            {`+${Math.round(bypass)}`}
+        </FigureBadge>
     );
     const flowText = flow === null ? null : formatFlowRate(flow);
     const pourRateText = pourRate === null ? null : formatFlowRate(pourRate);
@@ -216,18 +229,21 @@ export default function BrewFigures(
             <XStack gap={figureText.columnGap}>
                 <Figure label="WATER" value={String(Math.round(water))} color={accent}
                         badge={badge} fontSize={figureText.valueSize}
+                        badgeGap={badgeGeometry.gap}
                         labelSize={figureText.labelSize}
                         labelTracking={figureText.labelTracking}
                         valueTracking={figureText.valueTracking}
                         testID="figures-water" />
                 <Figure label="CUP" value={String(Math.round(cup))} color={palette.text}
                         fontSize={figureText.valueSize}
+                        badgeGap={badgeGeometry.gap}
                         labelSize={figureText.labelSize}
                         labelTracking={figureText.labelTracking}
                         valueTracking={figureText.valueTracking}
                         testID="figures-cup" />
                 <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text}
                         fontSize={figureText.valueSize}
+                        badgeGap={badgeGeometry.gap}
                         labelSize={figureText.labelSize}
                         labelTracking={figureText.labelTracking}
                         valueTracking={figureText.valueTracking}
@@ -291,13 +307,15 @@ export default function BrewFigures(
                                     value={grind.kind === "off" ? "OFF" : String(grind.dial)}
                                     color={palette.text}
                                     fontSize={figureText.detailValueSize}
+                                    badgeGap={badgeGeometry.gap}
                                     labelSize={figureText.labelSize}
                                     labelTracking={figureText.labelTracking}
                                     valueTracking={figureText.valueTracking}
                                     badge={grind.kind === "off" || grind.recipe === null
                                         ? undefined
                                         : (
-                                            <FigureBadge testID="figures-grind-recipe">
+                                            <FigureBadge testID="figures-grind-recipe"
+                                                         textScale={textScale}>
                                                 {`RECIPE ${grind.recipe}`}
                                             </FigureBadge>
                                         )}
@@ -313,6 +331,7 @@ export default function BrewFigures(
                                     value={`+${delay}`}
                                     color={palette.warn}
                                     fontSize={figureText.detailValueSize}
+                                    badgeGap={badgeGeometry.gap}
                                     labelSize={figureText.labelSize}
                                     labelTracking={figureText.labelTracking}
                                     valueTracking={figureText.valueTracking}
@@ -328,13 +347,15 @@ export default function BrewFigures(
                                     value={drawdownText}
                                     color={palette.text}
                                     fontSize={figureText.detailValueSize}
+                                    badgeGap={badgeGeometry.gap}
                                     labelSize={figureText.labelSize}
                                     labelTracking={figureText.labelTracking}
                                     valueTracking={figureText.valueTracking}
                                     badge={drawdownRateText === null
                                         ? undefined
                                         : (
-                                            <FigureBadge testID="figures-drawdown-rate">
+                                            <FigureBadge testID="figures-drawdown-rate"
+                                                         textScale={textScale}>
                                                 {`${drawdownRateText} G/S`}
                                             </FigureBadge>
                                         )}

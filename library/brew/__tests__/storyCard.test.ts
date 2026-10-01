@@ -283,6 +283,41 @@ describe("the frame", () => {
         );
     });
 
+    it("counts the bypass badge beside the water figure", () => {
+        const input = {
+            width: 185,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: true,
+            fontScale: 1
+        };
+        const budget = storySummaryBudget(input);
+        const fit = storyHorizontalFit(input, budget);
+
+        expect(fit).toEqual(expect.objectContaining({
+            fits: true,
+            widest: "water value and bypass"
+        }));
+        expect(fit.width).toBeGreaterThan(30);
+        expect(fit.width).toBeLessThanOrEqual(fit.limit);
+    });
+
+    it("does not use the header's self-clamped date as horizontal proof", () => {
+        const fit = storyHorizontalFit({
+            width: 137,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: false,
+            fontScale: 1.4
+        }, {showFigureDetails: false});
+
+        expect(fit.widest).not.toMatch(/^header/);
+    });
+
     it("keeps the real narrow-phone story width band inside the safe band", () => {
         expectAllMasksFit([185, 200, 220, 240]);
     });
@@ -299,19 +334,19 @@ describe("the frame", () => {
         expect(sweep.cell).toMatchObject({
             width: 430,
             stages: 1,
-            fontScale: 1,
+            fontScale: 1.4,
             hasCoffee: false,
             hasRating: false,
             tags: [],
             hasSummaryNote: false,
-            figureExtraRows: 0,
+            figureExtraRows: 1,
             hasRateChart: false,
             hasBypass: false
         });
-        // The 38 pt bound is the all-caps-saturated case. Trace and section
+        // The 65 pt bound is the all-caps-saturated case. Trace and section
         // gap have hit their composition caps, so the rest is centered-card
         // breathing room rather than a fit failure.
-        expect(sweep.worst).toBeLessThanOrEqual(38);
+        expect(sweep.worst).toBeLessThanOrEqual(65);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {

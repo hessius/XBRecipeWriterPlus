@@ -1,5 +1,5 @@
 import React from "react";
-import {StyleSheet, Text, type StyleProp, type ViewStyle} from "react-native";
+import {PixelRatio, StyleSheet, Text, type StyleProp, type ViewStyle} from "react-native";
 import {screen} from "@testing-library/react-native";
 
 import BrewStoryCard from "@/components/BrewStoryCard";
@@ -95,6 +95,19 @@ describe("the story card", () => {
         await show();
         expect(screen.getByLabelText("XBRW++")).toBeTruthy();
         expect(screen.getByTestId("story-when")).toHaveTextContent("3 Sep · 07:12");
+    });
+
+    it("shrinks the story date during layout rather than transforming it", async () => {
+        const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1.4);
+
+        await show({width: 185, when: "2026-09-30 · 06:55"});
+
+        const date = screen.getByTestId("story-when");
+        const style = StyleSheet.flatten(date.props.style as StyleProp<ViewStyle>);
+        expect(style?.transform).toBeUndefined();
+        expect(date.props.maxFontSizeMultiplier).toBeLessThan(1.4);
+
+        scaleSpy.mockRestore();
     });
 
     it("prints the coffee when there is one", async () => {
