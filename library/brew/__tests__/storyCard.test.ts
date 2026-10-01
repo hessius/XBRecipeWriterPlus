@@ -34,7 +34,7 @@ const STORY_NAME_MARGIN = 12;
 type SweepInput = Parameters<typeof storySummaryBudget>[0];
 
 function storyMaskInputs(width: number, stages: number, fontScale: number): SweepInput[] {
-    return Array.from({length: 64}, (_, mask) => ({
+    return Array.from({length: 128}, (_, mask) => ({
         width,
         stages,
         hasCoffee:      (mask & 1) !== 0,
@@ -45,7 +45,7 @@ function storyMaskInputs(width: number, stages: number, fontScale: number): Swee
         hasSummaryNote: (mask & 8) !== 0,
         figureExtraRows: (mask & 16) !== 0 ? 1 : 0,
         hasRateChart:   (mask & 32) !== 0,
-        hasBypass:      true,
+        hasBypass:      (mask & 64) !== 0,
         fontScale
     }));
 }

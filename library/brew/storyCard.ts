@@ -169,11 +169,6 @@ export const STORY_TRACE_MIN_HEIGHT = 44;
  */
 const STORY_TRACE_CAP = 237;
 /**
- * The flow chart deliberately stays at its shared record-screen height. The
- * trace is the card's primary object and takes slack first, so a later flow
- * allowance was never reachable.
- */
-/**
  * Section gaps spend what the two charts should not take. Ninety points is
  * reserved for cases where the rate chart was dropped, matching the default
  * trace's weight without exceeding it, so it still reads as row grouping rather
@@ -449,6 +444,11 @@ export function storySummaryBudget(
         ),
         requiredHeight,
         traceHeight: grown.values.get("trace") ?? chosen.trace,
+        // The flow chart stays at its shared record-screen height rather than
+        // growing into leftover slack. The trace is the card's primary object
+        // and is capped at 237, so an allowance behind it was measured as
+        // reached in one cell of a 15,552 cell sweep, at a width above any
+        // phone we draw on. It bought nothing and is gone.
         rateHeight: chosen.rate ? RATE_HEIGHT : 0,
         rateTopGap: chosen.rate ? RATE_TOP_GAP : 0,
         rateBottomGap: chosen.rate ? RATE_BOTTOM_GAP : 0,
