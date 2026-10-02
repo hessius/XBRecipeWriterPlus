@@ -4,7 +4,7 @@ type PluginEntry = string | [string, Record<string, unknown>];
 
 describe("native release configuration", () => {
     /**
-     * 2.1.0.
+     * 2.0.0.
      *
      * The ladder in issue #76 put M5 at 1.7.0 and reserved the major for the
      * account import, the release in which credentials leave the device for the
@@ -13,20 +13,25 @@ describe("native release configuration", () => {
      * import together, and one of those three is the one that changes what the
      * app does with their password.
      *
+     * The public store release is 1.5.0, so 2.0.0 is the next version a user
+     * will ever see. It was briefly carried to 2.1.0 on the reasoning that the
+     * BrewMind import (#159) added `expo-web-browser` and so changed the
+     * binary, but every 2.0.0 build so far reached TestFlight only. Nobody
+     * outside the beta has held a 2.0.0, so the minor was spent on a release
+     * that never happened, and it is spent back here.
+     *
      * `runtimeVersion.policy` is `appVersion`, so the version string is also
      * the runtime version, which is why a native affecting change has to bump
      * it. The belt and braces part is that `expo-updates` is not a dependency
      * of this app at all, so nothing is ever delivered over the air and
-     * `runtimeVersion` names a mechanism that is not in the build. If OTA
-     * updates are ever adopted, that second sentence stops being true and the
-     * first one carries the whole weight.
-     *
-     * The minor came with the BrewMind import (#159), which added
-     * `expo-web-browser`. That package ships Apple and Android native modules,
-     * so the binary changed and the version had to move with it.
+     * `runtimeVersion` names a mechanism that is not in the build. That is also
+     * why reusing 2.0.0 across TestFlight builds costs nothing: there is no
+     * update channel for the older builds to be caught by. If OTA updates are
+     * ever adopted, that stops being true and the paragraph above carries the
+     * whole weight.
      */
-    it("ships as 2.1.0, on the appVersion runtime policy", () => {
-        expect(appConfig.expo.version).toBe("2.1.0");
+    it("ships as 2.0.0, on the appVersion runtime policy", () => {
+        expect(appConfig.expo.version).toBe("2.0.0");
         expect(appConfig.expo.runtimeVersion.policy).toBe("appVersion");
     });
 
