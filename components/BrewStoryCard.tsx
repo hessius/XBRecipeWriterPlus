@@ -1,5 +1,5 @@
 import React from "react";
-import {PixelRatio, StyleSheet, View} from "react-native";
+import {StyleSheet, View} from "react-native";
 import {XStack, YStack} from "tamagui";
 
 import BrewStars from "@/components/BrewStars";
@@ -7,7 +7,12 @@ import DotMatrixText from "@/components/DotMatrixText";
 import Wordmark from "@/components/Wordmark";
 import {palette} from "@/constants/colors";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {storyFrame, storySummaryBudget, type StorySummaryBudget} from "@/library/brew/storyCard";
+import {
+    storyFrame,
+    storyHeaderLayout,
+    storyTextScale,
+    type StorySummaryBudget
+} from "@/library/brew/storyCard";
 
 /** How many tags fit on the card before the rest are counted instead. */
 const MAX_SHOWN_TAGS = 4;
@@ -15,6 +20,8 @@ const MAX_SHOWN_TAGS = 4;
 type Props = {
     /** The width the card is drawn at; the height follows from the ratio. */
     width: number;
+    /** The one measured layout decision for this card width and font scale. */
+    budget: StorySummaryBudget;
     /**
      * The very same `BrewSummary` element the record screen draws.
      *
@@ -38,10 +45,6 @@ type Props = {
     coffee: string | null;
     /** The brew's tags, in the order they were given. */
     tags: string[];
-    hasBypass?: boolean;
-    figureExtraRows?: number;
-    hasSummaryNote?: boolean;
-    stagesUnavailable?: boolean;
 };
 
 /**
@@ -61,24 +64,11 @@ type Props = {
  * is a mark that damages the data.
  */
 export default function BrewStoryCard({
-    width, summary, stageCount = 2, when, accent, rating, coffee, tags,
-    hasRateChart = true, hasBypass = false, figureExtraRows = 0,
-    hasSummaryNote = false, stagesUnavailable = false
+    width, budget, summary, when, accent, rating, coffee, tags
 }: Props) {
     const frame = storyFrame(width);
-    const budget = storySummaryBudget({
-        width,
-        stages: stageCount,
-        hasRateChart,
-        hasCoffee: coffee !== null,
-        hasRating: rating > 0,
-        tags,
-        fontScale: PixelRatio.getFontScale(),
-        hasBypass,
-        figureExtraRows,
-        hasSummaryNote,
-        stagesUnavailable
-    });
+    const textScale = storyTextScale(width);
+    const header = storyHeaderLayout(width, budget.fontScale, when);
     const shown = tags.slice(0, Math.min(MAX_SHOWN_TAGS, budget.shownTagCount));
     const extra = tags.length - shown.length;
     const summaryNode = typeof summary === "function" ? summary(budget) : summary;
@@ -91,15 +81,35 @@ export default function BrewStoryCard({
             <View style={{height: frame.safeTop}} testID="story-safe-top"/>
             <YStack testID="story-content" flex={1} justifyContent="center"
                     gap={budget.sectionGap}>
-                <XStack paddingHorizontal={SCREEN_PADDING}
-                        alignItems="center" justifyContent="space-between">
-                    <Wordmark fontSize={16} plusColor={accent}/>
-                    <DotMatrixText testID="story-when" fontSize={11}
-                                   weight="bold" letterSpacing={1.4}
-                                   color={palette.dim}>
-                        {when}
-                    </DotMatrixText>
-                </XStack>
+                {header.stacked ? (
+                    <YStack paddingHorizontal={SCREEN_PADDING} gap={2}>
+                        <Wordmark fontSize={header.markSize} plusColor={accent}/>
+                        <XStack justifyContent="flex-end">
+                            <DotMatrixText testID="story-when" fontSize={header.dateSize}
+                                           weight="bold"
+                                           letterSpacing={header.dateTracking}
+                                           maxFontSizeMultiplier={
+                                               header.dateMaxFontSizeMultiplier
+                                           }
+                                           numberOfLines={1} color={palette.dim}>
+                                {when}
+                            </DotMatrixText>
+                        </XStack>
+                    </YStack>
+                ) : (
+                    <XStack paddingHorizontal={SCREEN_PADDING}
+                            alignItems="center" justifyContent="space-between">
+                        <Wordmark fontSize={header.markSize} plusColor={accent}/>
+                        <DotMatrixText testID="story-when" fontSize={header.dateSize}
+                                       weight="bold" letterSpacing={header.dateTracking}
+                                       maxFontSizeMultiplier={
+                                           header.dateMaxFontSizeMultiplier
+                                       }
+                                       numberOfLines={1} color={palette.dim}>
+                            {when}
+                        </DotMatrixText>
+                    </XStack>
+                )}
 
                 {summaryNode}
 
@@ -108,9 +118,9 @@ export default function BrewStoryCard({
                     nobody gave, reads as a card that failed to load them. */}
                 {coffee !== null && budget.showCoffee && (
                     <XStack paddingHorizontal={SCREEN_PADDING}>
-                        <DotMatrixText testID="story-coffee" fontSize={12}
-                                       weight="bold" letterSpacing={1.4}
-                                       color={palette.text}>
+                        <DotMatrixText testID="story-coffee" fontSize={12 * textScale}
+                                       weight="bold" letterSpacing={1.4 * textScale}
+                                       numberOfLines={1} color={palette.text}>
                             {coffee}
                         </DotMatrixText>
                     </XStack>
@@ -132,11 +142,13 @@ export default function BrewStoryCard({
                     <XStack paddingHorizontal={SCREEN_PADDING} gap="$2"
                             flexWrap="wrap" testID="story-tags">
                         {shown.map((tag) => (
-                            <XStack key={tag} paddingHorizontal={8}
-                                    paddingVertical={4} borderRadius={4}
+                            <XStack key={tag} testID={`story-tag-${tag}`}
+                                    paddingHorizontal={8 * textScale}
+                                    paddingVertical={4 * textScale} borderRadius={4}
                                     backgroundColor={palette.raised}>
-                                <DotMatrixText fontSize={10} weight="bold"
-                                               letterSpacing={1.2}
+                                <DotMatrixText fontSize={10 * textScale} weight="bold"
+                                               letterSpacing={1.2 * textScale}
+                                               numberOfLines={1}
                                                color={palette.dim}>
                                     {tag}
                                 </DotMatrixText>
@@ -146,9 +158,9 @@ export default function BrewStoryCard({
                             wrap to a second row and push the ladder into the
                             platform's reply box. */}
                         {extra > 0 && (
-                            <DotMatrixText testID="story-tags-more" fontSize={10}
-                                           weight="bold" letterSpacing={1.2}
-                                           color={palette.muted}>
+                            <DotMatrixText testID="story-tags-more" fontSize={10 * textScale}
+                                           weight="bold" letterSpacing={1.2 * textScale}
+                                           numberOfLines={1} color={palette.muted}>
                                 {`+${extra}`}
                             </DotMatrixText>
                         )}

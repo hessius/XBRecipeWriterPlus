@@ -1,6 +1,12 @@
 // app/__tests__/brewRecord.test.tsx
 import React from "react";
-import {Linking, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
+import {
+    Linking,
+    StyleSheet,
+    type StyleProp,
+    type TextStyle,
+    type ViewStyle
+} from "react-native";
 import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 import * as Sharing from "expo-sharing";
 import {File as FSFile} from "expo-file-system";
@@ -22,6 +28,8 @@ import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {planFromPours} from "@/library/brew/BrewRecord";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import type {HandoffEnvelope} from "@/library/brew/handoff/envelope";
+import {BREW_FIGURE_VALUE_SIZE} from "@/library/brew/figureGeometry";
+import {storyTextScale} from "@/library/brew/storyCard";
 
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
@@ -180,6 +188,17 @@ function decodeHandoffUrl(url: string): HandoffEnvelope {
     return JSON.parse(
         new TextDecoder().decode(gunzipSync(Buffer.from(padded, "base64")))
     ) as HandoffEnvelope;
+}
+
+const RECORD_ACTION_KEYS = ["compare", "handoff", "export", "story"] as const;
+type RecordActionKey = typeof RECORD_ACTION_KEYS[number];
+
+function recordActionRows(): RecordActionKey[][] {
+    return screen.getAllByTestId("record-action-row").map((row) =>
+        RECORD_ACTION_KEYS.filter((key) =>
+            within(row).queryByTestId(`record-action-${key}`) !== null
+        )
+    );
 }
 
 describe("brew record", () => {
@@ -387,11 +406,74 @@ describe("brew record", () => {
         expect(screen.queryByLabelText("Copy the frame log")).toBeNull();
     });
 
-    it("keeps a lone action in its half-row slot when its pair is absent", async () => {
+    it("orders compare and handoff as full rows before the paired output actions", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(recordActionRows()).toEqual([
+            ["compare"],
+            ["handoff"],
+            ["export", "story"]
+        ]);
+        const compareStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-compare").props.style as StyleProp<ViewStyle>
+        );
+        const handoffStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-handoff").props.style as StyleProp<ViewStyle>
+        );
+        const exportStyle = StyleSheet.flatten(
+            screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
+        );
+        const actionStyle = StyleSheet.flatten(
+            screen.getByTestId("record-actions").props.style as StyleProp<ViewStyle>
+        );
+        const handoffWidth = handoffStyle?.width;
+        const compareWidth = compareStyle?.width;
+        const exportWidth = exportStyle?.width;
+        const actionWidth = actionStyle?.width;
+        expect(typeof compareWidth).toBe("number");
+        expect(typeof handoffWidth).toBe("number");
+        expect(typeof exportWidth).toBe("number");
+        expect(typeof actionWidth).toBe("number");
+
+        expect(compareWidth as number).toBe(actionWidth);
+        expect(handoffWidth as number).toBe(actionWidth);
+        expect(handoffWidth as number).toBeGreaterThan(exportWidth as number);
+    });
+
+    it("keeps export and story paired when compare is absent", async () => {
+        mockBrews = [record];
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(recordActionRows()).toEqual([
+            ["handoff"],
+            ["export", "story"]
+        ]);
+    });
+
+    it("keeps export and story paired when handoff is absent", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
+        sharedSettings().set("beanconquerorHandoff", false);
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(recordActionRows()).toEqual([
+            ["compare"],
+            ["export", "story"]
+        ]);
+    });
+
+    it("pairs export and story when they are the only actions", async () => {
         mockBrews = [record];
         sharedSettings().set("beanconquerorHandoff", false);
 
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(recordActionRows()).toEqual([["export", "story"]]);
         const exportStyle = StyleSheet.flatten(
             screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
         );
@@ -410,33 +492,24 @@ describe("brew record", () => {
 
         expect(exportWidth as number).toBe(storyWidth);
         expect(exportWidth as number).toBeLessThan(actionWidth as number);
-        expect(screen.getAllByTestId("record-action-row")).toHaveLength(2);
-        expect(screen.getByLabelText("Export the data")).toBeTruthy();
-        expect(screen.getByLabelText("Share this brew as a story card")).toBeTruthy();
     });
 
-    it("keeps the Beanconqueror handoff on a full-width row", async () => {
-        mockBrews = [record];
+    it("draws the record actions with the brew's snapshotted accent outline", async () => {
+        const other = {...record, id: "brew-2", startedAt: 900_000};
+        mockBrews = [other, record];
 
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
-        const handoffStyle = StyleSheet.flatten(
-            screen.getByTestId("record-action-handoff").props.style as StyleProp<ViewStyle>
-        );
-        const exportStyle = StyleSheet.flatten(
-            screen.getByTestId("record-action-export").props.style as StyleProp<ViewStyle>
-        );
-        const actionStyle = StyleSheet.flatten(
-            screen.getByTestId("record-actions").props.style as StyleProp<ViewStyle>
-        );
-        const handoffWidth = handoffStyle?.width;
-        const exportWidth = exportStyle?.width;
-        const actionWidth = actionStyle?.width;
-        expect(typeof handoffWidth).toBe("number");
-        expect(typeof exportWidth).toBe("number");
-        expect(typeof actionWidth).toBe("number");
 
-        expect(handoffWidth as number).toBe(actionWidth);
-        expect(handoffWidth as number).toBeGreaterThan(exportWidth as number);
+        expect(screen.getByTestId("record-action-compare-button-surface"))
+            .toHaveStyle({borderColor: record.accent, backgroundColor: palette.base});
+        expect(screen.getByTestId("record-action-compare-button-label"))
+            .toHaveStyle({color: record.accent});
+        expect(screen.getByTestId("record-action-handoff-button-surface"))
+            .toHaveStyle({borderColor: record.accent, backgroundColor: palette.base});
+        expect(screen.getByTestId("record-action-export-button-surface"))
+            .toHaveStyle({borderColor: record.accent, backgroundColor: palette.base});
+        expect(screen.getByTestId("record-action-story-button-surface"))
+            .toHaveStyle({borderColor: record.accent, backgroundColor: palette.base});
     });
 
     it("does not offer comparison when this is the only brew of its recipe", async () => {
@@ -1263,7 +1336,7 @@ describe("brew record's story card", () => {
             .toEqual(expect.objectContaining({selected: false}));
     });
 
-    it("drops the story rate chart when the fixed frame needs the room", async () => {
+    it("marks a requested story section unavailable when it cannot fit", async () => {
         mockOpened = {
             record:  recordWithDrawdownRate({
                 rating: 4,
@@ -1276,10 +1349,37 @@ describe("brew record's story card", () => {
         };
 
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
-        await openCard();
+        await openCard(120);
 
+        expect(screen.getByLabelText("FLOW unavailable, this will not fit")).toBeTruthy();
+        expect(screen.getByTestId("story-toggle-flow-unavailable")).toBeTruthy();
+    });
+
+    it("turns the story flow chart off and back on from its chip", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                rating: 4,
+                origin: "Huila",
+                roast:  "Medium",
+                tags:   ["filter", "washed"],
+                plan:   planFromPours(twoPours.pours)
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(349);
+
+        expect(summaryProps.showRateChart).toBe(true);
+        expect(screen.getByTestId("rate-chart")).toBeTruthy();
+
+        await pressStoryToggle("FLOW");
         expect(summaryProps.showRateChart).toBe(false);
         expect(screen.queryByTestId("rate-chart")).toBeNull();
+
+        await pressStoryToggle("FLOW");
+        expect(summaryProps.showRateChart).toBe(true);
+        expect(screen.getByTestId("rate-chart")).toBeTruthy();
         const style = StyleSheet.flatten(
             screen.getByTestId("brew-story-card").props.style as StyleProp<ViewStyle>
         );
@@ -1335,6 +1435,18 @@ describe("brew record's story card", () => {
             showRateChart: expect.any(Boolean),
             showStages: expect.any(Boolean)
         }));
+    });
+
+    it("renders story figures at the card's text scale", async () => {
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(185);
+
+        expect(summaryProps.textScale).toBeCloseTo(storyTextScale(185), 6);
+        const card = within(screen.getByTestId("brew-story-card"));
+        const waterStyle = StyleSheet.flatten(
+            card.getByText("250").props.style as StyleProp<TextStyle>
+        );
+        expect(waterStyle?.fontSize).toBeLessThan(BREW_FIGURE_VALUE_SIZE);
     });
 
     it("drops story note and detail figures from the rendered summary when the budget needs room",

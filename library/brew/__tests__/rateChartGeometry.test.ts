@@ -1,6 +1,7 @@
 import {
     contiguousRateRuns,
-    hasDrawableRateRun
+    hasDrawableRateRun,
+    rateAdjacentAllowance
 } from "../rateChartGeometry";
 import type {FlowPoint} from "../flowRate";
 
@@ -19,6 +20,10 @@ function runLengths(series: FlowPoint[]): number[] {
 }
 
 describe("rate chart geometry", () => {
+    it("allows four median gaps before splitting a sparse rate run", () => {
+        expect(rateAdjacentAllowance(seriesFromGaps([210, 210, 210, 210]))).toBe(840);
+    });
+
     it("keeps dense 100 ms streams on the existing 150 ms adjacency floor", () => {
         expect(runLengths(seriesFromGaps([100, 200, 100]))).toEqual([2, 2]);
     });
@@ -35,6 +40,15 @@ describe("rate chart geometry", () => {
 
     it("keeps an irregular sparse stream with occasional 900 ms gaps together", () => {
         expect(runLengths(seriesFromGaps([400, 380, 900, 410]))).toEqual([5]);
+    });
+
+    it("does not split a real 210 ms cadence on one 639 ms scale gap", () => {
+        const runs = contiguousRateRuns(seriesFromGaps([
+            210, 210, 639, 210, 210, 210, 210
+        ]));
+
+        expect(runs).toHaveLength(1);
+        expect(runs.map((run) => run.length)).toEqual([8]);
     });
 
     it("breaks across a real pause between stages", () => {

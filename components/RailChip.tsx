@@ -59,6 +59,8 @@ type Props = {
      * list that is not on screen to show the result.
      */
     dimmed?: boolean;
+    /** Requested but unavailable in the current measured layout. */
+    unavailable?: boolean;
     /**
      * Spelled out, because an icon-only chip has no visible text to fall back on
      * and a filter chip's Doto label is an abbreviation. Names the state, not the
@@ -145,11 +147,12 @@ function RailCaret({open, color}: {open: boolean; color: string}) {
  */
 export default function RailChip({
     active, onPress, accessibilityLabel, icon, label, expanded, caretOpen,
-    accent = palette.text, testID, dimmed = false
+    accent = palette.text, testID, dimmed = false, unavailable = false
 }: Props) {
     const iconOnly = label === undefined;
     // Ink only agrees with the fill; it does not carry the state itself.
-    const ink = active ? onAccent.text : palette.text;
+    const ink = active ? onAccent.text : unavailable ? palette.warn : palette.text;
+    const borderColor = unavailable ? palette.warn : active ? accent : palette.line;
 
     return (
         <XStack
@@ -162,7 +165,7 @@ export default function RailChip({
             // "disabled: false" on every chip in the rail is a word a reader
             // has to hear past on each one.
             accessibilityState={{
-                ...(expanded === undefined ? {selected: active} : {expanded}),
+                ...(expanded === undefined ? {selected: active && !unavailable} : {expanded}),
                 ...(dimmed ? {disabled: true} : {})
             }}
             opacity={dimmed ? DIMMED_OPACITY : 1}
@@ -176,8 +179,8 @@ export default function RailChip({
             gap="$1.5"
             borderRadius="$4"
             borderWidth={1}
-            backgroundColor={active ? accent : palette.none}
-            borderColor={active ? accent : palette.line}
+            backgroundColor={active && !unavailable ? accent : palette.none}
+            borderColor={borderColor}
             pressStyle={dimmed ? undefined : {opacity: 0.7}}>
             {icon !== undefined && (
                 <DotIcon name={icon} size={ICON_SIZE} color={ink}/>

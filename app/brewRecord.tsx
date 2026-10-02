@@ -1,7 +1,7 @@
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
-import {Pressable, ScrollView, useWindowDimensions} from "react-native";
+import {PixelRatio, Pressable, ScrollView, useWindowDimensions} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
@@ -28,7 +28,7 @@ import {bypassViewFromRecord} from "@/library/brew/bypassState";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {brewFigures} from "@/library/brew/brewFigures";
 import {poursFromPlan} from "@/library/brew/BrewRecord";
-import {dialNote} from "@/library/brew/dialAfterBrew";
+import {dialNote, type GrindFigure} from "@/library/brew/dialAfterBrew";
 import {drawdownFigures, retrospectiveFlowSeries} from "@/library/brew/flowRate";
 import {hasDrawableRateRun} from "@/library/brew/rateChartGeometry";
 import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
@@ -39,6 +39,8 @@ import {
     storyContentFacts,
     storyHiddenFromSetting,
     storyHiddenToSetting,
+    storySummaryBudget,
+    storyTextScale,
     type StoryContentKey
 } from "@/library/brew/storyCard";
 import {plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
@@ -75,11 +77,20 @@ const STORY_TOGGLE_LABELS: Record<StoryContentKey, string> = {
     flow:    "FLOW"
 };
 
+function storyGrindForBudget(
+    grind: GrindFigure | null,
+    showRecipeBadge: boolean
+): GrindFigure | null {
+    if (showRecipeBadge || grind === null || grind.kind !== "dial") return grind;
+    return {...grind, recipe: null};
+}
+
 function RecordActionRows(
-    {pairs, halfWidth, fullWidth}: {
+    {pairs, halfWidth, fullWidth, accent}: {
         pairs: readonly RecordActionPair[];
         halfWidth: number;
         fullWidth: number;
+        accent: string;
     }
 ) {
     const rows: React.ReactNode[] = [];
@@ -92,8 +103,10 @@ function RecordActionRows(
                 <XStack key={`${action.key}-wide`} testID="record-action-row">
                     <YStack testID={`record-action-${action.key}`} width={fullWidth}>
                         <ExportButton
+                            testID={`record-action-${action.key}-button`}
                             label={action.label}
                             busy={action.busy}
+                            accent={accent}
                             accessibilityLabel={action.accessibilityLabel}
                             onPress={action.onPress}
                         />
@@ -111,8 +124,10 @@ function RecordActionRows(
                     <YStack key={action.key} testID={`record-action-${action.key}`}
                             width={halfWidth}>
                         <ExportButton
+                            testID={`record-action-${action.key}-button`}
                             label={action.label}
                             busy={action.busy}
+                            accent={accent}
                             accessibilityLabel={action.accessibilityLabel}
                             onPress={action.onPress}
                         />
@@ -380,12 +395,6 @@ export default function BrewRecord({recipeLookup}: Props) {
         }
         setStoryCardHidden(storyHiddenToSetting(next));
     }
-    const storyToggles = offeredStoryContent(storyFacts).map((key) => ({
-        key,
-        label:  STORY_TOGGLE_LABELS[key],
-        active: storyContentRequested(key),
-        onPress: () => toggleStoryContent(key)
-    }));
     const storyCoffee = storyContentRequested("coffee") ? storyCoffeeLine(record) : null;
     const storyRating = storyContentRequested("rating") ? judgement.rating : 0;
     const storyTags = storyContentRequested("tags") ? record.tags ?? [] : [];
@@ -394,12 +403,20 @@ export default function BrewRecord({recipeLookup}: Props) {
     const storyHasRateChart = hasStoryRateChart && storyContentRequested("flow");
     const actionFullWidth = Math.max(0, width - SCREEN_PADDING * 2);
     const actionHalfWidth = Math.max(0, (actionFullWidth - RECORD_ACTION_GAP) / 2);
-    // This pair can never render as [handoff, export]: the handoff label is
-    // wider than a half slot at every font scale, so EXPORT THE DATA sits alone
-    // under the full-width handoff by design.
-    // Doto Bold at 11 pt and the bounded 1.4 font scale measures SEND TO
-    // BEANCONQUEROR at 226.04 pt. On a 320 pt screen the two-up slot is
-    // 135.5 pt, so this button keeps its own row instead of pairing.
+    // COMPARE and the Beanconqueror handoff each keep a full width row, then
+    // the two short output actions pair. Doto Bold at 11 pt and the bounded
+    // 1.4 font scale measures SEND TO BEANCONQUEROR at 226.04 pt. On a 320 pt
+    // screen the two up slot is 135.5 pt, so the handoff cannot share a row.
+    // Missing full width actions are skipped, leaving EXPORT THE DATA and
+    // SHARE STORY together whenever both are present.
+    const compareAction: RecordAction | null = hasComparisonCandidate ? {
+        key:                "compare",
+        label:              "Compare",
+        busy:               false,
+        accessibilityLabel: "Compare with another brew",
+        wide:               true,
+        onPress:            openComparisonPicker
+    } : null;
     const handoffAction: RecordAction | null = showHandoff ? {
         key:   "handoff",
         label: handoffTarget.buttonLabel,
@@ -408,23 +425,15 @@ export default function BrewRecord({recipeLookup}: Props) {
         onPress: handoff.requestSend
     } : null;
     const actionPairs: RecordActionPair[] = [
+        [compareAction, null],
+        [handoffAction, null],
         [
-            handoffAction,
             {
                 key:   "export",
                 label: "Export the data",
                 busy,
                 onPress: () => void shareData()
-            }
-        ],
-        [
-            hasComparisonCandidate ? {
-                key:                "compare",
-                label:              "Compare",
-                busy:               false,
-                accessibilityLabel: "Compare with another brew",
-                onPress:            openComparisonPicker
-            } : null,
+            },
             {
                 key:                "story",
                 label:              "Share story",
@@ -553,7 +562,8 @@ export default function BrewRecord({recipeLookup}: Props) {
                     <YStack testID="record-actions" width={actionFullWidth} gap="$2">
                     <RecordActionRows pairs={actionPairs}
                                       halfWidth={actionHalfWidth}
-                                      fullWidth={actionFullWidth} />
+                                      fullWidth={actionFullWidth}
+                                      accent={accent} />
                     {handoff.sentAt > 0 && (
                         <Text fontSize={12} color={palette.dim}>
                             {HANDOFF_ALREADY_SENT(
@@ -596,21 +606,42 @@ export default function BrewRecord({recipeLookup}: Props) {
             <BrewStorySheet open={storyOpen} onOpenChange={setStoryOpen}
                             shotRef={story.shotRef} busy={story.busy}
                             onShare={() => void story.shareImage()}
-                            toggles={storyToggles}>
-                {(cardWidth) => (
+                            layout={(cardWidth) => {
+                                const budget = storySummaryBudget({
+                                    width: cardWidth,
+                                    stages: stages.length,
+                                    hasRateChart: storyHasRateChart,
+                                    hasCoffee: storyCoffee !== null,
+                                    hasRating: storyRating > 0,
+                                    tags: storyTags,
+                                    hasBypass: summary.bypass !== undefined,
+                                    hasGrindRecipeBadge: storyHasDetails
+                                        && summary.grind?.kind === "dial"
+                                        && summary.grind.recipe !== null,
+                                    drawdownRate: storyHasDetails ? summary.drawdownRate : null,
+                                    hasSummaryNote: storyHasNote,
+                                    stagesUnavailable: summary.stagesUnavailable,
+                                    figureExtraRows: storyHasDetails ? 1 : 0,
+                                    fontScale: PixelRatio.getFontScale()
+                                });
+                                const toggles = offeredStoryContent(storyFacts).map((key) => ({
+                                    key,
+                                    label:       STORY_TOGGLE_LABELS[key],
+                                    active:      storyContentRequested(key),
+                                    unavailable: budget.declinedContent[key],
+                                    onPress:     () => toggleStoryContent(key)
+                                }));
+                                return {
+                                    toggles,
+                                    card: (
                     <BrewStoryCard
                         width={cardWidth}
+                        budget={budget}
                         when={`${formatBrewDate(record.startedAt)} · ${formatBrewTime(record.startedAt)}`}
                         accent={accent}
                         rating={storyRating}
                         coffee={storyCoffee}
                         tags={storyTags}
-                        stageCount={stages.length}
-                        hasRateChart={storyHasRateChart}
-                        hasBypass={summary.bypass !== undefined}
-                        hasSummaryNote={storyHasNote}
-                        stagesUnavailable={summary.stagesUnavailable}
-                        figureExtraRows={storyHasDetails ? 1 : 0}
                         summary={(budget) => (
                             <BrewSummary
                                 {...summary}
@@ -619,11 +650,15 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 drawdown={storyHasDetails && budget.showFigureDetails
                                     ? summary.drawdown : null}
                                 drawdownRate={storyHasDetails && budget.showFigureDetails
-                                    ? summary.drawdownRate : null}
+                                    && budget.showDrawdownRateBadge ? summary.drawdownRate : null}
                                 delay={storyHasDetails && budget.showFigureDetails
                                     ? summary.delay : null}
                                 grind={storyHasDetails && budget.showFigureDetails
-                                    ? summary.grind : null}
+                                    ? storyGrindForBudget(
+                                        summary.grind,
+                                        budget.showGrindRecipeBadge
+                                    ) : null}
+                                showBypassBadge={budget.showBypassBadge}
                                 width={cardWidth}
                                 testID="story-capture"
                                 traceHeight={budget.traceHeight}
@@ -638,6 +673,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 }}
                                 showRateChart={budget.showRateChart}
                                 showStages={budget.showStages}
+                                textScale={storyTextScale(cardWidth)}
                                 // Always still: a capture taken mid-travel
                                 // freezes the name half-scrolled, and unlike
                                 // the screen's own summary there is no moment
@@ -646,8 +682,9 @@ export default function BrewRecord({recipeLookup}: Props) {
                             />
                         )}
                     />
-                )}
-            </BrewStorySheet>
+                                    )
+                                };
+                            }} />
             <CompareWithSheet
                 open={pickingComparison}
                 candidates={comparisonCandidates}

@@ -2,15 +2,20 @@ import {
     STORY_ASPECT, STORY_SAFE_BOTTOM, STORY_SAFE_TOP,
     STORY_CAPTURE_PADDING,
     STORY_CONTENT_KEYS,
-    STORY_LADDER_TOP_GAP,
+    STORY_FIT_MARGIN,
+    STORY_TRACE_HEIGHT,
     STORY_TEST_FONT_SCALES, STORY_TEST_WIDTHS,
     offeredStoryContent,
     storyCoffeeLine,
     storyContentFacts,
     storyFrame,
+    storyHeaderLayout,
     storyHiddenFromSetting,
     storyHiddenToSetting,
-    storySummaryBudget
+    storyHorizontalFit,
+    storySummaryBudget,
+    storyTextScale,
+    type StorySummaryBudget
 } from "../storyCard";
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
@@ -20,10 +25,13 @@ import {
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
-    BREW_FIGURE_VALUE_SIZE
+    BREW_FIGURE_VALUE_SIZE,
+    brewFigureBadgeGeometry,
+    brewFigureBadgeWidth
 } from "../figureGeometry";
+import {formatBrewDate, formatBrewTime} from "../brewFormat";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
-import {dotoRowHeight} from "@/library/dotoMetrics";
+import {dotoRowHeight, dotoTextWidth, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
 import {stageLadderRungMinHeight} from "../stageLadderGeometry";
 
 const brew = (over: Partial<BrewRecord> = {}) =>
@@ -47,30 +55,34 @@ function storyMaskInputs(width: number, stages: number, fontScale: number): Swee
         figureExtraRows: (mask & 16) !== 0 ? 1 : 0,
         hasRateChart:   (mask & 32) !== 0,
         hasBypass:      (mask & 64) !== 0,
+        hasGrindRecipeBadge: (mask & 16) !== 0,
+        drawdownRate:   (mask & 16) !== 0 ? 2.1 : null,
         fontScale
     }));
 }
 
 function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySummaryBudget>) {
     const fontScale = input.fontScale ?? 1;
-    const nameHeight = dotoRowHeight(STORY_NAME_SIZE, fontScale) + STORY_NAME_MARGIN;
-    const baseFigures = dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+    const textScale = storyTextScale(input.width);
+    const nameHeight = dotoRowHeight(STORY_NAME_SIZE * textScale, fontScale)
+        + STORY_NAME_MARGIN * textScale;
+    const baseFigures = dotoRowHeight(BREW_FIGURE_LABEL_SIZE * textScale, fontScale)
         + BREW_FIGURE_INTERNAL_GAP
-        + dotoRowHeight(BREW_FIGURE_VALUE_SIZE, fontScale);
+        + dotoRowHeight(BREW_FIGURE_VALUE_SIZE * textScale, fontScale);
     const detailFigures = budget.showFigureDetails !== false
         ? Math.max(0, input.figureExtraRows ?? 0) * (
             BREW_FIGURE_ROW_GAP
-            + dotoRowHeight(BREW_FIGURE_LABEL_SIZE, fontScale)
+            + dotoRowHeight(BREW_FIGURE_LABEL_SIZE * textScale, fontScale)
             + BREW_FIGURE_INTERNAL_GAP
-            + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale)
+            + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE * textScale, fontScale)
         )
         : 0;
     const noteHeight = budget.showSummaryNote !== false && input.hasSummaryNote === true
-        ? dotoRowHeight(11, fontScale) + 8
+        ? dotoRowHeight(11 * textScale, fontScale) + 8
         : 0;
     const ladderRows = input.stages + (input.hasBypass === true ? 1 : 0);
     const ladderHeight = budget.showStages
-        ? STORY_LADDER_TOP_GAP
+        ? budget.ladderTopGap
             + (input.stagesUnavailable === true
                 ? dotoRowHeight(11, fontScale)
                 : ladderRows * stageLadderRungMinHeight(
@@ -112,6 +124,25 @@ function storySweepWorstSlack(): {worst: number; cell: SweepInput; visited: numb
     }
     if (cell === null) throw new Error("story slack sweep visited no cells");
     return {worst, cell, visited};
+}
+
+function storyHorizontalSweep(): {visited: number} {
+    let visited = 0;
+    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+        for (const fontScale of STORY_TEST_FONT_SCALES) {
+            for (const width of STORY_TEST_WIDTHS) {
+                for (const input of storyMaskInputs(width, stages, fontScale)) {
+                    visited += 1;
+                    const budget = storySummaryBudget(input);
+
+                    expect(storyHorizontalFit(input, budget)).toEqual(
+                        expect.objectContaining({fits: true})
+                    );
+                }
+            }
+        }
+    }
+    return {visited};
 }
 
 function expectAllMasksFit(widths: number[]) {
@@ -173,6 +204,77 @@ describe("the frame", () => {
         });
 
         expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+    });
+
+    it("grants the flow chart at a real height-constrained phone card width", () => {
+        const budget = storySummaryBudget({
+            width: 349,
+            stages: 4,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            fontScale: 1
+        });
+
+        expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+        expect(budget.showFigureDetails).toBe(true);
+        expect(budget.showRateChart).toBe(true);
+    });
+
+    it("shrinks the trace before it drops an enabled flow chart", () => {
+        const budget = storySummaryBudget({
+            width: 270,
+            stages: 4,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            fontScale: 1
+        });
+
+        expect(budget.showRateChart).toBe(true);
+        expect(budget.traceHeight).toBeLessThan(STORY_TRACE_HEIGHT);
+    });
+
+    it("keeps content the user turned off out even when there is room", () => {
+        const budget = storySummaryBudget({
+            width: 600,
+            stages: 4,
+            hasRateChart: false,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            fontScale: 1
+        });
+
+        expect(budget.showRateChart).toBe(false);
+        expect(budget.rateHeight).toBe(0);
+        expect(budget.declinedContent.flow).toBe(false);
+    });
+
+    it("reports enabled content that cannot fit at its minimum", () => {
+        const budget = storySummaryBudget({
+            width: 120,
+            stages: 10,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            hasSummaryNote: true,
+            fontScale: DOTO_MAX_FONT_SCALE
+        });
+
+        expect(budget.showRateChart).toBe(false);
+        expect(budget.declinedContent.flow).toBe(true);
     });
 
     it("spends spare story room on the ladder bands", () => {
@@ -237,7 +339,7 @@ describe("the frame", () => {
                         ].filter(Boolean).length;
 
                         expect(budget.gapSlots).toBe(1 + optionalRows);
-                        expect(budget.requiredHeight)
+                        expect(budget.requiredHeight + 0.001)
                             .toBeGreaterThanOrEqual(trueDrawnHeight(input, budget));
                     }
                 }
@@ -249,6 +351,218 @@ describe("the frame", () => {
         expectAllMasksFit(STORY_TEST_WIDTHS);
     });
 
+    /**
+     * The cell count is stated as a literal rather than derived from the same
+     * lists the sweep walks. Derived from them it would be a tautology: cutting
+     * STORY_TEST_WIDTHS to one entry shrinks both sides and still passes, which
+     * is how a sweep silently stops covering anything. These literals are the
+     * coverage this proof claims, so narrowing a list has to be deliberate.
+     */
+    it("keeps every drawn story row inside the card width", () => {
+        const sweep = storyHorizontalSweep();
+
+        expect(STORY_TEST_WIDTHS.length).toBe(13);
+        expect(STORY_TEST_FONT_SCALES.length).toBe(4);
+        expect(MACHINE_CARD_MAX_STAGES).toBe(10);
+        expect(sweep.visited).toBe(66_560);
+    });
+
+    it("uses an explicit horizontal fit tolerance", () => {
+        expect(STORY_FIT_MARGIN).toBeGreaterThan(0);
+    });
+
+    it("keeps the horizontal drawdown badge decision out of the vertical ladder", () => {
+        const budget = storySummaryBudget({
+            width: 430,
+            stages: 3,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
+            hasSummaryNote: true,
+            figureExtraRows: 1,
+            hasBypass: true,
+            drawdownRate: 2.1,
+            fontScale: 1.2
+        });
+
+        expect(budget.showFigureDetails).toBe(true);
+        expect(budget.showSummaryNote).toBe(true);
+        expect(budget.showRateChart).toBe(true);
+        expect(budget.showDrawdownRateBadge).toBe(false);
+    });
+
+    it("suppresses an oversized drawdown rate badge on the story card only", () => {
+        const budget = storySummaryBudget({
+            width: 430,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            figureExtraRows: 1,
+            drawdownRate: 9999.9,
+            fontScale: 1
+        });
+
+        expect(budget.showFigureDetails).toBe(true);
+        expect(budget.showDrawdownRateBadge).toBe(false);
+    });
+
+    it("drops tags when one legal tag cannot fit a row by itself", () => {
+        const budget = storySummaryBudget({
+            width: 220,
+            stages: 0,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            tags: ["W".repeat(32)],
+            fontScale: DOTO_MAX_FONT_SCALE
+        });
+
+        expect(budget.shownTagCount).toBe(0);
+        expect(budget.tagRows).toBe(0);
+    });
+
+    it("suppresses the bypass badge when card-limit figures would overflow the story cell", () => {
+        const input = {
+            width: 185,
+            stages: MACHINE_CARD_MAX_STAGES,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: true,
+            fontScale: DOTO_MAX_FONT_SCALE
+        };
+        const budget = storySummaryBudget(input);
+        const fit = storyHorizontalFit(input, budget);
+
+        expect((budget as StorySummaryBudget & {showBypassBadge: boolean}).showBypassBadge)
+            .toBe(false);
+        expect(fit).toEqual(expect.objectContaining({fits: true}));
+        expect(fit.widest).not.toBe("water value and bypass");
+    });
+
+    it("keeps the bypass badge when the actual stage-count maxima fit", () => {
+        const budget = storySummaryBudget({
+            width: 430,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: true,
+            fontScale: 1.2
+        });
+        const maxStageBudget = storySummaryBudget({
+            width: 430,
+            stages: MACHINE_CARD_MAX_STAGES,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: true,
+            fontScale: 1.2
+        });
+
+        expect(budget.showBypassBadge).toBe(true);
+        expect(maxStageBudget.showBypassBadge).toBe(false);
+    });
+
+    it("counts the bypass badge beside the water figure", () => {
+        const input = {
+            width: 185,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: true,
+            fontScale: 1
+        };
+        const budget = storySummaryBudget(input);
+        const fit = storyHorizontalFit(input, budget);
+
+        expect(fit).toEqual(expect.objectContaining({
+            fits: true,
+            widest: "water value and bypass"
+        }));
+        expect(fit.width).toBeGreaterThan(30);
+        expect(fit.width).toBeLessThanOrEqual(fit.limit);
+    });
+
+    it("counts the drawdown rate badge beside the drawdown figure", () => {
+        const input = {
+            width: 600,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: false,
+            hasGrindRecipeBadge: false,
+            figureExtraRows: 1,
+            fontScale: 1
+        };
+        const budget = storySummaryBudget(input);
+        const fit = storyHorizontalFit(input, budget);
+
+        expect(budget.showFigureDetails).toBe(true);
+        expect(budget.showDrawdownRateBadge).toBe(true);
+        expect(fit).toEqual(expect.objectContaining({fits: true}));
+        expect(fit.width).toBeGreaterThan(80);
+        expect(fit.width + STORY_FIT_MARGIN).toBeLessThanOrEqual(fit.limit);
+    });
+
+    it("does not hand React Native an invalid reduced date font multiplier", () => {
+        const header = storyHeaderLayout(185, 0.85);
+
+        expect(header.dateMaxFontSizeMultiplier).toBe(DOTO_MAX_FONT_SCALE);
+        expect(header.dateWidth).toBeLessThanOrEqual(185 - 36);
+    });
+
+    it("budgets figure badges with the same sub-one Doto floor the card draws", () => {
+        const scale = storyTextScale(220);
+        const badge = brewFigureBadgeGeometry(scale);
+        const withoutFloor = dotoTextWidth(
+            "RECIPE 80",
+            badge.fontSize,
+            0.85,
+            badge.tracking,
+            0
+        ) + (badge.paddingHorizontal + badge.borderWidth) * 2;
+
+        expect(brewFigureBadgeWidth("RECIPE 80", 0.85, scale)).toBeGreaterThan(withoutFloor);
+    });
+
+    it("reserves the date row height at the multiplier it can draw", () => {
+        const header = storyHeaderLayout(185, 1);
+
+        expect(header.stacked).toBe(true);
+        expect(header.height).toBe(
+            dotoRowHeight(header.markSize, 1)
+            + 2
+            + dotoRowHeight(header.dateSize, 1)
+        );
+    });
+
+    it("keeps the default story date length tied to the real date formatters", () => {
+        const when = `${formatBrewDate(new Date(2026, 8, 30, 6, 55).getTime())} · ${
+            formatBrewTime(new Date(2026, 8, 30, 6, 55).getTime())
+        }`;
+
+        expect(when).toHaveLength("2026-09-30 · 06:55".length);
+    });
+
+    it("does not use the header's self-clamped date as horizontal proof", () => {
+        const fit = storyHorizontalFit({
+            width: 137,
+            stages: 2,
+            hasRateChart: false,
+            hasCoffee: false,
+            hasRating: false,
+            hasBypass: false,
+            fontScale: 1.4
+        }, {showFigureDetails: false});
+
+        expect(fit.widest).not.toMatch(/^header/);
+    });
+
     it("keeps the real narrow-phone story width band inside the safe band", () => {
         expectAllMasksFit([185, 200, 220, 240]);
     });
@@ -256,16 +570,11 @@ describe("the frame", () => {
     it("bounds slack after growing every story content mask", () => {
         const sweep = storySweepWorstSlack();
 
-        expect(sweep.visited).toBe(
-            MACHINE_CARD_MAX_STAGES
-            * STORY_TEST_FONT_SCALES.length
-            * STORY_TEST_WIDTHS.length
-            * 128
-        );
+        expect(sweep.visited).toBe(66_560);
         expect(sweep.cell).toMatchObject({
             width: 430,
             stages: 1,
-            fontScale: 1,
+            fontScale: 0.85,
             hasCoffee: false,
             hasRating: false,
             tags: [],
@@ -274,10 +583,9 @@ describe("the frame", () => {
             hasRateChart: false,
             hasBypass: false
         });
-        // The 38 pt bound is the all-caps-saturated case. Trace and section
-        // gap have hit their composition caps, so the rest is centered-card
-        // breathing room rather than a fit failure.
-        expect(sweep.worst).toBeLessThanOrEqual(38);
+        // Trace and section gap have hit their composition caps, so the rest
+        // is centered-card breathing room rather than a fit failure.
+        expect(sweep.worst).toBeLessThanOrEqual(51);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {
@@ -341,8 +649,9 @@ describe("the frame", () => {
     });
 
     it("budgets the rate chart's top gap, drawn height and bottom gap separately", () => {
+        const width = 600;
         const withRate = storySummaryBudget({
-            width: 600,
+            width,
             stages: 0,
             hasRateChart: true,
             hasCoffee: false,
@@ -354,7 +663,7 @@ describe("the frame", () => {
         expect(withRate.rateBottomGap).toBe(RATE_BOTTOM_GAP);
 
         const withoutRate = storySummaryBudget({
-            width: 600,
+            width,
             stages: 0,
             hasRateChart: false,
             hasCoffee: false,

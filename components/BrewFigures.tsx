@@ -14,9 +14,11 @@ import {
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
-    BREW_FIGURE_VALUE_SIZE
+    brewFigureBadgeGeometry,
+    brewFigureTextGeometry
 } from "@/library/brew/figureGeometry";
 import {formatFlowRate} from "@/library/brew/flowRate";
+import {DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
 
 const DOTO_LINE_HEIGHT = 1.35;
 const FLOW_ROW_VERTICAL_ROOM = 4;
@@ -105,40 +107,63 @@ type Props = {
      * ended.
      */
     grind?: GrindFigure | null;
+    /** Story cards shrink figures from the 430 pt reference width. */
+    textScale?: number;
 };
 
-function FigureBadge({children, testID}: {children: string | number; testID?: string}) {
+function FigureBadge({children, testID, textScale = 1}: {
+    children: string | number;
+    testID?: string;
+    textScale?: number;
+}) {
+    const badge = brewFigureBadgeGeometry(textScale);
     return (
         <XStack testID={testID}
-                paddingHorizontal={4} paddingVertical={1}
-                borderRadius="$2" borderWidth={1} borderStyle="dashed"
+                paddingHorizontal={badge.paddingHorizontal}
+                paddingVertical={badge.paddingVertical}
+                borderRadius={badge.borderRadius}
+                borderWidth={badge.borderWidth} borderStyle="dashed"
                 borderColor={palette.line}>
-            <DotMatrixText fontSize={11} weight="bold" color={palette.dim}>
+            <DotMatrixText fontSize={badge.fontSize} weight="bold" color={palette.dim}
+                           letterSpacing={badge.tracking}
+                           minFontSize={DOTO_MIN_FONT_SIZE * textScale}>
                 {children}
             </DotMatrixText>
         </XStack>
     );
 }
 
-function Figure({label, value, color, badge, fontSize, testID, accessibilityLabel}: {
+function Figure({
+    label, value, color, badge, badgeGap, fontSize, labelSize, labelTracking, valueTracking,
+    testID, accessibilityLabel
+}: {
     label: string;
     value: string;
     color: string;
     badge?: React.ReactNode;
+    badgeGap: number;
     fontSize: number;
+    labelSize?: number;
+    labelTracking?: number;
+    valueTracking?: number;
     testID?: string;
     accessibilityLabel?: string;
 }) {
     return (
         <YStack flex={1} gap={BREW_FIGURE_INTERNAL_GAP} testID={testID}
+                minWidth={0}
                 accessible={accessibilityLabel !== undefined}
                 accessibilityLabel={accessibilityLabel}>
-            <DotMatrixText fontSize={BREW_FIGURE_LABEL_SIZE} weight="bold"
-                           letterSpacing={1.6} color={palette.dim}>
+            <DotMatrixText fontSize={labelSize ?? BREW_FIGURE_LABEL_SIZE}
+                           weight="bold" numberOfLines={1}
+                           letterSpacing={labelTracking ?? 1.6} color={palette.dim}>
                 {label}
             </DotMatrixText>
-            <XStack alignItems="center" gap="$1.5">
-                <DotMatrixText fontSize={fontSize} weight="bold" color={color}>
+            <XStack testID={testID === undefined ? undefined : `${testID}-value-row`}
+                    alignItems="center" gap={badgeGap}>
+                <DotMatrixText fontSize={fontSize} weight="bold" color={color}
+                               letterSpacing={valueTracking ?? 0.5}
+                               numberOfLines={1}>
                     {value}
                 </DotMatrixText>
                 {badge}
@@ -161,11 +186,15 @@ export default function BrewFigures(
     {
         water, cup, seconds, accent, bypass, drawdown = null, flow = null,
         flowTail, pourRate = null, reserveFlow = false, reserveDrawdown = false,
-        drawdownRate = null, delay = null, grind = null
+        drawdownRate = null, delay = null, grind = null, textScale = 1
     }: Props
 ) {
+    const figureText = brewFigureTextGeometry(textScale);
+    const badgeGeometry = brewFigureBadgeGeometry(textScale);
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
-        <FigureBadge testID="figures-bypass">{`+${Math.round(bypass)}`}</FigureBadge>
+        <FigureBadge testID="figures-bypass" textScale={textScale}>
+            {`+${Math.round(bypass)}`}
+        </FigureBadge>
     );
     const flowText = flow === null ? null : formatFlowRate(flow);
     const pourRateText = pourRate === null ? null : formatFlowRate(pourRate);
@@ -200,13 +229,28 @@ export default function BrewFigures(
 
     return (
         <YStack testID="brew-figures" gap={BREW_FIGURE_ROW_GAP}>
-            <XStack gap="$3">
+            <XStack testID="figures-main-row" gap={figureText.columnGap}>
                 <Figure label="WATER" value={String(Math.round(water))} color={accent}
-                        badge={badge} fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-water" />
+                        badge={badge} fontSize={figureText.valueSize}
+                        badgeGap={badgeGeometry.gap}
+                        labelSize={figureText.labelSize}
+                        labelTracking={figureText.labelTracking}
+                        valueTracking={figureText.valueTracking}
+                        testID="figures-water" />
                 <Figure label="CUP" value={String(Math.round(cup))} color={palette.text}
-                        fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-cup" />
+                        fontSize={figureText.valueSize}
+                        badgeGap={badgeGeometry.gap}
+                        labelSize={figureText.labelSize}
+                        labelTracking={figureText.labelTracking}
+                        valueTracking={figureText.valueTracking}
+                        testID="figures-cup" />
                 <Figure label="TIME" value={formatBrewClock(seconds)} color={palette.text}
-                        fontSize={BREW_FIGURE_VALUE_SIZE} testID="figures-time" />
+                        fontSize={figureText.valueSize}
+                        badgeGap={badgeGeometry.gap}
+                        labelSize={figureText.labelSize}
+                        labelTracking={figureText.labelTracking}
+                        valueTracking={figureText.valueTracking}
+                        testID="figures-time" />
             </XStack>
             {(hasFlow || reserveFlow) && (
                 <YStack testID="figures-flow-slot"
@@ -250,7 +294,7 @@ export default function BrewFigures(
                         minHeight={reserveDrawdown ? detailRowMinHeight() : undefined}
                         justifyContent="center">
                     {hasDetailRow && (
-                        <XStack testID="figures-detail-row" gap="$3">
+                        <XStack testID="figures-detail-row" gap={figureText.columnGap}>
                             {/* TIME is the right figure above, and DRAWDOWN is
                                 also a duration, so the right column rhymes. */}
                             {grind === null ? (
@@ -265,11 +309,16 @@ export default function BrewFigures(
                                     label="GRIND"
                                     value={grind.kind === "off" ? "OFF" : String(grind.dial)}
                                     color={palette.text}
-                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
+                                    fontSize={figureText.detailValueSize}
+                                    badgeGap={badgeGeometry.gap}
+                                    labelSize={figureText.labelSize}
+                                    labelTracking={figureText.labelTracking}
+                                    valueTracking={figureText.valueTracking}
                                     badge={grind.kind === "off" || grind.recipe === null
                                         ? undefined
                                         : (
-                                            <FigureBadge testID="figures-grind-recipe">
+                                            <FigureBadge testID="figures-grind-recipe"
+                                                         textScale={textScale}>
                                                 {`RECIPE ${grind.recipe}`}
                                             </FigureBadge>
                                         )}
@@ -284,7 +333,11 @@ export default function BrewFigures(
                                     label="DELAY"
                                     value={`+${delay}`}
                                     color={palette.warn}
-                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
+                                    fontSize={figureText.detailValueSize}
+                                    badgeGap={badgeGeometry.gap}
+                                    labelSize={figureText.labelSize}
+                                    labelTracking={figureText.labelTracking}
+                                    valueTracking={figureText.valueTracking}
                                     accessibilityLabel={delayAccessibility}
                                 />
                             )}
@@ -296,11 +349,16 @@ export default function BrewFigures(
                                     label="DRAWDOWN"
                                     value={drawdownText}
                                     color={palette.text}
-                                    fontSize={BREW_FIGURE_DETAIL_VALUE_SIZE}
+                                    fontSize={figureText.detailValueSize}
+                                    badgeGap={badgeGeometry.gap}
+                                    labelSize={figureText.labelSize}
+                                    labelTracking={figureText.labelTracking}
+                                    valueTracking={figureText.valueTracking}
                                     badge={drawdownRateText === null
                                         ? undefined
                                         : (
-                                            <FigureBadge testID="figures-drawdown-rate">
+                                            <FigureBadge testID="figures-drawdown-rate"
+                                                         textScale={textScale}>
                                                 {`${drawdownRateText} G/S`}
                                             </FigureBadge>
                                         )}

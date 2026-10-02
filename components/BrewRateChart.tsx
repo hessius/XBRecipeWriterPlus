@@ -7,12 +7,12 @@ import {palette} from "@/constants/colors";
 import {type Box, type Point, toMonotonePath} from "@/library/brew/brewShape";
 import {maxRateOf, type FlowPoint} from "@/library/brew/flowRate";
 import {
-    contiguousRateRuns,
     hasDrawableRateRun,
     RATE_HEIGHT,
     RATE_LABEL_SIZE,
     rateChartLabelRowHeight,
-    rateChartPlotTop
+    rateChartPlotTop,
+    rateRunsOf
 } from "@/library/brew/rateChartGeometry";
 import {channelStyle, type Role} from "@/library/brew/traceStyle";
 
@@ -25,6 +25,8 @@ import {channelStyle, type Role} from "@/library/brew/traceStyle";
  */
 /** Never scale a nearly flat brew up into a mountain range. */
 const MIN_AXIS = 4;
+const CUP_DOT_PERIOD = 4;
+const CUP_DOT_MARK = 1;
 export {RATE_HEIGHT};
 
 type Props = {
@@ -50,6 +52,55 @@ function channelPath(runs: FlowPoint[][], of: "cup" | "water", box: Box): string
         .map((run) => toMonotonePath(channelPoints(run, of), box))
         .filter((path) => path !== "")
         .join(" ");
+}
+
+function chartPoint(point: Point, box: Box): {x: number; y: number} {
+    const x = (point.t / box.maxT) * box.width;
+    const y = box.height - (point.v / box.maxV) * box.height;
+    return {
+        x: Math.round(x * 10) / 10,
+        y: Math.round(y * 10) / 10
+    };
+}
+
+function cupDotPath(runs: FlowPoint[][], box: Box): string {
+    const dots: string[] = [];
+    const addDot = ({x, y}: {x: number; y: number}) => {
+        dots.push(`M${Math.round((x - CUP_DOT_MARK / 2) * 10) / 10} ${y} l${CUP_DOT_MARK} 0`);
+    };
+
+    for (const run of runs) {
+        const points = channelPoints(run, "cup");
+        const first = points[0];
+        const last = points[points.length - 1];
+        if (first === undefined || last === undefined || points.length < 2) continue;
+
+        const firstX = chartPoint(first, box).x;
+        const lastX = chartPoint(last, box).x;
+        addDot(chartPoint(first, box));
+        let segment = 1;
+        for (
+            let x = firstX + CUP_DOT_PERIOD;
+            x < lastX;
+            x += CUP_DOT_PERIOD
+        ) {
+            const t = (x / box.width) * box.maxT;
+            while (segment < points.length && points[segment].t < t) segment += 1;
+            const before = points[segment - 1];
+            const after = points[segment];
+            if (before === undefined || after === undefined) continue;
+            const span = after.t - before.t;
+            const progress = span <= 0 ? 0 : (t - before.t) / span;
+            const point = {
+                t,
+                v: before.v + (after.v - before.v) * progress
+            };
+            const drawn = chartPoint(point, box);
+            addDot(drawn);
+        }
+        if (lastX !== firstX) addDot(chartPoint(last, box));
+    }
+    return dots.join(" ");
 }
 
 /**
@@ -79,9 +130,14 @@ export default function BrewRateChart({
     };
     if (box.width <= 0 || box.height <= 0 || box.maxT <= 0) return null;
 
-    const runs = contiguousRateRuns(series);
+    const runs = rateRunsOf(series);
     const waterPath = channelPath(runs, "water", box);
-    const cupPath = channelPath(runs, "cup", box);
+    const cupPath = cupDotPath(runs, box);
+    const cupDotStyle = {
+        ...cupStyle,
+        strokeDasharray: undefined,
+        strokeLinejoin:  undefined
+    };
 
     return (
         <View testID="rate-chart" pointerEvents="none">
@@ -115,7 +171,7 @@ export default function BrewRateChart({
                             testID="rate-chart-cup"
                             d={cupPath}
                             fill="none"
-                            {...cupStyle}
+                            {...cupDotStyle}
                         />
                     )}
                 </G>

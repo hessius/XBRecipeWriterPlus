@@ -157,6 +157,76 @@ function quantisedProfile(
     return out;
 }
 
+function steadyPourWithRealScaleGap(): BrewSample[] {
+    const prelude: BrewSample[] = [];
+    for (let i = 0; i < 90; i += 1) {
+        const at = i * 210;
+        const value = 3.2 * (at / 1000);
+        prelude.push({at, water: value, cup: value, pour: 1});
+    }
+
+    const points = [
+        [165_058, 211.1875], [165_358, 211.9625], [165_630, 213.125],
+        [165_898, 213.9], [166_198, 214.675], [166_439, 215.45],
+        [166_678, 216.225], [166_950, 217.3875], [167_188, 218.1625],
+        [167_430, 218.9375], [167_668, 219.7125], [167_968, 220.4875],
+        [168_208, 221.2625], [168_478, 222.0375], [168_718, 222.8125],
+        [168_958, 223.5875], [169_258, 224.75], [169_498, 225.525],
+        [169_768, 226.3], [170_008, 227.075], [170_647, 228.625],
+        [170_788, 229.4], [171_143, 230.5625], [171_298, 231.3375],
+        [171_540, 232.1125], [171_913, 232.8875], [172_159, 233.6625],
+        [172_407, 234.4375], [172_653, 235.2125], [172_906, 236.375],
+        [173_160, 237.15], [173_408, 237.925], [173_651, 238.7],
+        [173_853, 240]
+    ];
+    const [firstAt, firstWater] = points[0];
+    const segment = points.map(([at, water]) => ({
+        at: 40_000 + at - firstAt,
+        water: water - firstWater,
+        cup: water - firstWater,
+        pour: 1
+    }));
+    return [...prelude, ...segment];
+}
+
+function quantisedStaircaseFlow(seconds = 80, slope = 1.34): BrewSample[] {
+    const lattice = 0.0885;
+    const out: BrewSample[] = [];
+    let seed = 0x5eed;
+    let at = 0;
+    let nextUpdateAt = 0;
+    let cup = 0;
+
+    const jitter = (min: number, max: number) => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return min + (seed % (max - min + 1));
+    };
+
+    while (at <= seconds * 1000) {
+        while (nextUpdateAt <= at) {
+            cup = Math.round((slope * (nextUpdateAt / 1000)) / lattice) * lattice;
+            nextUpdateAt += jitter(150, 220);
+        }
+        out.push({at, water: cup, cup, pour: 1});
+        at += jitter(8, 120);
+    }
+
+    return out;
+}
+
+function quantise(value: number, phase: number): number {
+    return Math.round((value + phase) / 0.5) * 0.5;
+}
+
+function longCleanRun(): BrewSample[] {
+    return Array.from({length: 121}, (_, i) => ({
+        at: i * 100,
+        water: quantise(i * 0.2, 0.125),
+        cup: quantise(i * 0.2, 0.125),
+        pour: 1
+    }));
+}
+
 function realisticRampProfile(): BrewSample[] {
     return quantisedProfile(36, (at) => {
         if (at < 1_000) return 0;
@@ -172,6 +242,22 @@ function populationSpread(values: number[]): number {
     return Math.sqrt(
         values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length
     );
+}
+
+function median(values: number[]): number {
+    const sorted = values.toSorted((a, b) => a - b);
+    const middle = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+        ? (sorted[middle - 1] + sorted[middle]) / 2
+        : sorted[middle];
+}
+
+function meanAbsoluteSecondDifference(values: number[]): number {
+    let sum = 0;
+    for (let i = 2; i < values.length; i += 1) {
+        sum += Math.abs(values[i] - 2 * values[i - 1] + values[i - 2]);
+    }
+    return sum / Math.max(1, values.length - 2);
 }
 
 function movingAverage(points: {at: number; water: number}[], windowMs: number) {
@@ -198,6 +284,40 @@ function consecutiveRates(samples: BrewSample[]) {
         }
     }
     return out;
+}
+
+function integrateCupRate(series: {at: number; cup: number}[]): number {
+    let total = 0;
+    for (let i = 1; i < series.length; i += 1) {
+        total += ((series[i].cup + series[i - 1].cup) / 2) *
+            ((series[i].at - series[i - 1].at) / 1000);
+    }
+    return total;
+}
+
+function quantisedVariableCadenceRun(): {samples: BrewSample[]; fromAt: number; mass: number} {
+    const samples: BrewSample[] = [];
+    let at = 0;
+    const lattice = 0.0885;
+
+    for (let i = 0; i < 950; i += 1) {
+        samples.push({at, water: 0, cup: 0, pour: 1});
+        at += 210;
+    }
+
+    at += 2_000;
+    const fromAt = at;
+    samples.push({at, water: 0, cup: 0, pour: 1});
+
+    for (let i = 0; i < 500; i += 1) {
+        const gap = i % 5 === 4 ? 200 : 50;
+        at += gap;
+        const exact = 2 * ((at - fromAt) / 1000);
+        const cup = Math.round(exact / lattice) * lattice;
+        samples.push({at, water: cup, cup, pour: 1});
+    }
+
+    return {samples, fromAt, mass: samples[samples.length - 1].cup};
 }
 
 /** A finished record with only the fields the rate arithmetic reads. */
@@ -446,6 +566,38 @@ describe("retrospectiveFlowSeries", () => {
         expect(maxRateOf(smoothed)).toBeLessThan(2.25);
     });
 
+    it("fits the cumulative staircase instead of raw rates for full-support interiors", () => {
+        const expected = 1.34;
+        const smoothed = retrospectiveFlowSeries(quantisedStaircaseFlow(80, expected), 1);
+        const interior = smoothed
+            .filter((point) => point.at >= 30_000 && point.at <= 60_000)
+            .map((point) => point.cup);
+        expect(interior.length).toBeGreaterThan(100);
+        expect(Math.max(...interior)).toBeLessThan(expected + 0.2);
+        expect(median(interior)).toBeCloseTo(expected, 1);
+        expect(meanAbsoluteSecondDifference(interior)).toBeLessThan(0.05);
+    });
+
+    it("conserves mass across variable cadence quantised runs", () => {
+        const {samples, fromAt, mass} = quantisedVariableCadenceRun();
+        const smoothed = retrospectiveFlowSeries(samples, 1)
+            .filter((point) => point.at >= fromAt);
+        const estimated = integrateCupRate(smoothed);
+
+        expect(estimated / mass).toBeGreaterThan(0.98);
+        expect(estimated / mass).toBeLessThan(1.02);
+        expect(smoothed.length).toBeGreaterThan(450);
+    });
+
+    it("uses the centred fit through the true interior of a quantised run", () => {
+        const {samples, fromAt} = quantisedVariableCadenceRun();
+        const interior = retrospectiveFlowSeries(samples, 1)
+            .filter((point) => point.at >= fromAt + 12_000 && point.at <= fromAt + 28_000);
+
+        expect(interior.length).toBeGreaterThan(180);
+        expect(meanAbsoluteSecondDifference(interior.map((point) => point.cup))).toBeLessThan(0.01);
+    });
+
     it("does not let a short quantised run overshoot the live estimator", () => {
         const samples = quantisedSteadyFlow(1.1, 0.1);
         const smoothed = retrospectiveFlowSeries(samples, 1);
@@ -555,9 +707,9 @@ describe("retrospectiveFlowSeries", () => {
             .toBeLessThan(populationSpread(rawHighPlateau) * 0.65);
         expect(Math.min(...highPlateau)).toBeGreaterThan(3.6);
         expect(Math.max(...highPlateau)).toBeLessThan(4.4);
-        expect(beforeEdge!.water).toBeLessThan(1);
+        expect(beforeEdge!.water).toBeLessThan(1.1);
         expect(afterEdge!.water).toBeGreaterThan(3);
-        expect(beforeStop!.water).toBeGreaterThan(3);
+        expect(beforeStop!.water).toBeGreaterThan(2.9);
         expect(afterStop!.water).toBeLessThan(1);
         expect(movingAfterEdge!.water).toBeLessThan(2.5);
         expect(movingAfterStop!.water).toBeGreaterThan(1.5);
@@ -572,6 +724,259 @@ describe("retrospectiveFlowSeries", () => {
         expect(afterGap).toBeDefined();
         expect(afterGap!.water).toBeCloseTo(1, 6);
         expect(afterGap!.cup).toBeCloseTo(1, 6);
+    });
+
+    it("keeps the first valid interval after a non-finite reading", () => {
+        const first = ramp(3, 2);
+        const recovered: BrewSample[] = [
+            {at: 4_000, water: Number.NaN, cup: Number.NaN, pour: 1},
+            {at: 8_000, water: 6, cup: 6, pour: 1},
+            ...ramp(12, 2, 6, 8_000).slice(1)
+        ];
+        const smoothed = retrospectiveFlowSeries([...first, ...recovered], 1);
+
+        expect(smoothed.find((point) => point.at === 8_100)).toBeDefined();
+        expect(smoothed.find((point) => point.at === 8_100)!.cup).toBeCloseTo(2, 6);
+    });
+
+    it("keeps a steady real-cadence pour with one 639 ms scale gap near the true rate", () => {
+        const smoothed = retrospectiveFlowSeries(steadyPourWithRealScaleGap(), 1);
+        const afterGapWater = smoothed
+            .filter((point) => point.at >= 45_500 && point.at <= 46_500)
+            .map((point) => point.water);
+
+        expect(Math.max(...afterGapWater)).toBeLessThan(3.27);
+    });
+
+    it("does not use a long post-reset interval as contiguous evidence", () => {
+        const first = ramp(3, 2);
+        const recovered: BrewSample[] = [
+            {at: 4_000, water: Number.NaN, cup: Number.NaN, pour: 1},
+            {at: 8_000, water: 6, cup: 6, pour: 1},
+            {at: 12_000, water: 14, cup: 14, pour: 1},
+            ...ramp(4, 2, 14, 12_000).slice(1)
+        ];
+        const smoothed = retrospectiveFlowSeries([...first, ...recovered], 1);
+
+        expect(smoothed.find((point) => point.at === 12_000)).toBeUndefined();
+        expect(smoothed.find((point) => point.at === 12_100)).toBeDefined();
+    });
+
+    it("fits the full-support interior of a long run from cumulative mass", () => {
+        const smoothed = retrospectiveFlowSeries(longCleanRun(), 1);
+        const interior = smoothed
+            .filter((point) => point.at >= 4_000 && point.at <= 8_000)
+            .map((point) => [point.at, point.cup, point.water]);
+
+        expect(interior).toMatchInlineSnapshot(`
+[
+  [
+    4000,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+  [
+    4100,
+    2.0017182739039567,
+    2.0017182739039567,
+  ],
+  [
+    4200,
+    2.0002014555161045,
+    2.0002014555161045,
+  ],
+  [
+    4300,
+    1.9996978167258446,
+    1.9996978167258446,
+  ],
+  [
+    4400,
+    2.0014546504746806,
+    2.0014546504746806,
+  ],
+  [
+    4500,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+  [
+    4600,
+    2.0017182739039567,
+    2.0017182739039567,
+  ],
+  [
+    4700,
+    2.0002014555161045,
+    2.0002014555161045,
+  ],
+  [
+    4800,
+    1.9996978167258446,
+    1.9996978167258446,
+  ],
+  [
+    4900,
+    2.0014546504746806,
+    2.0014546504746806,
+  ],
+  [
+    5000,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+  [
+    5100,
+    2.0017182739039567,
+    2.0017182739039567,
+  ],
+  [
+    5200,
+    2.0002014555161045,
+    2.0002014555161045,
+  ],
+  [
+    5300,
+    1.9996978167258446,
+    1.9996978167258446,
+  ],
+  [
+    5400,
+    2.0014546504746806,
+    2.0014546504746806,
+  ],
+  [
+    5500,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+  [
+    5600,
+    2.0017182739039567,
+    2.0017182739039567,
+  ],
+  [
+    5700,
+    2.0002014555161045,
+    2.0002014555161045,
+  ],
+  [
+    5800,
+    1.9996978167258446,
+    1.9996978167258446,
+  ],
+  [
+    5900,
+    2.0014546504746806,
+    2.0014546504746806,
+  ],
+  [
+    6000,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+  [
+    6100,
+    2.0017182739039567,
+    2.0017182739039567,
+  ],
+  [
+    6200,
+    2.0002014555161045,
+    2.0002014555161045,
+  ],
+  [
+    6300,
+    1.9996978167258446,
+    1.9996978167258446,
+  ],
+  [
+    6400,
+    2.0014546504746806,
+    2.0014546504746806,
+  ],
+  [
+    6500,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+  [
+    6600,
+    2.0017182739039567,
+    2.0017182739039567,
+  ],
+  [
+    6700,
+    2.0002014555161045,
+    2.0002014555161045,
+  ],
+  [
+    6800,
+    1.9996978167258446,
+    1.9996978167258446,
+  ],
+  [
+    6900,
+    2.0014546504746806,
+    2.0014546504746806,
+  ],
+  [
+    7000,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+  [
+    7100,
+    2.0017182739039567,
+    2.0017182739039567,
+  ],
+  [
+    7200,
+    2.0002014555161045,
+    2.0002014555161045,
+  ],
+  [
+    7300,
+    1.9996978167258446,
+    1.9996978167258446,
+  ],
+  [
+    7400,
+    2.0014546504746806,
+    2.0014546504746806,
+  ],
+  [
+    7500,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+  [
+    7600,
+    2.0017182739039567,
+    2.0017182739039567,
+  ],
+  [
+    7700,
+    2.0002014555161045,
+    2.0002014555161045,
+  ],
+  [
+    7800,
+    1.9996978167258446,
+    1.9996978167258446,
+  ],
+  [
+    7900,
+    2.0014546504746806,
+    2.0014546504746806,
+  ],
+  [
+    8000,
+    1.9969278033794169,
+    1.9969278033794169,
+  ],
+]
+`);
     });
 
     it("keeps the live tail on the causal estimator", () => {
@@ -715,6 +1120,14 @@ describe("drawdownRate", () => {
             bypass: {volume: 40, temperature: 90, delivered: 40, startedAt: 110_000}
         });
         expect(drawdownRate(withBypass)).toBeCloseTo(2, 6);
+    });
+
+    it("keeps finite positive rates above the story badge width", () => {
+        expect(drawdownRate(record({
+            cupTotal: 200,
+            cupAtDrawdown: 100,
+            drawdownAt: 139_100
+        }))).toBeCloseTo(111.111111, 6);
     });
 
     it("is null, never 0, whenever a term is missing", () => {

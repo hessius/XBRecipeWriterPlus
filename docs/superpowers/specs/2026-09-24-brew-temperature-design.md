@@ -55,21 +55,23 @@ means "what the recipe asked for".
 
 ## The mark
 
-For each stage, a horizontal rule at that stage's temperature, spanning that
-stage's **pour only**, with a short gradient fading below it.
+For each stage, a thin T-bar at that stage's temperature, spanning that stage's
+**pour only**. The horizontal rule carries the stage extent; the short centred
+stem descends from it as a tick so the height reads against the water fill and
+trace without becoming a column.
 
 ```
   94°              92°                        90°
- ────            ──────────              ────────────
- ▓▓▓▓            ▓▓▓▓▓▓▓▓▓▓              ▓▓▓▓▓▓▓▓▓▓▓▓
+ ─┬──            ─────┬────              ──────┬─────
+  │                  │                       │
 ```
 
 | Element | Value |
 | --- | --- |
-| Rule | `palette.dim`, stroke width 2, round caps, full opacity |
-| Fade | Rect from the rule down 16px, vertical gradient `palette.dim` 0.38 to 0 |
+| Rule | `palette.dim`, stroke width 1.25, round caps, full opacity |
+| Stem | `palette.dim`, stroke width 1.25, 6px long, centred on the rule and descending from it |
 | Label | The temperature and a degree sign, 11px, `palette.dim`, centred on the rule, always above it |
-| Depth | Behind the water fill, the water line, the cup line and the plan line |
+| Depth | Above the water fill, behind the water line, the cup line and the plan line |
 
 ### Why a rule and not a filled column
 
@@ -78,9 +80,11 @@ the louder of the two while meaning nothing at all: a hot stage is not a bigger
 stage. Dropping to a rule leaves only the measurement that exists. Nothing is
 lost, because height, extent and printed value all survive.
 
-The 16px fade is kept because a bare rule reads as a boundary, while a rule with
-a little weight under it reads as a body of water at a temperature. It is short
-enough never to reach the water fill, so the two never mix.
+The stem replaced the earlier 16px fade on 2026-10-01. The fade gave the mark
+weight, but on device it read too thick. The stem keeps the reading as a
+position and a small tick only. It is deliberately short: if it reached toward
+the floor it would become a column and reintroduce the false area reading this
+section rejects.
 
 ### Why the pour only, and not the whole stage
 
@@ -137,15 +141,23 @@ So the band adapts to the recipe:
    where the clamp bites.
 
 The band occupies a fixed vertical region of the plot: its top edge at 5% of
-the plot height and its floor at 45%, leaving the lower half to the water fill
-and the 16px fades room to finish. The region is fixed even though the degrees
-it spans are not, so the marks never wander into the busy part of the chart.
+the plot height and its floor at 45%, leaving the lower half to the water fill.
+The region is fixed even though the degrees it spans are not, so the marks
+never wander into the busy part of the chart.
 
 **Cost, accepted deliberately:** rule heights are no longer comparable between
 two recipes with different bands. Only the printed numbers stay true across
 recipes. This is why **both ends of the band are always printed** small at the
 chart's right edge. A bar whose scale is unstated is a lie; a bar whose scale is
 printed beside it is a reading.
+
+**Reversal, 2026-10-01:** the band endpoints are no longer printed. The owner
+accepted the counter-argument that every mark already prints its own number, so
+the per-mark label carries the reading the endpoints were meant to supply. The
+chart now matches the rest of the trace, where water, cup and plan do not carry
+right-edge scales. The remaining cost is real: heights are still not comparable
+between two recipes with different adaptive bands, and now nothing on the chart
+says so. That tradeoff is explicit rather than accidental.
 
 The band is computed from brew stages only, and is **never widened for the
 bypass**. See below for why.
@@ -156,10 +168,10 @@ bypass**. See below for why.
 water at a different heat, and it deserves the same treatment as a stage, with
 one exception forced by the scale.
 
-- **Inside the band:** the bypass gets the full mark, rule and fade and label,
+- **Inside the band:** the bypass gets the same T-bar and label as a stage,
   spanning its own x extent, directly beneath the dashed box it already owns.
-  The box sits on the volume axis and the rule sits on the temperature band, so
-  they share an x extent and never overlap.
+  The box sits on the volume axis and the T-bar sits on the temperature band,
+  so they share an x extent and never overlap.
 - **Outside the band:** the bypass loses its rule and prints its number inside
   its box instead.
 
@@ -255,14 +267,16 @@ inspect a child's props. Each of these needs a `testID`.
 3. Rule extents match `stageSpans().pourEnd`, not `.end`. A recipe with a long
    pause must produce rules that stop short of their stage boundary.
 4. A 5ml pour still produces a rule at least 2px wide.
-5. The band honours the 15° minimum span for a flat recipe, and both band
+5. The band honours the 15° minimum span for a flat recipe, and no band endpoint
    labels are rendered.
-6. A bypass inside the band draws a fourth rule; a bypass below the band draws
-   no fourth rule and prints its number.
-7. `compact` draws no temperature marks.
-8. A record with no `stages` and empty `pours` draws no marks and does not
+6. The mark is a T-bar: the stem descends from the centre of the rule, uses the
+   same thin stroke and is short rather than reaching the floor.
+7. A bypass inside the band draws a fourth T-bar; a bypass below the band draws
+   no fourth T-bar and prints its number.
+8. `compact` draws no temperature marks.
+9. A record with no `stages` and empty `pours` draws no marks and does not
    throw.
-9. Temperature is read from `stages` when `pours` is empty.
+10. Temperature is read from `stages` when `pours` is empty.
 
 Every test must be mutation-checked: revert the behaviour and confirm the test
 fails.

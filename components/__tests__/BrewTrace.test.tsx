@@ -1,7 +1,6 @@
 import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
 import {PixelRatio, processColor, StyleSheet} from "react-native";
-import type {ReactTestRendererJSON} from "react-test-renderer";
 
 import BrewTrace from "@/components/BrewTrace";
 import {drawnFontSize} from "@/components/DotMatrixText";
@@ -13,6 +12,7 @@ import {accents, cupLineFor, palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
 const TEST_ACCENT = accents.coffee[1];
+const TEMP_BAR_STEM = 6;
 
 const pours = [new Pour(1, 40, 93, 40, 0, 0, 20), new Pour(2, 160, 92, 40, 0, 0, 0)];
 const fourPours = [
@@ -40,19 +40,6 @@ async function draw(props: Partial<React.ComponentProps<typeof BrewTrace>> = {})
     );
 }
 
-function renderedNodes(
-    node: ReactTestRendererJSON | ReactTestRendererJSON[] | null
-): ReactTestRendererJSON[] {
-    if (node === null) return [];
-    if (Array.isArray(node)) return node.flatMap(renderedNodes);
-    return [
-        node,
-        ...(node.children ?? []).flatMap((child) =>
-            typeof child === "string" ? [] : renderedNodes(child)
-        )
-    ];
-}
-
 function svgTextContent(node: {props: {children?: unknown}}): string | undefined {
     const child = node.props.children;
     if (typeof child === "string") return child;
@@ -62,6 +49,12 @@ function svgTextContent(node: {props: {children?: unknown}}): string | undefined
 
 function svgScalar(value: number | number[]): number {
     return Array.isArray(value) ? value[0] : value;
+}
+
+function brushRef(value: unknown): string | undefined {
+    return typeof value === "object" && value !== null && "brushRef" in value
+        ? String((value as {brushRef: unknown}).brushRef)
+        : undefined;
 }
 
 function lastPathPoint(path: string): {x: number; y: number} {
@@ -117,6 +110,20 @@ function expectTempLabelStyle(label: {props: Record<string, unknown>}) {
     );
 }
 
+function expectTBarGeometry(
+    rule: {props: Record<string, unknown>},
+    stem: {props: Record<string, unknown>},
+    svgHeight: number
+) {
+    expect(stem.props.x1).toBeCloseTo(((rule.props.x1 as number) + (rule.props.x2 as number)) / 2);
+    expect(stem.props.x2).toBeCloseTo(stem.props.x1 as number);
+    expect(stem.props.y1).toBeCloseTo(rule.props.y1 as number);
+    expect(stem.props.y2).toBeCloseTo((rule.props.y1 as number) + TEMP_BAR_STEM);
+    expect((stem.props.y2 as number) - (stem.props.y1 as number)).toBeLessThan(svgHeight / 10);
+    expect(rule.props.strokeWidth).toBeLessThan(2);
+    expect(stem.props.strokeWidth).toBe(rule.props.strokeWidth);
+}
+
 describe("BrewTrace", () => {
     it("draws the plan dashed", async () => {
         const {getByTestId} = await draw();
@@ -169,6 +176,33 @@ describe("BrewTrace", () => {
         expect(getByTestId("trace-water").props.stroke).toEqual(
             expect.objectContaining({payload: processColor(palette.warn)})
         );
+    });
+
+    it("gives two mounted traces different water fill gradient ids", async () => {
+        const r = await renderWithProviders(
+            <>
+                <BrewTrace
+                    pours={pours}
+                    samples={samples([0, 0, 0], [5000, 20, 12])}
+                    accent={TEST_ACCENT}
+                    width={300}
+                    height={140}
+                    plannedSeconds={70}
+                />
+                <BrewTrace
+                    pours={pours}
+                    samples={samples([0, 0, 0], [5000, 20, 12])}
+                    accent={palette.brand}
+                    width={220}
+                    height={140}
+                    plannedSeconds={70}
+                />
+            </>
+        );
+
+        const fills = r.getAllByTestId("trace-water-fill");
+
+        expect(brushRef(fills[0].props.fill)).not.toBe(brushRef(fills[1].props.fill));
     });
 
     it("survives a recipe with no pours", async () => {
@@ -259,17 +293,28 @@ describe("BrewTrace", () => {
         );
     });
 
-    it("draws a rule per stage, descending with the temperature", async () => {
+    it("draws a T-bar per stage, descending with the temperature", async () => {
         const descending = [
             new Pour(1, 40, 94, 40, 0, 0, 30),
             new Pour(2, 100, 92, 40, 0, 0, 20),
             new Pour(3, 100, 90, 40, 0, 0, 0)
         ];
-        const {getByTestId} = await draw({pours: descending, plannedSeconds: 110});
+        const {getByLabelText, getByTestId} = await draw({
+            pours: descending,
+            plannedSeconds: 110
+        });
+        const svgHeight = getByLabelText(
+            "Brew trace, 94 then 92 then 90 degrees"
+        ).props.height;
         const y = (i: number) => getByTestId(`trace-temp-${i}`).props.y1;
         // Screen coordinates run downward, so a cooler stage sits lower.
         expect(y(1)).toBeGreaterThan(y(0));
         expect(y(2)).toBeGreaterThan(y(1));
+        expectTBarGeometry(
+            getByTestId("trace-temp-0"),
+            getByTestId("trace-temp-stem-0"),
+            svgHeight
+        );
     });
 
     it("draws a flat recipe as one height", async () => {
@@ -311,12 +356,14 @@ describe("BrewTrace", () => {
         expect(rule.props.x2 - rule.props.x1).toBeGreaterThanOrEqual(2);
     });
 
-    it("draws the rules in the label grey and no fill or hue", async () => {
+    it("draws the T-bars in the label grey and no fill or hue", async () => {
         const {getByTestId} = await draw();
         const rule = getByTestId("trace-temp-0");
+        const stem = getByTestId("trace-temp-stem-0");
         expect(rule.props.stroke).toEqual(
             expect.objectContaining({payload: processColor(palette.dim)})
         );
+        expect(stem.props.stroke).toEqual(rule.props.stroke);
         expect(rule.props.stroke).not.toEqual(
             expect.objectContaining({payload: processColor(TEST_ACCENT)})
         );
@@ -327,59 +374,7 @@ describe("BrewTrace", () => {
             expect.objectContaining({payload: processColor(palette.danger)})
         );
         expect(rule.props.fill).toBeNull();
-    });
-
-    it("links each temperature fade to its own absolute gradient", async () => {
-        const {getByTestId, toJSON} = await draw();
-        const fade = getByTestId("trace-temp-fade-0");
-        const gradient = renderedNodes(toJSON())
-            .find((node) => node.props.name === fade.props.fill.brushRef);
-
-        expect(gradient).toBeTruthy();
-        expect(fade.props.fill.brushRef).toBe(gradient!.props.name);
-        expect(fade.props.height).toBe(16);
-        // react-native-svg renders userSpaceOnUse as its native enum value.
-        expect(gradient!.props.gradientUnits).toBe(1);
-        expect(gradient!.props.y1).toBe(fade.props.y);
-        expect(gradient!.props.y2).toBe(fade.props.y + fade.props.height);
-    });
-
-    it("gives each mounted trace its own temperature fade ids", async () => {
-        const first = [
-            new Pour(1, 40, 94, 40, 0, 0, 0),
-            new Pour(2, 100, 90, 40, 0, 0, 0)
-        ];
-        const second = [
-            new Pour(1, 40, 90, 40, 0, 0, 0),
-            new Pour(2, 100, 94, 40, 0, 0, 0)
-        ];
-        const {toJSON} = await renderWithProviders(
-            <React.Fragment>
-                <BrewTrace
-                    pours={first}
-                    samples={[]}
-                    accent={TEST_ACCENT}
-                    width={300}
-                    height={140}
-                    plannedSeconds={35}
-                />
-                <BrewTrace
-                    pours={second}
-                    samples={[]}
-                    accent={TEST_ACCENT}
-                    width={300}
-                    height={140}
-                    plannedSeconds={35}
-                />
-            </React.Fragment>
-        );
-        const ids = renderedNodes(toJSON())
-            .map((node) => node.props.name)
-            .filter((name): name is string =>
-                typeof name === "string" && name.includes("tempFade"));
-
-        expect(ids).toHaveLength(4);
-        expect(new Set(ids).size).toBe(ids.length);
+        expect(stem.props.fill).toBeNull();
     });
 
     it("prints every stage's temperature, repeating a flat one", async () => {
@@ -439,8 +434,6 @@ describe("BrewTrace", () => {
         const svgHeight = getByLabelText("Brew trace, 100 degrees").props.height;
         const rule = getByTestId("trace-temp-0");
         expect(rule.props.y1).toBeCloseTo(svgHeight * BAND_TOP, 1);
-        expect(rule.props.y1 - svgScalar(getByTestId("trace-band-max").props.y))
-            .toBeCloseTo(4, 1);
     });
 
     it("centres a stage label on its own rule", async () => {
@@ -476,45 +469,13 @@ describe("BrewTrace", () => {
         }
     });
 
-    it("prints both ends of the band, since heights are not comparable between recipes", async () => {
-        const {getByTestId} = await draw({
+    it("prints no band scale labels", async () => {
+        const {queryByTestId} = await draw({
             pours: [new Pour(1, 40, 94, 40, 0, 0, 0), new Pour(2, 100, 90, 40, 0, 0, 0)],
             plannedSeconds: 35
         });
-        expect(svgTextContent(getByTestId("trace-band-max"))).toBe("100");
-        expect(svgTextContent(getByTestId("trace-band-min"))).toBe("85");
-        expect(svgScalar(getByTestId("trace-band-max").props.y))
-            .toBe(drawnFontSize(11));
-        expect(svgScalar(getByTestId("trace-band-min").props.y))
-            .toBeGreaterThan(svgScalar(getByTestId("trace-band-max").props.y));
-        expect(svgScalar(getByTestId("trace-band-max").props.x)).toBe(298);
-        expect(svgScalar(getByTestId("trace-band-min").props.x)).toBe(298);
-    });
-
-    it("keeps a cool rule label clear of the band minimum readout", async () => {
-        const {getByTestId} = await draw({
-            pours: [new Pour(1, 40, 85, 40, 0, 0, 0)],
-            height: 250,
-            plannedSeconds: 10
-        });
-        const labelY = svgScalar(getByTestId("trace-temp-label-0").props.y);
-        const bandMinY = svgScalar(getByTestId("trace-band-min").props.y);
-        expect(labelY + drawnFontSize(11)).toBeLessThan(bandMinY);
-    });
-
-    it("keeps the band minimum readout inside a short plot", async () => {
-        const {getByTestId, getByLabelText} = await draw({
-            pours: [new Pour(1, 40, 85, 40, 0, 0, 0)],
-            height: 120,
-            plannedSeconds: 10
-        });
-        const svgHeight = getByLabelText("Brew trace, 85 degrees").props.height;
-        expect(svgScalar(getByTestId("trace-band-min").props.y)).toBeLessThanOrEqual(svgHeight);
-    });
-
-    it("prints no band edges when there is nothing to scale", async () => {
-        const {queryByTestId} = await draw({pours: [], plannedSeconds: 0});
         expect(queryByTestId("trace-band-max")).toBeNull();
+        expect(queryByTestId("trace-band-min")).toBeNull();
     });
 
     it("compact prints no readings", async () => {
@@ -568,13 +529,19 @@ describe("BrewTrace", () => {
     ];
 
     it("gives a bypass inside the band the same mark as a stage", async () => {
-        const {getByTestId, queryByTestId} = await draw({
+        const {getByLabelText, getByTestId, queryByTestId} = await draw({
             pours: brewing,
             plannedSeconds: 65,
             bypass: {volume: 60, temperature: 88, delivered: 60,
                      startedAt: 65, state: "done"}
         });
+        const svgHeight = getByLabelText("Brew trace, 94 then 90 degrees").props.height;
         expect(getByTestId("trace-temp-bypass")).toBeTruthy();
+        expectTBarGeometry(
+            getByTestId("trace-temp-bypass"),
+            getByTestId("trace-temp-stem-bypass"),
+            svgHeight
+        );
         expect(svgTextContent(getByTestId("trace-temp-label-bypass"))).toBe("88°");
         expect(queryByTestId("trace-bypass-temp")).toBeNull();
     });
@@ -589,23 +556,6 @@ describe("BrewTrace", () => {
         // 88 is cooler than the second brew stage's 90, so it sits lower.
         expect(getByTestId("trace-temp-bypass").props.y1)
             .toBeGreaterThan(getByTestId("trace-temp-1").props.y1);
-    });
-
-    it("keeps bypass fade ids in step with their fills", async () => {
-        const {getByTestId, toJSON} = await draw({
-            pours: brewing,
-            plannedSeconds: 65,
-            bypass: {volume: 60, temperature: 88, delivered: 60,
-                     startedAt: 65, state: "done"}
-        });
-        const fade = getByTestId("trace-temp-fade-bypass");
-        const gradient = renderedNodes(toJSON())
-            .find((node) => node.props.name === fade.props.fill.brushRef);
-
-        expect(gradient).toBeTruthy();
-        expect(fade.props.fill.brushRef).toBe(gradient!.props.name);
-        expect(gradient!.props.y1).toBe(fade.props.y);
-        expect(gradient!.props.y2).toBe(fade.props.y + fade.props.height);
     });
 
     it("draws bypass marks at both band edges with the same label styling", async () => {
@@ -650,6 +600,7 @@ describe("BrewTrace", () => {
                      startedAt: 65, state: "done"}
         });
         expect(queryByTestId("trace-temp-bypass")).toBeNull();
+        expect(queryByTestId("trace-temp-stem-bypass")).toBeNull();
         // It still says how hot it was, in the box it already owns.
         expect(svgTextContent(getByTestId("trace-bypass-temp"))).toBe("55°");
     });
@@ -662,6 +613,7 @@ describe("BrewTrace", () => {
                      startedAt: 65, state: "done"}
         });
         expect(queryByTestId("trace-temp-bypass")).toBeNull();
+        expect(queryByTestId("trace-temp-stem-bypass")).toBeNull();
         expect(queryByTestId("trace-bypass-temp")).toBeNull();
     });
 
@@ -717,13 +669,21 @@ describe("BrewTrace", () => {
     });
 
     it("never widens the band to admit a bypass", async () => {
+        const noBypass = await draw({
+            pours: brewing,
+            plannedSeconds: 65
+        });
         const cold = await draw({
             pours: brewing,
             plannedSeconds: 65,
             bypass: {volume: 60, temperature: 55, delivered: 60,
                      startedAt: 65, state: "done"}
         });
-        expect(svgTextContent(cold.getByTestId("trace-band-min"))).toBe("85");
+        expect(cold.queryByTestId("trace-temp-bypass")).toBeNull();
+        expect(cold.getByTestId("trace-temp-0").props.y1)
+            .toBeCloseTo(noBypass.getByTestId("trace-temp-0").props.y1);
+        expect(cold.getByTestId("trace-temp-1").props.y1)
+            .toBeCloseTo(noBypass.getByTestId("trace-temp-1").props.y1);
     });
 
     it("says the stage temperature run out loud", async () => {

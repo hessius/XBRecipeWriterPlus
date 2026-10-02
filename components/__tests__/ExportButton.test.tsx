@@ -2,6 +2,7 @@ import React from "react";
 import {StyleSheet} from "react-native";
 
 import ExportButton from "@/components/ExportButton";
+import {palette} from "@/constants/colors";
 import {renderWithProviders} from "@/test-utils/render";
 
 describe("ExportButton", () => {
@@ -48,5 +49,45 @@ describe("ExportButton", () => {
 
         const style = StyleSheet.flatten(getByLabelText("Save as image").props.style);
         expect(style.opacity).toBe(1);
+    });
+
+    it("keeps the original muted outline by default", async () => {
+        const {getByTestId} = await renderWithProviders(
+            <ExportButton testID="export-button" label="Save as image"
+                          busy={false} onPress={jest.fn()} />
+        );
+
+        expect(getByTestId("export-button-surface"))
+            .toHaveStyle({borderColor: palette.line});
+        expect(getByTestId("export-button-label"))
+            .toHaveStyle({color: palette.dim});
+    });
+
+    it("can opt into an accent outline", async () => {
+        const accent = palette.info;
+        const {getByTestId} = await renderWithProviders(
+            <ExportButton testID="export-button" label="Save as image"
+                          busy={false} accent={accent} onPress={jest.fn()} />
+        );
+
+        expect(getByTestId("export-button-surface"))
+            .toHaveStyle({borderColor: accent, backgroundColor: palette.base});
+        expect(getByTestId("export-button-label"))
+            .toHaveStyle({color: accent});
+    });
+
+    it("keeps the busy treatment on an accent outline", async () => {
+        const accent = palette.info;
+        const {getByLabelText, getByTestId, getByText, queryByText} =
+            await renderWithProviders(
+                <ExportButton testID="export-button" label="Save as image"
+                              busy={true} accent={accent} onPress={jest.fn()} />
+            );
+
+        const style = StyleSheet.flatten(getByLabelText("Save as image").props.style);
+        expect(style.opacity).toBe(0.5);
+        expect(getByText("WORKING…")).toBeTruthy();
+        expect(queryByText("SAVE AS IMAGE")).toBeNull();
+        expect(getByTestId("export-button-label")).toHaveStyle({color: accent});
     });
 });

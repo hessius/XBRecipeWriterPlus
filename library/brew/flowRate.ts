@@ -1,5 +1,10 @@
 import {drawdownSeconds, type BrewRecord, type BrewSample} from "./BrewRecord";
-import {contiguousRateRuns, medianRateGap, rateAdjacentAllowance} from "./rateChartGeometry";
+import {
+    contiguousRateRuns,
+    medianRateGap,
+    rateAdjacentAllowance,
+    rememberRateRuns
+} from "./rateChartGeometry";
 
 /**
  * How much of the stream one reading of the rate is fitted over.
@@ -516,39 +521,42 @@ function cumulativeQuadraticDerivativeAt(
 }
 
 function retrospectiveFitAt(
-    window: RawFlowPoint[], pointAt: number, windowMs: number, of: "cup" | "water"
+    run: RawFlowPoint[], window: RawFlowPoint[], pointAt: number, windowMs: number,
+    of: "cup" | "water"
 ): number | null {
+    const runFirst = run[0];
+    const runLast = run[run.length - 1];
     const first = window[0];
     const last = window[window.length - 1];
-    if (first === undefined || last === undefined) return null;
+    if (
+        runFirst === undefined ||
+        runLast === undefined ||
+        first === undefined ||
+        last === undefined
+    ) {
+        return null;
+    }
 
-    const leftSupportMs = pointAt - first.fromAt;
-    const rightSupportMs = last.at - pointAt;
+    const cumulative = window.length < RETROSPECTIVE_FLOW_MIN_SAMPLES
+        ? cumulativeSlopeAt(window, pointAt, of)
+        : cumulativeQuadraticDerivativeAt(window, pointAt, windowMs, of);
+    if (cumulative === null) return null;
+
     const halfWindowMs = windowMs / 2;
     if (
-        last.at - first.fromAt < windowMs ||
-        leftSupportMs < halfWindowMs ||
-        rightSupportMs < halfWindowMs
+        pointAt - halfWindowMs < runFirst.fromAt ||
+        pointAt + halfWindowMs > runLast.at
     ) {
-        // Endpoint windows have less support, so they get stricter fits. With
-        // fewer than the minimum samples, the cumulative path falls back to a
-        // linear slope because a quadratic fit would be invented. Otherwise it
-        // uses the quadratic cumulative derivative, blended back toward the
-        // linear slope by support squared so short endpoints cannot flatten
-        // into a shelf. The result is capped by the verified endpoint rate fit
-        // so cumulative curvature cannot claim flow before the first drop or
-        // after the run has ended. Finally, negative endpoint noise clamps to
-        // zero here, where the rate becomes a claim.
-        const cumulative = window.length < RETROSPECTIVE_FLOW_MIN_SAMPLES
-            ? cumulativeSlopeAt(window, pointAt, of)
-            : cumulativeQuadraticDerivativeAt(window, pointAt, windowMs, of);
-        if (cumulative === null) return null;
+        // The cumulative fit is support-blended inside
+        // cumulativeQuadraticDerivativeAt. The cap is endpoint-only: it stops
+        // edge curvature claiming flow before the first drop or after the run
+        // has ended, while full centred windows already have complete support.
         const rateFit = savitzkyGolayAt(window, pointAt, of);
         const fitted = rateFit === null ? cumulative : Math.min(cumulative, rateFit);
         return Math.max(0, fitted);
     }
 
-    return savitzkyGolayAt(window, pointAt, of);
+    return Math.max(0, cumulative);
 }
 
 function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
@@ -559,8 +567,8 @@ function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
     const windowMs = retrospectiveWindowMs(run);
     return run.flatMap((point) => {
         const window = retrospectiveWindowFor(run, point.at, windowMs);
-        const cup = retrospectiveFitAt(window, point.at, windowMs, "cup");
-        const water = retrospectiveFitAt(window, point.at, windowMs, "water");
+        const cup = retrospectiveFitAt(run, window, point.at, windowMs, "cup");
+        const water = retrospectiveFitAt(run, window, point.at, windowMs, "water");
         if (cup === null || water === null) return [];
         return {
             at:    point.at,
@@ -568,6 +576,13 @@ function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
             water
         };
     });
+}
+
+function hasRetrospectiveSupport<T extends FlowPoint>(run: T[]): boolean {
+    const first = run[0];
+    const last = run[run.length - 1];
+    return first !== undefined && last !== undefined &&
+        last.at - first.at >= FLOW_MIN_WINDOW_MS;
 }
 
 /**
@@ -583,18 +598,31 @@ function smoothRetrospectiveRun(run: RawFlowPoint[]): FlowPoint[] {
 export function retrospectiveFlowSeries(
     samples: BrewSample[], stages: number
 ): FlowPoint[] {
-    return contiguousRateRuns(rawRateSeries(samples, stages))
-        .map((run) => {
-            const adjacentMs = rateAdjacentAllowance(run);
-            return run.filter((point) => point.at - point.fromAt <= adjacentMs);
-        })
-        .filter((run) => {
+    const runs = contiguousRateRuns(rawRateSeries(samples, stages));
+    const smoothedRuns = runs
+        .map((run, index) => {
             const first = run[0];
-            const last = run[run.length - 1];
-            return first !== undefined && last !== undefined &&
-                last.at - first.at >= FLOW_MIN_WINDOW_MS;
+            const previousRun = runs[index - 1];
+            const previous = previousRun?.[previousRun.length - 1];
+            const firstGapMs = first === undefined ? 0 : first.at - first.fromAt;
+            if (first !== undefined && previous !== undefined && first.fromAt <= previous.at) {
+                // This point spans the split gap. The split has already said
+                // that interval is not contiguous evidence, so it cannot
+                // donate mass to either side's cumulative fit.
+                return run.slice(1);
+            }
+            if (firstGapMs > rateAdjacentAllowance(run)) {
+                // The first rate point has no prior point inside its run, so
+                // run splitting cannot judge this interval from point spacing.
+                // Treat an over-cadence first interval as a boundary gap only;
+                // every later point is kept so measured mass is conserved.
+                return run.slice(1);
+            }
+            return run;
         })
-        .flatMap(smoothRetrospectiveRun);
+        .filter(hasRetrospectiveSupport)
+        .map(smoothRetrospectiveRun);
+    return rememberRateRuns(smoothedRuns.flat(), smoothedRuns);
 }
 
 /**
