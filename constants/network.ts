@@ -97,6 +97,23 @@ export const OUTBOUND_CALLS: OutboundCall[] = [
         source:  ["library/XBloomRecipe.ts", "library/importInput.ts"]
     },
     {
+        id:      "brewMind",
+        title:   "Open BrewMind to build a recipe",
+        trigger: "You choose BrewMind under New recipe.",
+        host:    "brewmind.coffee",
+        hostPinned: true,
+        owner:   "BrewMind",
+        carries: [
+            "Nothing from your library, and nothing about your machine.",
+            "Two fixed values in the address: that the visitor is this app, and which version of the handoff it can read.",
+            "Whatever any web page sees when you visit it, because this is a browser and not a single request: your IP address, the name and version of the browser engine, and any cookies that page sets.",
+            "Whatever you type or choose on BrewMind's own page, which goes to them under their privacy policy and not ours.",
+            "A recipe comes back only as a link you tapped. Nothing is sent from this app to make that happen."
+        ],
+        source:  ["components/BrewMindBrowser.tsx", "hooks/useBrewMindCreate.ts"],
+        unverifiable: "This opens a page you can browse, so where it goes after the first address is up to the page and to you. The address it starts at is the one named here."
+    },
+    {
         id:      "signIn",
         title:   "Sign in to your xBloom account",
         trigger: "You enter your xBloom email and password in Settings.",
