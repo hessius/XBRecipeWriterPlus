@@ -54,7 +54,7 @@ export default function BrewMindBrowser({
         <Modal visible={visible} animationType="slide" presentationStyle="fullScreen"
                onRequestClose={onClose}>
             <YStack flex={1} backgroundColor={palette.base}
-                    paddingTop={insets.top} paddingBottom={insets.bottom}
+                    paddingTop={insets.top}
                     accessibilityViewIsModal>
                 <XStack alignItems="center" gap="$3"
                         paddingHorizontal="$4" paddingVertical="$3"
@@ -101,6 +101,22 @@ export default function BrewMindBrowser({
                      * page where the shutter control is.
                      */
                     allowsInlineMediaPlayback
+                    /*
+                     * The page runs to the bottom edge of the screen rather
+                     * than stopping above the home indicator, which is why
+                     * there is no bottom inset on the container. Padding there
+                     * left a black bar under the page, because the ground
+                     * behind the WebView is `base` and BrewMind's own page is
+                     * not.
+                     *
+                     * The inset is not dropped, it moves inside: `automatic`
+                     * hands it to WKWebView's scroll view, which insets the
+                     * page's *content* while letting its background fill the
+                     * whole frame. So the colour runs to the edge and nothing
+                     * scrollable ends up under the home indicator. The default
+                     * is `never`, which would do neither.
+                     */
+                    contentInsetAdjustmentBehavior="automatic"
                     style={{flex: 1, backgroundColor: palette.base}}
                     onLoadStart={onLoadStart}
                     onLoadEnd={onLoadEnd}
