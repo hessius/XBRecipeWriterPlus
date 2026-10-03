@@ -1,18 +1,19 @@
 import React from "react";
 import {Pressable, Text, View} from "react-native";
-import {act, fireEvent, screen} from "@testing-library/react-native";
+import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 import type {WebViewNavigation} from "react-native-webview";
 import type {ShouldStartLoadRequest} from "react-native-webview/lib/WebViewTypes";
 
 import BrewMindBrowser from "@/components/BrewMindBrowser";
 import {useBrewMindCreate, BREWMIND_CREATE_URL} from "@/hooks/useBrewMindCreate";
 import type {BrewMindLink} from "@/library/brewmindLink";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, SHEET_PRESS_TIMEOUT} from "@/test-utils/render";
 
 let mockWebViewProps: {
     source: {uri: string};
     onShouldStartLoadWithRequest: (request: ShouldStartLoadRequest) => boolean;
     onNavigationStateChange: (navigation: WebViewNavigation) => void;
+    originWhitelist?: string[];
 } | null = null;
 
 jest.mock("react-native-webview", () => {
@@ -157,4 +158,28 @@ describe("useBrewMindCreate", () => {
         expect(screen.getByTestId("brewmind-busy")).toHaveTextContent("false");
     });
 
+});
+
+describe("the browser's origin whitelist", () => {
+    /*
+     * Without the app schemes on this list the WebView never asks
+     * `onShouldStartLoadWithRequest` about BrewMind's redirect: the default is
+     * http and https only, and anything else goes straight to
+     * `Linking.openURL`. The import would still happen, by the redirect
+     * re-entering the app from the outside, but nothing would close the
+     * browser, so it would sit open above the recipe it just imported.
+     */
+    it("lets the classifier see the app's own schemes", async () => {
+        const onLink = jest.fn();
+        const onShare = jest.fn();
+        await renderWithProviders(<Harness onLink={onLink} onShare={onShare}/>);
+
+        await waitFor(() => {
+            fireEvent.press(screen.getByLabelText("Open BrewMind"));
+            expect(mockWebViewProps).not.toBeNull();
+        }, {timeout: SHEET_PRESS_TIMEOUT});
+
+        expect(mockWebViewProps?.originWhitelist)
+            .toEqual(expect.arrayContaining(["xbrw://*", "xbrecipewriter://*"]));
+    });
 });
