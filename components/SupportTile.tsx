@@ -4,14 +4,14 @@ import {Text, XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
 import {openLink} from "@/components/openLink";
-import {onAccent, palette} from "@/constants/colors";
+import {onBrand, palette} from "@/constants/colors";
 
 /** Where the tap goes. */
 export const SUPPORT_URL = "https://buymeacoffee.com/hsus";
 
 export const SUPPORT_TITLE = "Buy me a coffee";
 export const SUPPORT_BODY =
-    "Built by one person in his own time. Free and open source. If you want to, I will not say no.";
+    "Built by one person in his own time. Free and open source. If you want to, I won't refuse.";
 
 /**
  * The tip jar.
@@ -26,12 +26,15 @@ export const SUPPORT_BODY =
  * screen and no "already supported" flag, so it needs no setting, which keeps
  * it out of `Settings.DEFAULTS` and out of the backup snapshot.
  *
- * Both lines take solid `onAccent.text` rather than the softer `onAccent.label`
- * the accent tiles use for their second line. That token promises 5.1:1 worst
- * case, but the promise is scoped to the twelve recipe accents; `brand` is not
- * one of them and is darker than all of them, so `onAccent.label` measures
- * 3.80:1 here and misses AA. Solid ink is 5.18:1 on `brand`, and the hierarchy
- * between the two lines comes from size and weight instead of alpha.
+ * Both lines take solid `onBrand.text`, which is white. The tile is filled with
+ * `brandFill` rather than `brand` itself to make that readable: `brand` is also
+ * used as ink on the dark surfaces, so it has to stay light, and white on it
+ * measures only 3.78:1. `brandFill` is the same magenta deepened until white
+ * clears AA at 5.36:1, which is within a whisker of the 5.18:1 the dark ink
+ * used to measure, so the tile reads at the weight it always did.
+ *
+ * There is no softer second ink. The hierarchy between the two lines comes from
+ * size and weight, as it did when the ink was dark.
  */
 export default function SupportTile() {
     return (
@@ -55,12 +58,12 @@ export default function SupportTile() {
                     alignItems="center" justifyContent="space-between" gap="$4"
                     minHeight={44} marginTop="$4"
                     paddingVertical="$3" paddingHorizontal="$4"
-                    backgroundColor={palette.brand} borderRadius="$5">
+                    backgroundColor={palette.brandFill} borderRadius="$5">
                 <YStack flex={1} gap="$1">
-                    <Text fontSize={16} fontWeight="700" color={onAccent.text}>
+                    <Text fontSize={16} fontWeight="700" color={onBrand.text}>
                         {SUPPORT_TITLE}
                     </Text>
-                    <Text fontSize={13} lineHeight={18} color={onAccent.text}>
+                    <Text fontSize={13} lineHeight={18} color={onBrand.text}>
                         {SUPPORT_BODY}
                     </Text>
                 </YStack>
@@ -68,7 +71,7 @@ export default function SupportTile() {
                     glyph must not become a second accessibility element. The
                     chevron is the `back` glyph rotated, as everywhere else. */}
                 <XStack style={{transform: [{rotate: "180deg"}]}}>
-                    <DotIcon name="back" size={14} color={onAccent.marker}/>
+                    <DotIcon name="back" size={14} color={onBrand.marker}/>
                 </XStack>
             </XStack>
         </Pressable>

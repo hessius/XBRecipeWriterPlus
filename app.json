@@ -22,7 +22,9 @@
       "infoPlist": {
         "UIBackgroundModes": [
           "bluetooth-central"
-        ]
+        ],
+        "NSCameraUsageDescription": "This app uses the camera so the BrewMind recipe builder can read a coffee bag you photograph.",
+        "NSPhotoLibraryUsageDescription": "This app uses your photo library so you can give the BrewMind recipe builder a photo of a coffee bag."
       }
     },
     "android": {

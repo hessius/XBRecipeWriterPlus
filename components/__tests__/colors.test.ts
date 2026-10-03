@@ -1,4 +1,4 @@
-import {accents, mix, onAccent, palette} from "@/constants/colors";
+import {accents, mix, onAccent, onBrand, palette} from "@/constants/colors";
 import {contrast, over} from "@/test-utils/contrast";
 
 const everyAccent = [...accents.coffee, ...accents.tea];
@@ -75,26 +75,30 @@ describe("the row actions revealed by a swipe", () => {
     });
 });
 
-describe("the support tile, filled with the brand magenta", () => {
-    // `brand` is not one of the twelve recipe accents. It is darker than all of
-    // them, so nothing the "accent inks" block above proves applies to it and
-    // each ink has to be measured against it separately.
-    it("carries both lines of copy in solid ink", () => {
-        expect(contrast(onAccent.text, palette.brand)).toBeGreaterThanOrEqual(4.5);
+describe("the support tile, filled with the deepened brand magenta", () => {
+    // `brandFill` is not one of the twelve recipe accents, and unlike them it
+    // is dark and takes white ink, so nothing the "accent inks" block above
+    // proves applies to it and each ink is measured against it separately.
+    it("carries both lines of copy in solid white", () => {
+        expect(contrast(onBrand.text, palette.brandFill)).toBeGreaterThanOrEqual(4.5);
     });
 
-    // The finding that decided the tile, pinned so it cannot be undone by
-    // someone reaching for the softer token to get a second line of hierarchy.
-    // `onAccent.label` promises 5.1:1 worst case and delivers it on every
-    // accent; on `brand` it is 3.80:1 and misses AA. Hierarchy in the tile
-    // comes from size and weight instead.
-    it("cannot use the softer label ink, which is why both lines are solid", () => {
-        expect(contrast(onAccent.label, palette.brand)).toBeLessThan(4.5);
+    // The reason the fill is a second token rather than a change to `brand`.
+    // White on `brand` itself is 3.78:1 and misses AA, so anyone simplifying
+    // the two tokens back into one takes the tile's copy below the floor.
+    it("cannot be filled with the ink magenta, which is too light for white", () => {
+        expect(contrast(onBrand.text, palette.brand)).toBeLessThan(4.5);
+    });
+
+    // The other half of that squeeze, pinned so the pair cannot be collapsed
+    // from the other end either: `brandFill` is too dark to be used as ink.
+    it("cannot be used as ink, which is what keeps the two tokens apart", () => {
+        expect(contrast(palette.brandFill, palette.base)).toBeLessThan(4.5);
     });
 
     // The chevron is a graphic, not text, so 3:1 is its floor.
     it("carries the chevron", () => {
-        expect(contrast(onAccent.marker, palette.brand)).toBeGreaterThanOrEqual(3);
+        expect(contrast(onBrand.marker, palette.brandFill)).toBeGreaterThanOrEqual(3);
     });
 });
 
