@@ -15,7 +15,7 @@ describe("native release configuration", () => {
      *
      * The public store release is 1.5.0, so 2.0.0 is the next version a user
      * will ever see. It was briefly carried to 2.1.0 on the reasoning that the
-     * BrewMind import (#159) added `expo-web-browser` and so changed the
+     * BrewMind import (#159) added browser native code and so changed the
      * binary, but every 2.0.0 build so far reached TestFlight only. Nobody
      * outside the beta has held a 2.0.0, so the minor was spent on a release
      * that never happened, and it is spent back here.

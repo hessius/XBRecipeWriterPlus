@@ -16,6 +16,7 @@ import EmptyLibrary from "@/components/EmptyLibrary";
 import HomeHeader from "@/components/HomeHeader";
 import ImportSheet from "@/components/ImportSheet";
 import ImportTile from "@/components/ImportTile";
+import BrewMindBrowser from "@/components/BrewMindBrowser";
 import LibraryRail, {type RailFilter} from "@/components/LibraryRail";
 import MachinePanel from "@/components/MachinePanel";
 import NewRecipeSheet from "@/components/NewRecipeSheet";
@@ -986,7 +987,15 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // Every link the system delivers, launch URL and later events alike.
     useImportLink(openImportLink);
 
-    const brewMind = useBrewMindCreate(openImportLink);
+    function openImportShare(url: string) {
+        const source = parseImportInput(url);
+        if (!source || source.kind !== "share") return;
+
+        setImportOpen(true);
+        importer.resolveNow(source, "shared");
+    }
+
+    const brewMind = useBrewMindCreate(openImportLink, openImportShare);
 
     useEffect(() => {
         // A shared link that failed (network down, not found) leaves its guard
@@ -1692,6 +1701,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                             onChoose={createRecipe}
                             onBrewMind={openBrewMindDoor}
                             brewMindBusy={brewMind.busy}/>
+
+            <BrewMindBrowser {...brewMind.browser}/>
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         unavailable={readUnavailable} onCancel={cancelScan}/>

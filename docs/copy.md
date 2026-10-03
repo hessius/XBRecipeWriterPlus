@@ -130,6 +130,14 @@ tray, and the overflow sheet.
 | `newRecipe.brewMind.a11y` | `components/NewRecipeSheet.tsx` (a11y) | (a11y) The BrewMind door. | `Build a recipe with BrewMind` |
 | `newRecipe.brewMind.hint` | `components/NewRecipeSheet.tsx` (a11y) | (a11y) Hint for the BrewMind door. | `Opens BrewMind to pick a coffee, then brings the recipe back.` |
 
+### BrewMind browser (`components/BrewMindBrowser.tsx`)
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `brewMindBrowser.title` | `components/BrewMindBrowser.tsx` | Doto title in the in-app browser header. | `BREWMIND` |
+| `brewMindBrowser.summary` | `components/BrewMindBrowser.tsx` | Subtitle in the in-app browser header. | `Build a recipe from a coffee` |
+| `brewMindBrowser.close` | `components/BrewMindBrowser.tsx` | Button that closes the in-app browser. | `Close` |
+| `brewMindBrowser.close.a11y` | `components/BrewMindBrowser.tsx` (a11y) | (a11y) Close button in the in-app browser. | `Close BrewMind` |
 
 ### Recipe overflow sheet (`components/RecipeOverflowSheet.tsx`)
 
