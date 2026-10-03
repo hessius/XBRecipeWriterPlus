@@ -92,6 +92,15 @@ export default function BrewMindBrowser({
                      * charge of them, so it can block the navigation and close.
                      */
                     originWhitelist={ORIGIN_WHITELIST}
+                    /*
+                     * BrewMind reads a coffee bag from a photo, so the page may
+                     * ask for a live camera. WKWebView defaults to playing any
+                     * captured stream fullscreen, which would throw the page's
+                     * own framing away and leave the user in a video player
+                     * with no obvious way back. Inline keeps the preview in the
+                     * page where the shutter control is.
+                     */
+                    allowsInlineMediaPlayback
                     style={{flex: 1, backgroundColor: palette.base}}
                     onLoadStart={onLoadStart}
                     onLoadEnd={onLoadEnd}
