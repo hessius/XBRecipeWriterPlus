@@ -3,6 +3,7 @@ import {Pressable, StyleSheet, Text, type StyleProp, type ViewStyle} from "react
 import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 
 import BrewStorySheet from "@/components/BrewStorySheet";
+import {CHIP_HEIGHT} from "@/components/RailChip";
 import {STORY_ASPECT} from "@/library/brew/storyCard";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -133,6 +134,26 @@ describe("the story sheet", () => {
         expect(screen.getByTestId("story-toggle-row").props.horizontal).toBe(true);
         expect(within(screen.getByTestId("viewshot")).queryByTestId("story-toggle-coffee"))
             .toBeNull();
+    });
+
+    it("pins the toggle row's height so it cannot eat the card's stage", async () => {
+        await show({
+            toggles: [
+                {key: "coffee", label: "COFFEE", active: true, onPress: jest.fn()}
+            ]
+        });
+        await measure(360, 4000);
+        await waitFor(() => expect(screen.getByTestId("story-toggle-coffee")).toBeTruthy());
+
+        // A horizontal ScrollView left to its own devices in a flex column
+        // grows into the column's spare space. The column above it is the card
+        // stage, and the card is sized from what that stage measures, so an
+        // unpinned row here shrinks the card and the shared PNG with it.
+        const row = StyleSheet.flatten(
+            screen.getByTestId("story-toggle-row").props.style as StyleProp<ViewStyle>
+        );
+        expect(row?.height).toBe(CHIP_HEIGHT);
+        expect(row?.flexGrow).toBe(0);
     });
 
     it("keeps a story toggle choice when the sheet is closed and reopened", async () => {
