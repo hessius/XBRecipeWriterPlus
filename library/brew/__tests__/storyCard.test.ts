@@ -9,11 +9,13 @@ import {
     storyCoffeeLine,
     storyContentFacts,
     storyFrame,
+    storyChartWidth,
     storyHeaderLayout,
     storyHiddenFromSetting,
     storyHiddenToSetting,
     storyHorizontalFit,
     storySummaryBudget,
+    storyTextContentWidth,
     storyTextScale,
     type StorySummaryBudget
 } from "../storyCard";
@@ -174,7 +176,12 @@ describe("the frame", () => {
         expect(frame.height).toBe(Math.round(393 * STORY_ASPECT));
     });
 
-    it("reserves the bands the platform's own furniture covers", () => {
+    it("pins the near full bleed safe bands", () => {
+        expect(STORY_SAFE_TOP).toBe(0.03);
+        expect(STORY_SAFE_BOTTOM).toBe(0.05);
+    });
+
+    it("reserves only the narrow bands this near full bleed card accepts", () => {
         const frame = storyFrame(1080);
         expect(frame.safeTop).toBe(Math.round(1920 * STORY_SAFE_TOP));
         expect(frame.safeBottom).toBe(Math.round(1920 * STORY_SAFE_BOTTOM));
@@ -187,9 +194,14 @@ describe("the frame", () => {
     });
 
     it("gives the bottom band more room than the top", () => {
-        // The reply field and the action row both live down there.
+        // The reply field and the action row still live down there, even when
+        // the card deliberately lets them graze the very edge.
         const frame = storyFrame(1080);
         expect(frame.safeBottom).toBeGreaterThan(frame.safeTop);
+    });
+
+    it("makes story charts wider than the text content width", () => {
+        expect(storyChartWidth(342)).toBeGreaterThan(storyTextContentWidth(342));
     });
 
     it("keeps a two stage story card inside the readable band", () => {
@@ -617,9 +629,10 @@ describe("the frame", () => {
             hasRateChart: false,
             hasBypass: false
         });
-        // Trace and section gap have hit their composition caps, so the rest
-        // is centered-card breathing room rather than a fit failure.
-        expect(sweep.worst).toBeLessThanOrEqual(51);
+        // In the sparsest no-rate story, the trace cap now binds before the
+        // near full bleed frame runs out of room. That remainder is centered
+        // breathing room, not a failure to fit the rows that were requested.
+        expect(sweep.worst).toBeLessThanOrEqual(204);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {

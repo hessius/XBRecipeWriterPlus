@@ -133,6 +133,7 @@ type Props = {
     showRateChart?: boolean;
     showStages?: boolean;
     textScale?: number;
+    chartWidth?: number;
 };
 
 /*
@@ -163,10 +164,16 @@ export default function BrewSummary({
     capturePadding = SCREEN_PADDING + CAPTURE_MARGIN, ladderTopGap = 12,
     storyBands, showBypassBadge = true, showRateChart = true, showStages = true,
     textScale = 1,
+    chartWidth,
     testID = "brew-capture"
 }: Props) {
     // The drawable width inside the capture's own padding.
     const traceWidth = width - capturePadding * 2;
+    const bleedChartWidth = chartWidth ?? traceWidth;
+    const chartBleed = Math.max(0, (bleedChartWidth - traceWidth) / 2);
+    const chartSlotStyle = chartBleed > 0
+        ? {marginHorizontal: -chartBleed}
+        : undefined;
     const traceAxis = traceAxisFor(NO_PLAN, samples, plannedSeconds, bypass);
     const rates = rateSeries ?? [];
     const drawsRateChart = hasStream && showRateChart && hasDrawableRateRun(rates);
@@ -203,11 +210,12 @@ export default function BrewSummary({
             </MarqueeText>
 
             {hasStream ? (
+                <View testID="trace-chart-slot" style={chartSlotStyle}>
                 <BrewTrace
                     pours={NO_PLAN}
                     samples={samples}
                     accent={accent}
-                    width={traceWidth}
+                    width={bleedChartWidth}
                     height={traceHeight}
                     plannedSeconds={plannedSeconds}
                     planOpacity={0}
@@ -217,8 +225,10 @@ export default function BrewSummary({
                     selectedIndex={selectedIndex}
                     onSelectStage={onSelectStage}
                     bypass={bypass}
+                    legendInset={chartBleed}
                     axis={traceAxis}
                 />
+                </View>
             ) : (
                 <YStack height={traceHeight} alignItems="center"
                         justifyContent="center">
@@ -235,13 +245,17 @@ export default function BrewSummary({
 
             {drawsRateChart && (
                 <View testID="rate-chart-slot"
-                      style={{marginTop: rateTopGap, marginBottom: rateBottomGap}}>
+                      style={[
+                          {marginTop: rateTopGap, marginBottom: rateBottomGap},
+                          chartSlotStyle
+                      ]}>
                 <BrewRateChart
                     series={rates}
                     accent={accent}
-                    width={traceWidth}
+                    width={bleedChartWidth}
                     maxT={traceAxis.maxT}
                     height={rateHeight}
+                    labelInset={chartBleed}
                 />
                 </View>
             )}

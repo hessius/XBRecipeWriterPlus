@@ -62,6 +62,8 @@ type Props = {
     planHeadAt?: number;
     /** When true, render only the SVG at exactly width by height, no stage counter. */
     compact?: boolean;
+    /** Keeps the legend aligned with text while the plot itself bleeds. */
+    legendInset?: number;
     /**
      * The stages a tap resolves against. Defaults to `pours`.
      *
@@ -187,7 +189,7 @@ export default function BrewTrace({
     axis,
     holding = false, role = "subject", planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
-    compact = false, stages, selectedIndex = null, onSelectStage, bypass
+    compact = false, legendInset = 0, stages, selectedIndex = null, onSelectStage, bypass
 }: Props) {
     const id = useId().replace(/[^a-zA-Z0-9]/g, "");
     const waterFillId = `trace-water-fill-${id}`;
@@ -506,7 +508,7 @@ export default function BrewTrace({
                 </Pressable>
             ) : chart}
             <XStack testID="trace-legend-row" height={rowHeight(LEGEND_SIZE)}
-                    alignItems="center" gap="$3">
+                    alignItems="center" gap="$3" paddingHorizontal={legendInset}>
                 <TraceLegendItem colour={waterStyle.stroke} label="WATER" />
                 <TraceLegendItem colour={cupStyle.stroke} label="CUP" dotted />
                 {plan.length > 0 && planOpacity > 0 && (

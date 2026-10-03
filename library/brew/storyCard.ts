@@ -43,15 +43,15 @@ import {
 export const STORY_ASPECT = 16 / 9;
 
 /**
- * The share of the frame the platform's own furniture covers.
+ * A near full bleed story card, chosen after the conservative bands made the
+ * export read as letterboxed and left roughly a third of the image unused.
  *
- * A story is drawn edge to edge and then has an avatar, a caption box, a reply
- * field and a set of buttons laid over it. The numbers are the conservative
- * end of what the platforms publish: nothing that has to be read may sit in
- * these bands, and the card leaves them empty rather than merely dimmed.
+ * Instagram's profile row and reply bar may graze the extreme top and bottom.
+ * The trade is deliberate: a story that uses its height honestly reads more
+ * like a card somebody meant to post than a picture framed by empty black.
  */
-export const STORY_SAFE_TOP = 0.12;
-export const STORY_SAFE_BOTTOM = 0.16;
+export const STORY_SAFE_TOP = 0.03;
+export const STORY_SAFE_BOTTOM = 0.05;
 
 /** A card's pixel frame, derived from the width it is drawn at. */
 export type StoryFrame = {
@@ -256,6 +256,17 @@ function storyFigureMaxima(stages: number): StoryFigureMaxima {
 
 export function storyTextScale(width: number): number {
     return Math.min(1, width / STORY_REFERENCE_WIDTH);
+}
+
+export function storyTextContentWidth(
+    width: number,
+    capturePadding = STORY_CAPTURE_PADDING
+): number {
+    return width - capturePadding * 2;
+}
+
+export function storyChartWidth(width: number): number {
+    return width;
 }
 
 function scaledSize(size: number, width: number): number {
@@ -925,31 +936,34 @@ export function storySummaryBudget(
     }
 
     const margin = contentHeight - measured.required;
-    const bands = chosen.stages ? storyBands(margin, ladderRows) : {
+    const chartCap = chosen.rate ? STORY_CHART_PAIR_CAP : STORY_TRACE_CAP;
+    const grownCharts = growAllowances(margin, [
+        {id: "charts", floor: chosen.chart, cap: chartCap, share: 1}
+    ]);
+    const afterCharts = margin - grownCharts.spent;
+    const bands = chosen.stages ? storyBands(afterCharts, ladderRows) : {
         barHeight: BAR_FLOOR, rungGap: GAP_FLOOR, spent: 0
     };
-    const afterBands = margin - bands.spent;
-    const chartCap = chosen.rate ? STORY_CHART_PAIR_CAP : STORY_TRACE_CAP;
-    const grown = growAllowances(afterBands, [
-        {id: "charts", floor: chosen.chart, cap: chartCap, share: 1},
+    const afterBands = afterCharts - bands.spent;
+    const grownGaps = growAllowances(afterBands, [
         {id: "sectionGap", floor: sectionGapFloor, cap: STORY_SECTION_GAP_CAP,
          share: measured.gapSlots}
     ]);
     const charts = storyChartHeights(
-        grown.values.get("charts") ?? chosen.chart,
+        grownCharts.values.get("charts") ?? chosen.chart,
         chosen.rate
     );
     // If all caps are reached, the true remainder is deliberate breathing room
     // from the card's centred content stack. It must not enter the safe top or
     // bottom bands, which are reserved for platform story furniture.
-    const requiredHeight = measured.required + bands.spent + grown.spent;
+    const requiredHeight = measured.required + grownCharts.spent + bands.spent + grownGaps.spent;
 
     return {
         contentHeight,
         fontScale,
         surroundingHeight: surroundingHeight(
             measured.surroundingRows,
-            grown.values.get("sectionGap") ?? sectionGapFloor
+            grownGaps.values.get("sectionGap") ?? sectionGapFloor
         ),
         requiredHeight,
         traceHeight: charts.trace,
@@ -961,7 +975,7 @@ export function storySummaryBudget(
         rateHeight: chosen.rate ? charts.rate : 0,
         rateTopGap: chosen.rate ? rateTopGap : 0,
         rateBottomGap: chosen.rate ? rateBottomGap : 0,
-        sectionGap: grown.values.get("sectionGap") ?? sectionGapFloor,
+        sectionGap: grownGaps.values.get("sectionGap") ?? sectionGapFloor,
         gapSlots: measured.gapSlots,
         capturePadding: STORY_CAPTURE_PADDING,
         ladderTopGap: chosen.stages ? ladderTopGap : 0,
