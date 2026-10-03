@@ -170,3 +170,22 @@ jest.mock("react-native/Libraries/PermissionsAndroid/PermissionsAndroid", () => 
     // site that imports it from "react-native".
     return {__esModule: true, default: PermissionsAndroid, ...PermissionsAndroid};
 });
+
+// `react-native-webview` reaches straight for the `RNCWebViewModule` turbo
+// module at import time, so merely importing a screen that renders one throws
+// under jest. It is mocked globally rather than suite by suite because
+// `app/index.tsx` pulls the browser in transitively: without this, every suite
+// that renders the home screen fails to run, and the failure names a native
+// module rather than anything the suite is about.
+//
+// The element keeps its props so a suite that genuinely drives the browser can
+// find it and call the navigation callbacks. A suite that only happens to
+// mount one gets an inert view and never notices.
+jest.mock("react-native-webview", () => {
+    const React = require("react");
+    const {View} = require("react-native");
+    function WebView(props) {
+        return React.createElement(View, {...props, testID: props.testID ?? "webview"});
+    }
+    return {__esModule: true, WebView, default: WebView};
+});

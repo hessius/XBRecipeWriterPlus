@@ -2,6 +2,7 @@ import React from "react";
 import {Pressable} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
+import BrewMindMark from "@/components/BrewMindMark";
 import DotMatrixText from "@/components/DotMatrixText";
 import XbrwSheet from "@/components/XbrwSheet";
 import {accents, palette, type AccentGroup} from "@/constants/colors";
@@ -9,6 +10,12 @@ import {accents, palette, type AccentGroup} from "@/constants/colors";
 /** How many swatches a door shows. The tea half only has four. */
 const SWATCH_COUNT = 4;
 const SWATCH_SIZE = 10;
+const DOOR_MARK_SIZE = 22;
+const DOOR_MARK_WIDTH = 52;
+const FROM_SCRATCH_HEADING = "FROM SCRATCH";
+const WITH_AI_HEADING = "WITH AI";
+const BREWMIND_LABEL = "BREWMIND";
+const BREWMIND_SUMMARY = "Pick a coffee. Bring back a recipe.";
 
 /**
  * The two doors, in the order they are offered.
@@ -32,6 +39,9 @@ type Props = {
     onOpenChange: (open: boolean) => void;
     /** Called with the beverage chosen. The sheet does not close itself. */
     onChoose: (group: AccentGroup) => void;
+    /** Opens BrewMind. Separate from `onChoose` because it does not make a blank recipe. */
+    onBrewMind?: () => void;
+    brewMindBusy?: boolean;
 };
 
 /**
@@ -52,11 +62,14 @@ type Props = {
  * Holds no state: it is a picture of its props, and the screen owns both the
  * open flag and what a choice means.
  */
-export default function NewRecipeSheet({open, onOpenChange, onChoose}: Props) {
+export default function NewRecipeSheet({
+    open, onOpenChange, onChoose, onBrewMind, brewMindBusy = false
+}: Props) {
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange}
-                   title="New recipe" heightPercent={27}>
+                   title="New recipe" heightPercent={42}>
             <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
+                <DoorHeading>{FROM_SCRATCH_HEADING}</DoorHeading>
                 {DOORS.map((door) => (
                     <Pressable key={door.group}
                                accessibilityRole="button"
@@ -67,7 +80,7 @@ export default function NewRecipeSheet({open, onOpenChange, onChoose}: Props) {
                                 borderRadius="$6"
                                 backgroundColor={palette.raised}
                                 borderWidth={1} borderColor={palette.line}>
-                            <XStack gap="$1"
+                            <XStack gap="$1" width={DOOR_MARK_WIDTH}
                                     accessibilityElementsHidden
                                     importantForAccessibility="no-hide-descendants">
                                 {accents[door.group].slice(0, SWATCH_COUNT).map((colour) => (
@@ -96,7 +109,55 @@ export default function NewRecipeSheet({open, onOpenChange, onChoose}: Props) {
                         </XStack>
                     </Pressable>
                 ))}
+
+                {onBrewMind !== undefined && (
+                    <>
+                        <DoorHeading>{WITH_AI_HEADING}</DoorHeading>
+                        <Pressable
+                            testID="new-recipe-brewmind-door"
+                            accessibilityRole="button"
+                            accessibilityLabel="Build a recipe with BrewMind"
+                            accessibilityHint="Opens BrewMind to pick a coffee, then brings the recipe back."
+                            accessibilityState={{disabled: brewMindBusy}}
+                            disabled={brewMindBusy}
+                            onPress={brewMindBusy ? undefined : onBrewMind}
+                            style={({pressed}) => ({
+                                opacity: brewMindBusy ? 0.45 : pressed ? 0.7 : 1,
+                                transform: [{scale: !brewMindBusy && pressed ? 0.98 : 1}]
+                            })}>
+                            <XStack alignItems="center" gap="$3"
+                                    paddingVertical="$3.5" paddingHorizontal="$3.5"
+                                    borderRadius="$6"
+                                    backgroundColor={palette.raised}
+                                    borderWidth={1} borderColor={palette.line}>
+                                <XStack width={DOOR_MARK_WIDTH} alignItems="center" justifyContent="center"
+                                        accessibilityElementsHidden
+                                        importantForAccessibility="no-hide-descendants">
+                                    <BrewMindMark size={DOOR_MARK_SIZE}/>
+                                </XStack>
+                                <YStack gap="$1.5" flex={1}>
+                                    <DotMatrixText testID="new-recipe-brewmind-label"
+                                                   fontSize={13} weight="bold"
+                                                   letterSpacing={1.5} color={palette.text}>
+                                        {BREWMIND_LABEL}
+                                    </DotMatrixText>
+                                    <Text fontSize={12} color={palette.dim}>
+                                        {BREWMIND_SUMMARY}
+                                    </Text>
+                                </YStack>
+                            </XStack>
+                        </Pressable>
+                    </>
+                )}
             </YStack>
         </XbrwSheet>
+    );
+}
+
+function DoorHeading({children}: {children: string}) {
+    return (
+        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6} color={palette.dim}>
+            {children}
+        </DotMatrixText>
     );
 }

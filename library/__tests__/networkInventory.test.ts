@@ -142,6 +142,11 @@ const EXPECTED_CALLS: Record<string, number> = {
     "api/_lib/store.ts":           2,
     "api/_lib/xbloom.ts":          1,
     "app/hubRecipe.tsx":           1,
+    // The WebView's `source={{uri}}`. One site, but unlike every other line
+    // here it opens a page rather than making a request, so the count bounds
+    // where the browser starts and says nothing about where it then goes. The
+    // inventory entry carries that caveat in words.
+    "components/BrewMindBrowser.tsx": 1,
     "components/FromSection.tsx":  1,
     "components/HubRow.tsx":       1,
     "components/ImportResult.tsx": 1,

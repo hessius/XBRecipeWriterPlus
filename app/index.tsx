@@ -16,6 +16,7 @@ import EmptyLibrary from "@/components/EmptyLibrary";
 import HomeHeader from "@/components/HomeHeader";
 import ImportSheet from "@/components/ImportSheet";
 import ImportTile from "@/components/ImportTile";
+import BrewMindBrowser from "@/components/BrewMindBrowser";
 import LibraryRail, {type RailFilter} from "@/components/LibraryRail";
 import MachinePanel from "@/components/MachinePanel";
 import NewRecipeSheet from "@/components/NewRecipeSheet";
@@ -986,7 +987,15 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // Every link the system delivers, launch URL and later events alike.
     useImportLink(openImportLink);
 
-    const brewMind = useBrewMindCreate(openImportLink);
+    function openImportShare(url: string) {
+        const source = parseImportInput(url);
+        if (!source || source.kind !== "share") return;
+
+        setImportOpen(true);
+        importer.resolveNow(source, "shared");
+    }
+
+    const brewMind = useBrewMindCreate(openImportLink, openImportShare);
 
     useEffect(() => {
         // A shared link that failed (network down, not found) leaves its guard
@@ -1131,6 +1140,14 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         // Straight to `openRecipe`, so a new recipe gets the same push guard
         // and the same accent settling as a read or an import.
         openRecipe(blankRecipe(group));
+    }
+
+    function openBrewMindDoor(): void {
+        // Close before opening BrewMind. The returned link opens the import
+        // sheet, and leaving this chooser mounted would put the old decision
+        // surface above the arriving recipe.
+        setNewOpen(false);
+        void brewMind.open();
     }
 
     function openBrew(recipe: Recipe): void {
@@ -1672,8 +1689,6 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
             <ImportSheet
                 open={importOpen}
                 importer={importer}
-                onCreate={brewMind.open}
-                creating={brewMind.busy}
                 onOpenChange={(open) => {
                     setImportOpen(open);
                     if (!open) {
@@ -1683,7 +1698,11 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 }}/>
 
             <NewRecipeSheet open={newOpen} onOpenChange={setNewOpen}
-                            onChoose={createRecipe}/>
+                            onChoose={createRecipe}
+                            onBrewMind={openBrewMindDoor}
+                            brewMindBusy={brewMind.busy}/>
+
+            <BrewMindBrowser {...brewMind.browser}/>
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         unavailable={readUnavailable} onCancel={cancelScan}/>
