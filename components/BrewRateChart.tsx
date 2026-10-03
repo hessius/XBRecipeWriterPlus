@@ -38,6 +38,8 @@ type Props = {
     maxRate?: number;
     height?: number;
     role?: Role;
+    /** Keeps the chart label aligned with story text while the plot bleeds. */
+    labelInset?: number;
 };
 
 function channelPoints(run: FlowPoint[], of: "cup" | "water"): Point[] {
@@ -111,7 +113,8 @@ function cupDotPath(runs: FlowPoint[][], box: Box): string {
  * where the bed never flowed rather than a chart the stream cannot support.
  */
 export default function BrewRateChart({
-    series, accent, width, maxT, maxRate, height = RATE_HEIGHT, role = "subject"
+    series, accent, width, maxT, maxRate, height = RATE_HEIGHT, role = "subject",
+    labelInset = 0
 }: Props) {
     if (!hasDrawableRateRun(series)) return null;
 
@@ -150,7 +153,7 @@ export default function BrewRateChart({
             >
                 <SvgText
                     testID="rate-chart-label"
-                    x={0}
+                    x={labelInset}
                     y={labelSize}
                     fill={palette.dim}
                     {...dotMatrixSvgProps({fontSize: RATE_LABEL_SIZE, letterSpacing: 1.2})}

@@ -78,7 +78,7 @@ describe("the story card", () => {
         });
 
         expect(renderSummary).toHaveBeenCalledWith(expect.objectContaining({
-            contentHeight: 461,
+            contentHeight: 589,
             showRateChart: true,
             showStages: true,
             traceHeight: expect.any(Number),

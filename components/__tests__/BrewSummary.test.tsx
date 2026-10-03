@@ -6,6 +6,7 @@ import BrewSummary from "@/components/BrewSummary";
 import {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
+import {storyChartWidth, storyTextContentWidth} from "@/library/brew/storyCard";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
 
@@ -286,6 +287,25 @@ describe("BrewSummary", () => {
         expect(screen.getByLabelText("Brew trace, 93 then 93 then 93 degrees")
             .props.height).toBe(traceHeight - rowHeight(LEGEND_SIZE));
         expect(screen.getByLabelText("Brew rate chart").props.height).toBe(rateHeight);
+    });
+
+    it("lets story charts bleed wider than the padded text content", async () => {
+        const width = 390;
+        const capturePadding = 7;
+        const textWidth = storyTextContentWidth(width, capturePadding);
+        await draw({
+            width,
+            capturePadding,
+            chartWidth: storyChartWidth(width),
+            rateSeries: [
+                {at: 59_900, cup: 1.6, water: 3.2},
+                {at: 60_000, cup: 1.7, water: 3.2}
+            ]
+        });
+
+        expect(screen.getByLabelText("Brew trace, 93 then 93 then 93 degrees").props.width)
+            .toBeGreaterThan(textWidth);
+        expect(screen.getByLabelText("Brew rate chart").props.width).toBeGreaterThan(textWidth);
     });
 
     it("passes delay and grind figures into the captured summary", async () => {

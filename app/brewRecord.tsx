@@ -37,6 +37,7 @@ import {
     offeredStoryContent,
     storyCoffeeLine,
     storyContentFacts,
+    storyChartWidth,
     storyHiddenFromSetting,
     storyHiddenToSetting,
     storySummaryBudget,
@@ -674,6 +675,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                                 showRateChart={budget.showRateChart}
                                 showStages={budget.showStages}
                                 textScale={storyTextScale(cardWidth)}
+                                chartWidth={storyChartWidth(cardWidth)}
                                 // Always still: a capture taken mid-travel
                                 // freezes the name half-scrolled, and unlike
                                 // the screen's own summary there is no moment

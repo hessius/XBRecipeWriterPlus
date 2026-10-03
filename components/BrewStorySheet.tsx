@@ -4,7 +4,7 @@ import ViewShot, {type ViewShotRef} from "react-native-view-shot";
 import {XStack, YStack} from "tamagui";
 
 import ExportButton from "@/components/ExportButton";
-import RailChip from "@/components/RailChip";
+import RailChip, {CHIP_HEIGHT} from "@/components/RailChip";
 import XbrwSheet from "@/components/XbrwSheet";
 import {SCREEN_PADDING} from "@/constants/layout";
 import {STORY_ASPECT, storyFrame} from "@/library/brew/storyCard";
@@ -45,6 +45,16 @@ function StoryToggleRow({toggles}: {toggles: StoryToggleOption[]}) {
             testID="story-toggle-row"
             horizontal
             showsHorizontalScrollIndicator={false}
+            // The height is pinned, as it is on every other chip row in the
+            // app. A horizontal ScrollView left unconstrained in a flex column
+            // grows into whatever the column has spare, and the row above it
+            // here is the card stage, which is sized from what the stage
+            // measures. Unpinned, this row took about 320 pt of that stage and
+            // the card came out at 171 pt rather than 349 pt: half the size on
+            // the glass, a quarter of the pixels in the shared PNG, and small
+            // enough that the layout budget began declining content that would
+            // otherwise have fitted.
+            style={styles.toggleRow}
             contentContainerStyle={styles.toggleContent}
         >
             {toggles.map((toggle) => {
@@ -154,6 +164,11 @@ export default function BrewStorySheet({
 }
 
 const styles = StyleSheet.create({
+    toggleRow: {
+        flexGrow:   0,
+        flexShrink: 0,
+        height:     CHIP_HEIGHT
+    },
     toggleContent: {
         gap:               8,
         paddingHorizontal: SCREEN_PADDING
