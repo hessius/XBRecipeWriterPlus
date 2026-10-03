@@ -3,12 +3,19 @@
  * `await`, `screen` is empty and the test passes for the wrong reason.
  */
 import React from "react";
-import {fireEvent, screen} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import NewRecipeSheet from "@/components/NewRecipeSheet";
 import {MAX_TEA_POURS} from "@/library/cardLimits";
 import {blankRecipe} from "@/library/newRecipe";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, SHEET_PRESS_TIMEOUT} from "@/test-utils/render";
+
+async function pressOnSheet(label: string, landed: () => boolean): Promise<void> {
+    await waitFor(async () => {
+        await fireEvent.press(screen.getByLabelText(label));
+        expect(landed()).toBe(true);
+    }, {timeout: SHEET_PRESS_TIMEOUT});
+}
 
 describe("NewRecipeSheet", () => {
     it("offers both beverages", async () => {
@@ -76,6 +83,63 @@ describe("NewRecipeSheet", () => {
         expect(await screen.findByText(
             new RegExp(`^${tea.dosage} g · 90 ml steeps · up to ${MAX_TEA_POURS}$`)
         )).toBeTruthy();
+    });
+
+    it("offers BrewMind as the AI door", async () => {
+        await renderWithProviders(
+            <NewRecipeSheet open onOpenChange={() => {}}
+                            onChoose={() => {}}
+                            onBrewMind={() => {}}/>
+        );
+
+        expect(await screen.findByText("FROM SCRATCH")).toBeTruthy();
+        expect(await screen.findByText("WITH AI")).toBeTruthy();
+        expect(screen.getByTestId("new-recipe-brewmind-label")).toHaveTextContent("BREWMIND");
+        expect(screen.getByText("Pick a coffee. Bring back a recipe.")).toBeTruthy();
+        expect(screen.getByRole("button", {name: "Build a recipe with BrewMind"})).toBeTruthy();
+    });
+
+    it("opens BrewMind when its door is pressed", async () => {
+        const onBrewMind = jest.fn();
+        await renderWithProviders(
+            <NewRecipeSheet open onOpenChange={() => {}}
+                            onChoose={() => {}}
+                            onBrewMind={onBrewMind}/>
+        );
+
+        await pressOnSheet("Build a recipe with BrewMind", () => onBrewMind.mock.calls.length > 0);
+
+        expect(onBrewMind).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not choose a blank recipe from the BrewMind door", async () => {
+        const onChoose = jest.fn();
+        const onBrewMind = jest.fn();
+        await renderWithProviders(
+            <NewRecipeSheet open onOpenChange={() => {}}
+                            onChoose={onChoose}
+                            onBrewMind={onBrewMind}/>
+        );
+
+        await pressOnSheet("Build a recipe with BrewMind", () => onBrewMind.mock.calls.length > 0);
+
+        expect(onChoose).not.toHaveBeenCalled();
+    });
+
+    it("keeps the BrewMind door inert while it is busy", async () => {
+        const onBrewMind = jest.fn();
+        await renderWithProviders(
+            <NewRecipeSheet open onOpenChange={() => {}}
+                            onChoose={() => {}}
+                            onBrewMind={onBrewMind}
+                            brewMindBusy/>
+        );
+
+        const door = await screen.findByTestId("new-recipe-brewmind-door");
+        expect(door.props.accessibilityState.disabled).toBe(true);
+        await fireEvent.press(door);
+
+        expect(onBrewMind).not.toHaveBeenCalled();
     });
 
     it("draws nothing while closed", async () => {

@@ -1133,6 +1133,14 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         openRecipe(blankRecipe(group));
     }
 
+    function openBrewMindDoor(): void {
+        // Close before opening BrewMind. The returned link opens the import
+        // sheet, and leaving this chooser mounted would put the old decision
+        // surface above the arriving recipe.
+        setNewOpen(false);
+        void brewMind.open();
+    }
+
     function openBrew(recipe: Recipe): void {
         // There is one machine, and `LiveBrewProvider.start` refuses a second
         // run while the first is still going. Without this the tap would push
@@ -1672,8 +1680,6 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
             <ImportSheet
                 open={importOpen}
                 importer={importer}
-                onCreate={brewMind.open}
-                creating={brewMind.busy}
                 onOpenChange={(open) => {
                     setImportOpen(open);
                     if (!open) {
@@ -1683,7 +1689,9 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 }}/>
 
             <NewRecipeSheet open={newOpen} onOpenChange={setNewOpen}
-                            onChoose={createRecipe}/>
+                            onChoose={createRecipe}
+                            onBrewMind={openBrewMindDoor}
+                            brewMindBusy={brewMind.busy}/>
 
             <NfcOverlay visible={scanning} mode="read" progress={readProgress}
                         unavailable={readUnavailable} onCancel={cancelScan}/>

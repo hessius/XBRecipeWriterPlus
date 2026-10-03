@@ -114,6 +114,22 @@ tray, and the overflow sheet.
 | `home.swipe.delete.caption` | `components/SwipeableRecipeRow.tsx` (`caption="DELETE"`) | Doto caption on the management-tray (swipe-left) delete tile. | `DELETE` |
 | `home.swipe.delete.a11y` | `components/SwipeableRecipeRow.tsx` (a11y) | (a11y) Management-tray delete tile. `${...}` is the recipe name. | `Delete ${recipe.displayName()}` |
 
+### New recipe sheet (`components/NewRecipeSheet.tsx`)
+
+| ID | Source | Context — when the user sees this | Current text |
+|----|--------|-----------------------------------|--------------|
+| `newRecipe.sheet.title` | `components/NewRecipeSheet.tsx` | Title of the sheet opened by the new-recipe button. | `New recipe` |
+| `newRecipe.fromScratch` | `components/NewRecipeSheet.tsx` (`FROM_SCRATCH_HEADING`) | Doto heading above the blank preset doors. | `FROM SCRATCH` |
+| `newRecipe.coffee.label` | `components/NewRecipeSheet.tsx` (`DOORS.coffee.label`) | Doto label on the coffee preset door. | `COFFEE` |
+| `newRecipe.coffee.summary` | `components/NewRecipeSheet.tsx` (`DOORS.coffee.summary`) | Summary under the coffee preset door. | `15 g · 1:16 · grind 65 · OMNI` |
+| `newRecipe.tea.label` | `components/NewRecipeSheet.tsx` (`DOORS.tea.label`) | Doto label on the tea preset door. | `TEA` |
+| `newRecipe.tea.summary` | `components/NewRecipeSheet.tsx` (`DOORS.tea.summary`) | Summary under the tea preset door. | `5 g · 90 ml steeps · up to 3` |
+| `newRecipe.withAi` | `components/NewRecipeSheet.tsx` (`WITH_AI_HEADING`) | Doto heading above the BrewMind door. | `WITH AI` |
+| `newRecipe.brewMind.label` | `components/NewRecipeSheet.tsx` (`BREWMIND_LABEL`) | Doto label on the BrewMind door. | `BREWMIND` |
+| `newRecipe.brewMind.summary` | `components/NewRecipeSheet.tsx` (`BREWMIND_SUMMARY`) | Summary under the BrewMind door. | `Pick a coffee. Bring back a recipe.` |
+| `newRecipe.brewMind.a11y` | `components/NewRecipeSheet.tsx` (a11y) | (a11y) The BrewMind door. | `Build a recipe with BrewMind` |
+| `newRecipe.brewMind.hint` | `components/NewRecipeSheet.tsx` (a11y) | (a11y) Hint for the BrewMind door. | `Opens BrewMind to pick a coffee, then brings the recipe back.` |
+
 
 ### Recipe overflow sheet (`components/RecipeOverflowSheet.tsx`)
 
