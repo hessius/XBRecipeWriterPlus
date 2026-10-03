@@ -1,6 +1,7 @@
 import {dotoRowHeight} from "@/library/dotoMetrics";
 import type {FlowPoint} from "@/library/brew/flowRate";
 
+export const TRACE_HEIGHT = 150;
 export const RATE_HEIGHT = 84;
 export const RATE_TOP_GAP = 18;
 export const RATE_BOTTOM_GAP = 12;

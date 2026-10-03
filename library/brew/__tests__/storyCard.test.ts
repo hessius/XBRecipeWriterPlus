@@ -19,7 +19,7 @@ import {
 } from "../storyCard";
 import {BAR_FLOOR, GAP_FLOOR} from "../bands";
 import type {BrewRecord} from "../BrewRecord";
-import {RATE_BOTTOM_GAP, RATE_HEIGHT, RATE_TOP_GAP} from "../rateChartGeometry";
+import {RATE_BOTTOM_GAP, RATE_HEIGHT, RATE_TOP_GAP, TRACE_HEIGHT} from "../rateChartGeometry";
 import {
     BREW_FIGURE_DETAIL_VALUE_SIZE,
     BREW_FIGURE_INTERNAL_GAP,
@@ -239,6 +239,40 @@ describe("the frame", () => {
 
         expect(budget.showRateChart).toBe(true);
         expect(budget.traceHeight).toBeLessThan(STORY_TRACE_HEIGHT);
+    });
+
+    it("keeps the story charts in the record screen's proportion", () => {
+        const budget = storySummaryBudget({
+            width: 342,
+            stages: 4,
+            hasRateChart: true,
+            hasCoffee: true,
+            hasRating: true,
+            tags: ["filter", "washed"],
+            hasBypass: true,
+            figureExtraRows: 1,
+            fontScale: 1
+        });
+
+        expect(budget.showRateChart).toBe(true);
+        expect(budget.traceHeight / budget.rateHeight)
+            .toBeCloseTo(TRACE_HEIGHT / RATE_HEIGHT, 1);
+    });
+
+    it("keeps the primary trace taller than the secondary flow chart", () => {
+        for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+            for (const fontScale of STORY_TEST_FONT_SCALES) {
+                for (const width of STORY_TEST_WIDTHS) {
+                    for (const input of storyMaskInputs(width, stages, fontScale)) {
+                        const budget = storySummaryBudget(input);
+
+                        if (budget.showRateChart) {
+                            expect(budget.traceHeight).toBeGreaterThan(budget.rateHeight);
+                        }
+                    }
+                }
+            }
+        }
     });
 
     it("keeps content the user turned off out even when there is room", () => {
@@ -658,7 +692,7 @@ describe("the frame", () => {
             hasRating: false
         });
 
-        expect(withRate.rateHeight).toBe(RATE_HEIGHT);
+        expect(withRate.rateHeight).toBe(132);
         expect(withRate.rateTopGap).toBe(RATE_TOP_GAP);
         expect(withRate.rateBottomGap).toBe(RATE_BOTTOM_GAP);
 
@@ -670,7 +704,7 @@ describe("the frame", () => {
             hasRating: false
         });
         expect(withRate.requiredHeight - withoutRate.requiredHeight)
-            .toBe(RATE_TOP_GAP + RATE_HEIGHT + RATE_BOTTOM_GAP);
+            .toBe(RATE_TOP_GAP + 132 + RATE_BOTTOM_GAP);
     });
 
     it("budgets one smaller figure row instead of the removed caption lines", () => {

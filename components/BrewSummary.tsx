@@ -20,12 +20,13 @@ import {
     hasDrawableRateRun,
     RATE_BOTTOM_GAP,
     RATE_HEIGHT,
+    TRACE_HEIGHT,
     RATE_TOP_GAP
 } from "@/library/brew/rateChartGeometry";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
-export const TRACE_HEIGHT = 150;
+export {TRACE_HEIGHT};
 /** Enough of the next scroll section to show that more than the summary exists. */
 export const SUMMARY_SCROLL_PEEK = 44;
 
