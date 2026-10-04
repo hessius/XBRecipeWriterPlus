@@ -38,17 +38,18 @@ the dev server running, and it uses the Chrome already installed on the machine
 
 ## Screenshots
 
-Real device captures go in `public/screenshots/en/` as these seven files:
+Real device captures go in `public/screenshots/en/` as these eight files:
 
 | File | What to capture |
 | --- | --- |
-| `home.png` | the recipe library with 4+ recipes, machine dot connected |
-| `import.png` | the import sheet mid-resolve |
+| `home.png` | the recipe library with 4+ recipes and a shelf row, machine dot connected |
 | `stages.png` | the stages deck with the pour profile visible |
 | `read.png` | the NFC scan overlay with the bloom part-filled - needs a real card |
-| `hero.png` | the top of the editor: dose, ratio, grind |
-| `brew.png` | a live brew, mid-pour: graph part-drawn, timer running - needs a machine |
+| `hero.png` | the top of the editor: dose, ratio, grind. Use a recipe on a half ratio, so the slide that claims a card cannot hold one is proving it |
+| `brew.png` | a live brew, mid-pour: graph part-drawn, flow rate showing, timer running - needs a machine |
 | `history.png` | one past brew's detail, with its full chart |
+| `compare.png` | two brews on the compare screen, both traces drawn |
+| `hub.png` | the community hub list, scrolled so several rows show |
 
 Capture full-frame on a real device (status bar included, no cropping) at
 1206x2622 or larger. Do not crop: the `Phone` frame positions the screen with
@@ -62,25 +63,30 @@ throw away. Pass `--force` to regenerate a placeholder on purpose.
 
 ## Slides
 
-Eight slides, one idea each, in a deliberate arc. The order sells the cards
-first and the machine second, because the cards are what people arrive looking
-for and the brewing is what keeps them:
+Ten slides, Apple's maximum, one idea each. The order changed for 2.0: the app
+no longer leads on the cards. It leads on the machine, because what a buyer
+is choosing between is this app and the official one, and the cards are a
+thing only existing owners already know they want.
 
-1. **hero** - three phones fanned: library, editor, brew. The arc of the whole
-   product in one image, under a headline that promises only the cards.
-2. **library** - centred phone on a wall of tinted cards. The library outgrows
-   the cards it started from.
-3. **brew** - tilted phone, off centre, behind a rising dotted trace. The graph
+1. **hero** - three phones fanned: library, editor, brew. The whole product in
+   one image, under the store subtitle verbatim.
+2. **brew** - tilted phone, off centre, behind a rising dotted trace. The graph
    pulled out of the screen so it survives thumbnail size.
-4. **stages** - two layered phones. Depth, and the only slide with a second device.
-5. **import** - a numbered four-step spine, phone entering from below. The only
-   slide that explains a sequence rather than a single idea.
-6. **read** - centred phone behind contactless arcs. The NFC money shot, no
-   longer the headline.
-7. **history** - phone at the right, behind five fading ghosts of slide 3's
+3. **beyond** - three Doto chips over a phone. The only slide that argues rather
+   than shows: a half ratio, bypass water and a stage count no card can carry.
+4. **dial** - two traces, one lagging the other. The comparison screen, and the
+   only slide that poses a question instead of making a claim.
+5. **history** - phone at the right, behind five fading ghosts of slide 2's
    trace. The live graph rewritten as an archive.
-8. **privacy** - the contrast slide: inverted to magenta, no device, all type, set
-   in Doto. The headline is lifted from the app's own About ticker.
+6. **library** - centred phone on a wall of tinted cards. The library outgrows
+   the cards it started from.
+7. **hub** - ragged bars in columns, a catalogue seen edge on. Deliberately not
+   the card wall, so the hub and the library do not read as the same idea.
+8. **stages** - two layered phones. Depth, and the only slide with a second device.
+9. **read** - centred phone behind contactless arcs. The NFC shot, no longer the
+   headline.
+10. **privacy** - the contrast slide: inverted to magenta, no device, all type,
+    set in Doto.
 
 Adding or reordering a slide means touching three places: the `SLIDES` array in
 `src/app/page.tsx`, `SLIDE_IDS` in `scripts/export.mjs` (the headless export

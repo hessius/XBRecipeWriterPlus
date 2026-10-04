@@ -65,7 +65,7 @@ const ACCENT = {
 
 /* ------------------------------------------------------------------- images */
 
-const SHOTS = ["home", "import", "stages", "read", "hero", "brew", "history"] as const;
+const SHOTS = ["home", "stages", "read", "hero", "brew", "history", "compare", "hub"] as const;
 type Shot = (typeof SHOTS)[number];
 
 const shot = (name: Shot) => `/screenshots/en/${name}.png`;
@@ -323,9 +323,13 @@ const frame: React.CSSProperties = {
  *
  * Three phones rather than one, because the app is no longer one thing. The
  * order left to right is the arc of the whole product -- read a card, rewrite
- * it, brew it -- so the slide carries the "come for the cards, stay for the
- * brews" story without the headline having to say two things at once. The
- * headline still sells the cards alone: that is what people arrive looking for.
+ * it, brew it.
+ *
+ * The headline used to be "Rewrite the card that came with your coffee", which
+ * promised the cards alone and was true when the cards were all there was. It
+ * is now the smallest thing in here, and a first slide that sells it is selling
+ * the 1.x app. This line is the store subtitle word for word, so the two
+ * loudest pieces of type on the product page say one thing rather than two.
  */
 const HERO_FAN: {name: Shot; alt: string; left: string; scale: number; rotate: number; z: number; opacity: number}[] = [
     {name: "home", alt: "Recipe library", left: "21%", scale: 0.88, rotate: -9, z: 1, opacity: 0.62},
@@ -347,11 +351,9 @@ const slideHero: SlideDef = {
                     eyebrow="XBRW++"
                     headline={
                         <>
-                            Rewrite the card
+                            Your xBloom,
                             <br />
-                            that came with
-                            <br />
-                            <span style={{color: C.brand}}>your</span> coffee.
+                            <span style={{color: C.brand}}>unleashed</span>.
                         </>
                     }
                 />
@@ -377,7 +379,7 @@ const slideHero: SlideDef = {
 };
 
 /**
- * 2 - Library. What the app becomes once you have used it for a month.
+ * 6 - Library. What the app becomes once you have used it for a month.
  *
  * The wall of tinted cards behind the phone is the point of the slide: the
  * library outgrows the cards it started from, and a single centred phone on an
@@ -466,7 +468,7 @@ const slideLibrary: SlideDef = {
 };
 
 /**
- * 3 - Brew. The feature that turned a card writer into an app you open daily.
+ * 2 - Brew. The feature that turned a card writer into an app you open daily.
  *
  * The rising dotted trace behind the phone is the brew graph pulled out of the
  * screen and drawn at slide scale, so the idea survives being seen at thumbnail
@@ -553,105 +555,236 @@ const slideBrew: SlideDef = {
 };
 
 /**
- * 5 - Import. The four-step card flow, then the phone.
+ * 3 - Beyond the card. The slide that argues the app is worth having.
  *
- * The steps run horizontally rather than down a column so the phone can keep
- * its full width: the interesting half of this capture is the middle band, and
- * cropping horizontally to make room for a text column was eating into it. The
- * phone bleeds off the bottom instead, which costs only the button rail.
+ * Three chips rather than prose, because the claim is only convincing when it
+ * is specific: a card byte holds a whole number, has nowhere to put bypass, and
+ * runs out of room for stages. Each chip is a thing the card format genuinely
+ * cannot represent and the Bluetooth path genuinely can, so the slide is a list
+ * of facts rather than an adjective.
  */
-const IMPORT_STEPS = ["Paste a link", "Write the card", "Tap it", "Brew it"];
+const BEYOND_CHIPS = ["1:15.5", "Bypass", "17 stages"];
 
-const slideImport: SlideDef = {
-    id: "import",
+const slideBeyond: SlideDef = {
+    id: "beyond",
     component: ({cW, cH}) => (
         <div style={frame}>
-            <Glow cW={cW} colour={ACCENT.sky} x="78%" y="18%" size={1.2} opacity={0.28} />
-            <Glow cW={cW} colour={C.brand} x="5%" y="80%" size={1.0} opacity={0.26} />
+            <Glow cW={cW} colour={ACCENT.blossom} x="50%" y="32%" size={1.3} opacity={0.3} />
+            <Glow cW={cW} colour={C.brand} x="12%" y="86%" size={1.0} opacity={0.24} />
             <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
             <Caption
                 cW={cW}
-                eyebrow="Import"
-                eyebrowColour={ACCENT.sky}
+                eyebrow="Bluetooth"
+                eyebrowColour={ACCENT.blossom}
+                scale={0.88}
                 headline={
                     <>
-                        Link in.
+                        Brew what a card
                         <br />
-                        <span style={{color: ACCENT.sky}}>Coffee out.</span>
+                        <span style={{color: ACCENT.blossom}}>can&apos;t hold</span>.
                     </>
                 }
             />
             <div
                 style={{
                     position: "absolute",
-                    top: cH * 0.205,
-                    left: cW * 0.075,
-                    right: cW * 0.075,
-                    zIndex: 6,
+                    top: cH * 0.272,
+                    left: 0,
+                    width: cW,
                     display: "flex",
-                    alignItems: "flex-start"
+                    justifyContent: "center",
+                    gap: cW * 0.03,
+                    zIndex: 5
                 }}>
-                {IMPORT_STEPS.map((step, i) => {
-                    const last = i === IMPORT_STEPS.length - 1;
-                    return (
-                        <div
-                            key={step}
-                            style={{
-                                flex: 1,
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                gap: cW * 0.022
-                            }}>
-                            <div
-                                style={{
-                                    width: cW * 0.066,
-                                    height: cW * 0.066,
-                                    borderRadius: cW * 0.017,
-                                    background: last ? ACCENT.sky : "transparent",
-                                    border: `${cW * 0.0038}px solid ${ACCENT.sky}`,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontFamily: "var(--font-mono)",
-                                    fontWeight: 700,
-                                    fontSize: cW * 0.03,
-                                    color: last ? C.ink : ACCENT.sky
-                                }}>
-                                {i + 1}
-                            </div>
-                            <div
-                                style={{
-                                    fontFamily: "var(--font-inter)",
-                                    fontWeight: 700,
-                                    fontSize: cW * 0.026,
-                                    letterSpacing: `-${cW * 0.0004}px`,
-                                    color: last ? C.text : C.dim,
-                                    textAlign: "center",
-                                    whiteSpace: "nowrap"
-                                }}>
-                                {step}
-                            </div>
-                        </div>
-                    );
-                })}
+                {BEYOND_CHIPS.map((chip) => (
+                    <div
+                        key={chip}
+                        style={{
+                            fontFamily: "var(--font-doto)",
+                            fontWeight: 800,
+                            fontSize: cW * 0.044,
+                            lineHeight: 1,
+                            textTransform: "uppercase",
+                            whiteSpace: "nowrap",
+                            color: ACCENT.blossom,
+                            border: `${cW * 0.0035}px solid ${ACCENT.blossom}`,
+                            borderRadius: cW * 0.028,
+                            padding: `${cW * 0.019}px ${cW * 0.032}px ${cW * 0.014}px`,
+                            background: "rgba(0,0,0,0.4)"
+                        }}>
+                        {chip}
+                    </div>
+                ))}
             </div>
             <Phone
-                src={img(shot("import"))}
-                alt="Import sheet"
+                src={img(shot("hero"))}
+                alt="Recipe editor"
                 style={{
                     position: "absolute",
-                    top: cH * 0.295,
-                    width: "94%",
+                    bottom: 0,
+                    width: "76%",
                     left: "50%",
-                    transform: "translateX(-50%)"
+                    transform: "translateX(-50%) translateY(12%)"
                 }}
             />
         </div>
     )
 };
 
-/** 4 - Editor. Two phones layered, to say "there is a lot in here". */
+/**
+ * 4 - Compare. Two traces, because one trace is just slide 2 again.
+ *
+ * The second trace is drawn shorter and dimmer rather than in a mirrored
+ * position, so the pair reads as "the same brew, done differently" instead of
+ * two unrelated graphs sharing a canvas. That is the whole proposition of the
+ * compare screen, and it has to survive at thumbnail size.
+ */
+const slideDial: SlideDef = {
+    id: "dial",
+    component: ({cW, cH}) => (
+        <div style={frame}>
+            <Glow cW={cW} colour={ACCENT.sky} x="68%" y="34%" size={1.4} opacity={0.3} />
+            <Glow cW={cW} colour={ACCENT.peach} x="10%" y="20%" size={0.9} opacity={0.16} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
+            <div style={{position: "absolute", left: 0, top: cH * 0.185, width: cW, height: cH * 0.36}}>
+                <TraceMotif cW={cW} cH={cH * 0.36} colour={ACCENT.sky} />
+            </div>
+            <div
+                style={{
+                    position: "absolute",
+                    left: 0,
+                    top: cH * 0.185,
+                    width: cW,
+                    height: cH * 0.36,
+                    // Only the top 60% of this box clears the phone, so the two
+                    // traces have to diverge *there*. Scaling vertically either
+                    // buries the second one behind the phone or stacks it a few
+                    // pixels off the first, which reads as a drop shadow. A
+                    // horizontal lag separates them in the visible band and
+                    // happens to mean something: the same climb, later.
+                    transform: `translateX(${cW * 0.13}px) scaleY(0.9)`,
+                    transformOrigin: "top"
+                }}>
+                <TraceMotif cW={cW} cH={cH * 0.36} colour={ACCENT.peach} opacity={0.8} />
+            </div>
+            <Caption
+                cW={cW}
+                eyebrow="Compare"
+                eyebrowColour={ACCENT.sky}
+                scale={0.88}
+                headline={
+                    <>
+                        Why was that one
+                        <br />
+                        <span style={{color: ACCENT.sky}}>better</span>?
+                    </>
+                }
+            />
+            <Phone
+                src={img(shot("compare"))}
+                alt="Two brews compared"
+                style={{
+                    position: "absolute",
+                    bottom: 0,
+                    width: "74%",
+                    left: "50%",
+                    transform: "translateX(-50%) translateY(12%) rotate(3deg)"
+                }}
+            />
+        </div>
+    )
+};
+
+/**
+ * 7 - Community catalogue. Somebody else has already done the work.
+ *
+ * Columns of bars rather than the card wall used on the library slide: that
+ * wall says "a lot of cards", and this needs to say "a very long list". Reusing
+ * it would have made the two slides read as the same idea twice, which is the
+ * one thing a listing cannot afford when it has ten slides to fill.
+ */
+function CatalogueColumns({cW, cH, colour}: {cW: number; cH: number; colour: string}) {
+    const cols = 5;
+    const rows = 30;
+    const barH = cH * 0.0125;
+    const gap = cH * 0.0115;
+    return (
+        <div
+            style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                justifyContent: "center",
+                gap: cW * 0.028,
+                transform: "rotate(-6deg) scale(1.3)",
+                pointerEvents: "none"
+            }}>
+            {Array.from({length: cols}).map((_, c) => (
+                <div
+                    key={c}
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap,
+                        marginTop: c % 2 ? cH * 0.035 : 0
+                    }}>
+                    {Array.from({length: rows}).map((_, r) => (
+                        <div
+                            key={r}
+                            style={{
+                                // Varied widths, because a column of identical
+                                // bars is a loading skeleton and a column of
+                                // ragged ones is a list of names.
+                                width: cW * (0.1 + ((r * 5 + c * 3) % 7) * 0.013),
+                                height: barH,
+                                borderRadius: barH / 2,
+                                background: colour,
+                                opacity: 0.06 + ((r * 7 + c * 3) % 5) * 0.022
+                            }}
+                        />
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+const slideHub: SlideDef = {
+    id: "hub",
+    component: ({cW, cH}) => (
+        <div style={frame}>
+            <Glow cW={cW} colour={ACCENT.mint} x="50%" y="66%" size={1.5} opacity={0.3} />
+            <CatalogueColumns cW={cW} cH={cH} colour={ACCENT.mint} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
+            <Caption
+                cW={cW}
+                eyebrow="Community"
+                eyebrowColour={ACCENT.mint}
+                scale={0.88}
+                headline={
+                    <>
+                        Someone already
+                        <br />
+                        <span style={{color: ACCENT.mint}}>dialled it in</span>.
+                    </>
+                }
+            />
+            <Phone
+                src={img(shot("hub"))}
+                alt="The community catalogue"
+                style={{
+                    position: "absolute",
+                    bottom: 0,
+                    width: "74%",
+                    left: "50%",
+                    transform: "translateX(-50%) translateY(12%) rotate(-3deg)"
+                }}
+            />
+        </div>
+    )
+};
+
+/** 8 - Editor. Two phones layered, to say "there is a lot in here". */
 const slideStages: SlideDef = {
     id: "stages",
     component: ({cW, cH}) => (
@@ -699,7 +832,7 @@ const slideStages: SlideDef = {
     )
 };
 
-/** 6 - Read. Contactless arcs behind the phone, echoing the scan overlay. */
+/** 9 - Read. Contactless arcs behind the phone, echoing the scan overlay. */
 const slideRead: SlideDef = {
     id: "read",
     component: ({cW, cH}) => (
@@ -758,9 +891,9 @@ const slideRead: SlideDef = {
 };
 
 /**
- * 7 - History. The quiet feature that keeps people in the app.
+ * 5 - History. The quiet feature that keeps people in the app.
  *
- * Five ghosts of slide 3's trace, stacked and fading backwards. Rewriting the
+ * Five ghosts of slide 2's trace, stacked and fading backwards. Rewriting the
  * live graph as an archive says "every brew" in one glance, where the screen
  * itself -- a list of rows -- is unreadable at thumbnail size. An earlier pass
  * drew flat bars instead and they read as a loading skeleton, which is the one
@@ -820,11 +953,15 @@ const slideHistory: SlideDef = {
 };
 
 /**
- * 8 - Privacy. The contrast slide: inverted, no device, all type.
+ * 10 - Privacy. The contrast slide: inverted, no device, all type.
  *
- * The headline is the app's own ticker line. It is the loudest thing XBRW++
- * says about itself, and a listing that buries "no account" under a screenshot
- * of a settings screen is throwing away the clearest reason to choose it.
+ * This used to read "No cloud. No account. No thanks." and quote the app's own
+ * About ticker. Both halves went stale in 2.0: the ticker lines are nonsense in
+ * a crack-intro register and never said this, and the app now has a community
+ * catalogue, an optional xBloom sign-in and a share service, so "no cloud" is
+ * simply untrue. What survived the version is the part that was never about the
+ * network at all -- nobody is sold anything and nobody is counted -- so the
+ * slide now claims that and points at the screen where the rest is itemised.
  */
 const slidePrivacy: SlideDef = {
     id: "privacy",
@@ -869,9 +1006,9 @@ const slidePrivacy: SlideDef = {
                         whiteSpace: "nowrap",
                         textTransform: "uppercase"
                     }}>
-                    No cloud.
+                    No ads.
                     <br />
-                    No account.
+                    No tracking.
                     <br />
                     No thanks.
                 </div>
@@ -885,7 +1022,7 @@ const slidePrivacy: SlideDef = {
                         textAlign: "center",
                         maxWidth: cW * 0.76
                     }}>
-                    Your recipes stay on your phone. No sync, no analytics, no sign-up.
+                    There is no XBRW++ account. Every network call the app can make is listed inside it.
                 </div>
             </div>
         </div>
@@ -894,12 +1031,14 @@ const slidePrivacy: SlideDef = {
 
 const SLIDES: SlideDef[] = [
     slideHero,
-    slideLibrary,
     slideBrew,
-    slideStages,
-    slideImport,
-    slideRead,
+    slideBeyond,
+    slideDial,
     slideHistory,
+    slideLibrary,
+    slideHub,
+    slideStages,
+    slideRead,
     slidePrivacy
 ];
 
