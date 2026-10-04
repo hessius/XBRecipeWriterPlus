@@ -38,11 +38,12 @@ the dev server running, and it uses the Chrome already installed on the machine
 
 ## Screenshots
 
-Real device captures go in `public/screenshots/en/` as these eight files:
+Real device captures go in `public/screenshots/en/` as these nine files:
 
 | File | What to capture |
 | --- | --- |
-| `home.png` | the recipe library with 4+ recipes and a shelf row, machine dot connected |
+| `home.png` | the recipe library in the plain grid, 4+ recipes, machine dot connected |
+| `shelves.png` | the same library in the shelf layout, several shelves showing their marks |
 | `stages.png` | the stages deck with the pour profile visible |
 | `read.png` | the NFC scan overlay with the bloom part-filled - needs a real card |
 | `hero.png` | the top of the editor: dose, ratio, grind. Use a recipe on a half ratio, so the slide that claims a card cannot hold one is proving it |
@@ -80,13 +81,18 @@ thing only existing owners already know they want.
    trace. The live graph rewritten as an archive.
 6. **library** - centred phone on a wall of tinted cards. The library outgrows
    the cards it started from.
-7. **hub** - ragged bars in columns, a catalogue seen edge on. Deliberately not
+7. **shelves** - the same library sorted, over a grid of shelf marks. Paired
+   with 6 on purpose: two views of one library, which is why it does not reuse
+   the card wall.
+8. **hub** - ragged bars in columns, a catalogue seen edge on. Deliberately not
    the card wall, so the hub and the library do not read as the same idea.
-8. **stages** - two layered phones. Depth, and the only slide with a second device.
-9. **read** - centred phone behind contactless arcs. The NFC shot, no longer the
-   headline.
-10. **privacy** - the contrast slide: inverted to magenta, no device, all type,
-    set in Doto.
+9. **stages** - two layered phones. Depth, and the only slide with a second device.
+10. **read** - centred phone behind contactless arcs. The NFC shot, no longer
+    the headline.
+
+There is no privacy slide any more. It claimed "No cloud. No account.", which
+2.0 made untrue, and the honest shorter version was not worth a slot that could
+show a feature instead.
 
 Adding or reordering a slide means touching three places: the `SLIDES` array in
 `src/app/page.tsx`, `SLIDE_IDS` in `scripts/export.mjs` (the headless export

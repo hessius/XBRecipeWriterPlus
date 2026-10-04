@@ -65,7 +65,7 @@ const ACCENT = {
 
 /* ------------------------------------------------------------------- images */
 
-const SHOTS = ["home", "stages", "read", "hero", "brew", "history", "compare", "hub"] as const;
+const SHOTS = ["home", "stages", "read", "hero", "brew", "history", "compare", "hub", "shelves"] as const;
 type Shot = (typeof SHOTS)[number];
 
 const shot = (name: Shot) => `/screenshots/en/${name}.png`;
@@ -696,7 +696,7 @@ const slideDial: SlideDef = {
 };
 
 /**
- * 7 - Community catalogue. Somebody else has already done the work.
+ * 8 - Community catalogue. Somebody else has already done the work.
  *
  * Columns of bars rather than the card wall used on the library slide: that
  * wall says "a lot of cards", and this needs to say "a very long list". Reusing
@@ -784,7 +784,7 @@ const slideHub: SlideDef = {
     )
 };
 
-/** 8 - Editor. Two phones layered, to say "there is a lot in here". */
+/** 9 - Editor. Two phones layered, to say "there is a lot in here". */
 const slideStages: SlideDef = {
     id: "stages",
     component: ({cW, cH}) => (
@@ -832,7 +832,7 @@ const slideStages: SlideDef = {
     )
 };
 
-/** 9 - Read. Contactless arcs behind the phone, echoing the scan overlay. */
+/** 10 - Read. Contactless arcs behind the phone, echoing the scan overlay. */
 const slideRead: SlideDef = {
     id: "read",
     component: ({cW, cH}) => (
@@ -953,78 +953,94 @@ const slideHistory: SlideDef = {
 };
 
 /**
- * 10 - Privacy. The contrast slide: inverted, no device, all type.
+ * 7 - Shelves. The other half of the library, and the reason it has two slides.
  *
- * This used to read "No cloud. No account. No thanks." and quote the app's own
- * About ticker. Both halves went stale in 2.0: the ticker lines are nonsense in
- * a crack-intro register and never said this, and the app now has a community
- * catalogue, an optional xBloom sign-in and a share service, so "no cloud" is
- * simply untrue. What survived the version is the part that was never about the
- * network at all -- nobody is sold anything and nobody is counted -- so the
- * slide now claims that and points at the screen where the rest is itemised.
+ * The privacy slide used to sit here. It said "No cloud. No account." and
+ * credited the app's About ticker, and both halves went stale in 2.0: the
+ * ticker lines are crack-intro nonsense that never said it, and the app now has
+ * a community catalogue, an optional xBloom sign-in and a share service, so "no
+ * cloud" is untrue. Rather than restate a weaker version of the claim, the slot
+ * went to the thing a buyer can actually see the value of.
+ *
+ * The motif is a grid of shelf marks, not the card wall from the slide before:
+ * the pair has to read as two views of one library, and repeating the wall
+ * would make it read as two libraries.
  */
-const slidePrivacy: SlideDef = {
-    id: "privacy",
+function MarkGrid({cW, cH}: {cW: number; cH: number}) {
+    const tints = [ACCENT.mint, ACCENT.lilac, ACCENT.peach, ACCENT.sky, ACCENT.blossom, ACCENT.oolong];
+    const cols = 5;
+    const rows = 7;
+    const size = cW * 0.135;
+    const gap = cW * 0.045;
+    return (
+        <div
+            style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap,
+                transform: "rotate(-5deg) scale(1.25)",
+                pointerEvents: "none"
+            }}>
+            {Array.from({length: rows}).map((_, r) => (
+                <div key={r} style={{display: "flex", gap}}>
+                    {Array.from({length: cols}).map((_, c) => {
+                        const i = r * cols + c;
+                        return (
+                            <div
+                                key={c}
+                                style={{
+                                    width: size,
+                                    height: size,
+                                    borderRadius: size * 0.26,
+                                    background: tints[i % tints.length],
+                                    opacity: 0.1 + ((i * 3) % 4) * 0.035
+                                }}
+                            />
+                        );
+                    })}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+const slideShelves: SlideDef = {
+    id: "shelves",
     component: ({cW, cH}) => (
-        <div style={{...frame, background: C.brand}}>
-            <DotScreen cW={cW} colour="rgba(0,0,0,0.22)" size={0.016} />
-            <Glow cW={cW} colour="rgba(255,255,255,0.55)" x="50%" y="2%" size={1.4} opacity={0.3} />
-            <div
+        <div style={frame}>
+            <MarkGrid cW={cW} cH={cH} />
+            <Glow cW={cW} colour={ACCENT.mint} x="50%" y="76%" size={1.5} opacity={0.26} />
+            <Glow cW={cW} colour={C.base} x="50%" y="8%" size={1.8} opacity={0.78} />
+            <Glow cW={cW} colour={C.base} x="50%" y="66%" size={1.7} opacity={0.85} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
+            <Caption
+                cW={cW}
+                eyebrow="Shelves"
+                eyebrowColour={ACCENT.mint}
+                scale={0.9}
+                headline={
+                    <>
+                        It sorts itself
+                        <br />
+                        <span style={{color: ACCENT.mint}}>as you brew</span>.
+                    </>
+                }
+            />
+            <Phone
+                src={img(shot("shelves"))}
+                alt="Library shelves"
                 style={{
                     position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: cW * 0.06,
-                    zIndex: 5
-                }}>
-                <img
-                    src={img("/app-icon.png")}
-                    alt=""
-                    style={{
-                        width: cW * 0.19,
-                        height: cW * 0.19,
-                        borderRadius: cW * 0.042,
-                        marginBottom: cW * 0.09,
-                        boxShadow: `0 ${cW * 0.015}px ${cW * 0.05}px rgba(0,0,0,0.35)`
-                    }}
-                    draggable={false}
-                />
-                <div
-                    style={{
-                        fontFamily: "var(--font-doto)",
-                        fontWeight: 800,
-                        fontSize: cW * 0.112,
-                        lineHeight: 1.12,
-                        color: C.ink,
-                        textAlign: "center",
-                        // Doto is a wide face: let a line that no longer fits
-                        // overflow visibly rather than silently rewrap into a
-                        // ragged "NO / ACCOUNT." that reads as a fourth line.
-                        whiteSpace: "nowrap",
-                        textTransform: "uppercase"
-                    }}>
-                    No ads.
-                    <br />
-                    No tracking.
-                    <br />
-                    No thanks.
-                </div>
-                <div
-                    style={{
-                        marginTop: cH * 0.045,
-                        fontFamily: "var(--font-mono)",
-                        fontSize: cW * 0.034,
-                        lineHeight: 1.5,
-                        color: "rgba(0,0,0,0.72)",
-                        textAlign: "center",
-                        maxWidth: cW * 0.76
-                    }}>
-                    There is no XBRW++ account. Every network call the app can make is listed inside it.
-                </div>
-            </div>
+                    bottom: 0,
+                    width: "82%",
+                    left: "50%",
+                    transform: "translateX(-50%) translateY(10%)"
+                }}
+            />
         </div>
     )
 };
@@ -1036,10 +1052,10 @@ const SLIDES: SlideDef[] = [
     slideDial,
     slideHistory,
     slideLibrary,
+    slideShelves,
     slideHub,
     slideStages,
-    slideRead,
-    slidePrivacy
+    slideRead
 ];
 
 /* -------------------------------------------------------------- promo image */
