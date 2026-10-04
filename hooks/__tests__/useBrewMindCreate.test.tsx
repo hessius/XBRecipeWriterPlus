@@ -14,6 +14,8 @@ let mockWebViewProps: {
     onShouldStartLoadWithRequest: (request: ShouldStartLoadRequest) => boolean;
     onNavigationStateChange: (navigation: WebViewNavigation) => void;
     originWhitelist?: string[];
+    allowsInlineMediaPlayback?: boolean;
+    contentInsetAdjustmentBehavior?: string;
 } | null = null;
 
 jest.mock("react-native-webview", () => {
@@ -181,5 +183,47 @@ describe("the browser's origin whitelist", () => {
 
         expect(mockWebViewProps?.originWhitelist)
             .toEqual(expect.arrayContaining(["xbrw://*", "xbrecipewriter://*"]));
+    });
+});
+
+/*
+ * Two props whose native default is the opposite of what the browser wants,
+ * which is the whole reason they are pinned. Neither is visible in a snapshot
+ * of what the page draws and neither fails loudly: deleting either one leaves
+ * a browser that still loads BrewMind, still imports, and still passes every
+ * other test in this file, while quietly undoing the thing it was set for.
+ */
+describe("the browser's iOS presentation defaults", () => {
+    async function propsAfterOpen() {
+        await renderWithProviders(
+            <Harness onLink={jest.fn()} onShare={jest.fn()}/>);
+
+        await waitFor(() => {
+            fireEvent.press(screen.getByLabelText("Open BrewMind"));
+            expect(mockWebViewProps).not.toBeNull();
+        }, {timeout: SHEET_PRESS_TIMEOUT});
+
+        return mockWebViewProps;
+    }
+
+    /*
+     * BrewMind reads a coffee bag from a photo, so the page may ask for a live
+     * camera. The native default is false, which plays a captured stream
+     * fullscreen: the page's own framing, including its shutter control, is
+     * torn away and the user is left in a video player.
+     */
+    it("keeps a camera preview inside the page", async () => {
+        expect((await propsAfterOpen())?.allowsInlineMediaPlayback).toBe(true);
+    });
+
+    /*
+     * The container deliberately does not pad the bottom safe area, because
+     * doing so drew a black bar under the page. That only works while the
+     * WebView insets its own content: the native default is `never`, which
+     * would leave the page running under the home indicator instead.
+     */
+    it("hands the bottom inset to the page rather than padding around it", async () => {
+        expect((await propsAfterOpen())?.contentInsetAdjustmentBehavior)
+            .toBe("automatic");
     });
 });

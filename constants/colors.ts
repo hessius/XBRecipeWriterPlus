@@ -83,6 +83,27 @@ export const palette = {
      */
     brand:   "#FF007F",
 
+    /**
+     * The same magenta, deepened until it can carry white ink.
+     *
+     * `brand` cannot do this job. It is used as *ink* on the two dark
+     * surfaces, where it is pinned at 4.5:1 on both `base` and `raised`, and
+     * that wants it light; carrying white text wants it dark. The two pull
+     * opposite ways and there is no value that does both, because darkening
+     * `brand` far enough for white (around #E60074) drops it to 3.98:1 on
+     * `raised` and breaks the wordmark. So the fill is a second token rather
+     * than a change to the first, which also leaves `brand` exactly the value
+     * sampled from the app icon.
+     *
+     * White lands at 5.36:1 here, within a whisker of the 5.18:1 the black ink
+     * measured on `brand`. The tile keeps the ink weight it always had and
+     * only inverts it, so nothing about its hierarchy needs re-tuning.
+     *
+     * Fill only. It is darker than `brand` and so fails as ink on `base`,
+     * which is the whole reason both exist.
+     */
+    brandFill: "#D10069",
+
     /** Confirmation, and the "reader ready" state. */
     success: "#5DDC8A",
     /** Destructive actions and validation errors. */
@@ -174,6 +195,29 @@ export const onAccent = {
      * there is real headroom here.
      */
     key:           "rgba(0,0,0,0.78)"
+} as const;
+
+/**
+ * Foregrounds drawn on `brandFill`, which is the support tile and nothing else.
+ *
+ * Separate from `onAccent` because it is the other way up. Every recipe accent
+ * is light and takes dark ink; `brandFill` is dark and takes white, so none of
+ * the alphas in `onAccent` mean anything here and reaching for one would be a
+ * silent contrast failure rather than a type error.
+ */
+export const onBrand = {
+    /** Both lines of copy. 5.36:1 on `brandFill`. */
+    text:   "#FFFFFF",
+    /**
+     * The chevron, which is a graphic and so has a 3:1 floor rather than 4.5.
+     *
+     * 0.80 rather than `onAccent.marker`'s 0.70. White loses contrast against
+     * this fill faster than black does, so the alpha that leaves a dark marker
+     * comfortable leaves a white one at 3.09:1, a hair over the floor. 0.80 is
+     * 3.74:1 and still clearly stepped back from the 5.36:1 copy, so the glyph
+     * recedes by eye without sitting on the limit.
+     */
+    marker: "rgba(255,255,255,0.80)"
 } as const;
 
 /**
