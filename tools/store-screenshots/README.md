@@ -102,6 +102,24 @@ There is no privacy slide any more. It claimed "No cloud. No account.", which
 2.0 made untrue, and the honest shorter version was not worth a slot that could
 show a feature instead.
 
+## The promo banner
+
+A 1920x1080 landscape banner for Discord, not a store asset. Apple never sees
+it, so it can carry a link and a call to action.
+
+Rewritten for 2.0. It previously recruited testers for an app that had not
+shipped and sold "rewrite the card that came with your coffee", which was the
+whole product in 1.x. Both were true when written. A banner that lives in a
+repo has no way of failing when it goes stale, so check it whenever the
+positioning moves: it now carries the store subtitle verbatim, the same line
+slide 1 uses.
+
+Two things it deliberately does not do. It does not say "no cloud" - the app
+makes seven kinds of call (`constants/network.ts`) and the listing already
+refused that claim, so repeating it here would leave the two disagreeing. And
+the call to action is plain text, not Apple's badge artwork, which has its own
+guidelines and cannot be redrawn by hand.
+
 Adding or reordering a slide means touching three places: the `SLIDES` array in
 `src/app/page.tsx`, `SLIDE_IDS` in `scripts/export.mjs` (the headless export
 walks its own list), and this table. A new capture also means extending the

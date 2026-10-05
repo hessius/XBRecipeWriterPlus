@@ -1112,17 +1112,38 @@ const SLIDES: SlideDef[] = [
 /* -------------------------------------------------------------- promo image */
 
 /**
- * Landscape banner for Discord recruitment. Not a store asset -- Apple never
- * sees this -- so it carries the repo URL and the "testers wanted" framing that
- * would be out of place on a listing.
+ * Landscape banner for Discord. Not a store asset -- Apple never sees this --
+ * so it can carry a link and a call to action that would be out of place on a
+ * listing.
+ *
+ * Rewritten for 2.0. The old banner recruited testers for an app that was not
+ * out yet, and sold "rewrite the card that came with your coffee", which was
+ * the whole product in 1.x and is now the smallest part of it. Both were true
+ * when written and neither is now, which is the failure mode a banner living
+ * in a repo is prone to: nothing breaks when it goes stale.
+ *
+ * The headline is the store subtitle verbatim, as it is on slide 1. Three
+ * places now say one thing rather than three.
+ *
+ * The body deliberately does not say "no cloud". The app makes seven kinds of
+ * call (`constants/network.ts`) -- the hub, the share-link mint, BrewMind --
+ * and the listing already refused that claim once, so repeating it here would
+ * leave the two documents disagreeing. It sells what 2.0 actually added.
+ *
+ * The pill is plain text rather than Apple's badge artwork. The badge has its
+ * own guidelines and cannot be redrawn by hand, and an approximation of it is
+ * worse than not using it.
  */
+const APP_STORE_URL = "apps.apple.com/app/id6806339475";
+
 const promoSlide: SlideDef = {
     id: "promo",
     component: ({cW, cH}) => {
+        /* brew in front: 2.0 leads on the machine, so the banner does too. */
         const fan: {name: Shot; left: string; scale: number; rotate: number; z: number; opacity: number}[] = [
-            {name: "stages", left: "63%", scale: 0.84, rotate: -9, z: 1, opacity: 0.7},
-            {name: "brew", left: "87%", scale: 0.84, rotate: 9, z: 1, opacity: 0.7},
-            {name: "home", left: "75%", scale: 1, rotate: 0, z: 2, opacity: 1}
+            {name: "home", left: "63%", scale: 0.84, rotate: -9, z: 1, opacity: 0.7},
+            {name: "history", left: "87%", scale: 0.84, rotate: 9, z: 1, opacity: 0.7},
+            {name: "brew", left: "75%", scale: 1, rotate: 0, z: 2, opacity: 1}
         ];
         const base = cH * 0.88 * MK_RATIO;
         return (
@@ -1136,7 +1157,7 @@ const promoSlide: SlideDef = {
                         top: "50%",
                         left: cW * 0.055,
                         width: cW * 0.5,
-                        marginTop: -cH * 0.29,
+                        marginTop: -cH * 0.4,
                         zIndex: 5
                     }}>
                     <div style={{display: "flex", alignItems: "center", gap: cW * 0.018, marginBottom: cW * 0.03}}>
@@ -1166,9 +1187,9 @@ const promoSlide: SlideDef = {
                             letterSpacing: `-${cW * 0.0018}px`,
                             color: C.text
                         }}>
-                        Rewrite the card that
+                        Your xBloom,
                         <br />
-                        came with <span style={{color: C.brand}}>your</span> coffee.
+                        <span style={{color: C.brand}}>unleashed</span>.
                     </div>
                     <div
                         style={{
@@ -1179,8 +1200,8 @@ const promoSlide: SlideDef = {
                             color: C.dim,
                             maxWidth: cW * 0.46
                         }}>
-                        Read, edit and write xBloom recipe cards from your phone. No account, no
-                        cloud, no analytics.
+                        Brew over Bluetooth, watch every pour land, and keep every brew.
+                        Reads and writes the cards too.
                     </div>
                     <div
                         style={{
@@ -1201,12 +1222,21 @@ const promoSlide: SlideDef = {
                                 fontWeight: 700,
                                 whiteSpace: "nowrap"
                             }}>
-                            TESTERS WANTED
+                            ON THE APP STORE
                         </span>
                         <span
                             style={{
                                 fontFamily: "var(--font-mono)",
                                 fontSize: cW * 0.018,
+                                color: C.text,
+                                whiteSpace: "nowrap"
+                            }}>
+                            {APP_STORE_URL}
+                        </span>
+                        <span
+                            style={{
+                                fontFamily: "var(--font-mono)",
+                                fontSize: cW * 0.0155,
                                 color: C.dim,
                                 whiteSpace: "nowrap"
                             }}>
