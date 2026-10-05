@@ -102,7 +102,9 @@ describe("buildEnvelope", () => {
         expect(buildEnvelope(brew(), samples).bean).toEqual({
             name: "Kenya Sakami Gloria Natural Batian",
             origin: "Nabiswa, Kenya",
-            processing: "Natural",
+            // `process`, not the pod's own `processing`: the receiving app
+            // reads this name and ignored the other one.
+            process: "Natural",
             variety: "Batian",
             aromatics: "Cherry・strawberry・blueberry",
             beanMix: "Single Origin",

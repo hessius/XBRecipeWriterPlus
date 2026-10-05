@@ -459,8 +459,20 @@ ever wants to draw an xBloom stage ladder.
 **`bean` is absent far more often than present.** It appears only for an
 unedited xPod recipe (§2.1.1). Every field in it is optional, no field is a
 UUID, and a decoder that ignores the block entirely must still produce a
-correct brew. `roaster` and `roastingDate` are not in the block because the pod
-endpoint does not carry them; they are left for the user rather than invented.
+correct brew.
+
+A pod endpoint carries no `roaster` and no roast date, so for a pod those stay
+empty rather than being invented. They are in the block all the same, because
+a coffee can also reach `PodCoffee` from a BrewMind link, which states them
+outright. The same goes for the finer origin fields #159 added: `region`,
+`farm`, `farmer` and `elevation` are sent when something knew them.
+
+The block is BC's vocabulary, not ours, and `library/brew/handoff/handoffBean.ts`
+is the one place that translates. That module exists because the two are nearly
+the same and the gaps are silent: `PodCoffee.processing` is BC's `process`, and
+handing the stored object over whole meant a pod's process was sent on every
+brew and dropped on every arrival, with both sides implemented and neither
+wrong on its own.
 
 **`grinderName` is omitted, not defaulted, when the grinder did not run**
 (§3.1), and stays `"xBloom"` rather than naming a model we cannot yet
