@@ -159,10 +159,33 @@ There is also a screen listing every network call the app can make, backups now 
   Beanconqueror's own release yet. A reviewer installing the app cannot find it,
   so it cannot go on the store page. Worth adding to the description the moment
   the gate comes off.
-- **"Brew recipes the official app cannot brew."** We say "what a card cannot
-  hold" instead. The card limits are provable from our own encoder
-  (`library/cardLimits.ts:105-111, 246-281`); what the official app will or will
-  not send over its own Bluetooth link is not something we can stand behind.
+- **"Brew recipes the official app cannot brew."** Refused at first, then
+  **reversed by the owner on 3 October**, who has both machines and both apps
+  and is content to drop the line if review objects. It now appears in the
+  description and as the foot line on slide 3.
+
+  What changed is that the claim got narrow enough to measure. The general
+  version is still refused: what the official app will or will not send over
+  its own Bluetooth link is not something this repo can stand behind. The
+  version we ship is about **stages only**, and that one is corroborated.
+  Fetching xBloom's own community catalogue whole, both machine partitions,
+  gives a hard ceiling at nine:
+
+  | Machine | Rows | Pour counts seen |
+  |---|---|---|
+  | Studio (`J15`) | 1,667 | 2:26 3:287 4:675 5:554 6:73 7:42 8:7 **9:2** |
+  | Original (`J20`) | 1,345 | 2:23 3:241 4:518 5:460 6:62 7:35 **8:6** |
+
+  Not one of the 3,012 live recipes exceeds nine, and only two reach it.
+  A ceiling in published data is evidence rather than proof, but it agrees
+  with what the owner sees in the official editor.
+
+  The slide's three chips are **not** all comparisons, and the foot line is
+  worded so it cannot be read as claiming they are. Bypass in particular is a
+  field in xBloom's own share-link format (`isEnableBypassWater`,
+  `library/shareLink.ts:33`), so the official app has it. The chips are things
+  a **card** cannot hold, which is what the headline says; only the stage count
+  is a statement about the other app.
 - **"Unlimited stages."** The code documents seventeen stages run successfully
   over Bluetooth (`library/cardLimits.ts:53-66`), not an unbounded number, so
   the copy says "more stages than a card can carry".

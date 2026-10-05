@@ -65,7 +65,19 @@ const ACCENT = {
 
 /* ------------------------------------------------------------------- images */
 
-const SHOTS = ["home", "stages", "read", "hero", "brew", "history", "compare", "hub", "shelves"] as const;
+const SHOTS = [
+    "home",
+    "stages",
+    "read",
+    "hero",
+    "recipe",
+    "brew",
+    "history",
+    "historylist",
+    "compare",
+    "hub",
+    "shelves"
+] as const;
 type Shot = (typeof SHOTS)[number];
 
 const shot = (name: Shot) => `/screenshots/en/${name}.png`;
@@ -562,8 +574,27 @@ const slideBrew: SlideDef = {
  * runs out of room for stages. Each chip is a thing the card format genuinely
  * cannot represent and the Bluetooth path genuinely can, so the slide is a list
  * of facts rather than an adjective.
+ *
+ * The chips sit over a capture that proves them from the inside: the recipe on
+ * screen is named "No Stage Fright" and reads STAGES 17, RATIO 15.5, with the
+ * app's own warning that a card holds whole ratios only. A chip drawn over a
+ * screenshot that contradicts it is the one failure this set has already made
+ * once, so the capture is chosen to carry the argument rather than sit near it.
+ *
+ * The foot line names the official app, which nothing else in the listing does.
+ * It is scoped to stages alone because that is the only part of the comparison
+ * measured rather than assumed: every one of the 3,012 live recipes in
+ * xBloom's own community catalogue stops at nine pours, and only two reach
+ * even that. The word "stages" is in the line rather than implied, because
+ * without it the sentence sits under all three chips and reads as covering
+ * them all -- and bypass is a field in xBloom's own share-link format
+ * (`isEnableBypassWater`, see library/shareLink.ts), so the official app has
+ * it and a line that claimed otherwise would be false. It carries no full
+ * stop: Doto draws one as a comma, which looks like a typo at the end of a
+ * sentence.
  */
 const BEYOND_CHIPS = ["1:15.5", "Bypass", "17 stages"];
+const BEYOND_FOOT = "The official app stops at nine stages";
 
 const slideBeyond: SlideDef = {
     id: "beyond",
@@ -616,8 +647,26 @@ const slideBeyond: SlideDef = {
                     </div>
                 ))}
             </div>
+            <div
+                style={{
+                    position: "absolute",
+                    top: cH * 0.332,
+                    left: 0,
+                    width: cW,
+                    textAlign: "center",
+                    fontFamily: "var(--font-doto)",
+                    fontWeight: 600,
+                    fontSize: cW * 0.036,
+                    lineHeight: 1,
+                    textTransform: "uppercase",
+                    letterSpacing: `${cW * 0.002}px`,
+                    color: "rgba(255,255,255,0.5)",
+                    zIndex: 5
+                }}>
+                {BEYOND_FOOT}
+            </div>
             <Phone
-                src={img(shot("hero"))}
+                src={img(shot("recipe"))}
                 alt="Recipe editor"
                 style={{
                     position: "absolute",
@@ -936,6 +985,23 @@ const slideHistory: SlideDef = {
                         <span style={{color: ACCENT.oolong}}>kept</span>.
                     </>
                 }
+            />
+            {/* The list behind the record, because "every brew" is a claim the
+                list makes and the record cannot: one record is one brew. It sits
+                back and dim so the pair still reads as a single idea, and the
+                record keeps the foreground because it is the one worth looking
+                at on a 400 pixel thumbnail. */}
+            <Phone
+                src={img(shot("historylist"))}
+                alt="Brew history"
+                style={{
+                    position: "absolute",
+                    bottom: 0,
+                    width: "58%",
+                    left: "-6%",
+                    transform: "translateY(-2%) rotate(-7deg)",
+                    opacity: 0.5
+                }}
             />
             <Phone
                 src={img(shot("history"))}

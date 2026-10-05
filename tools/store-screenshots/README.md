@@ -38,7 +38,7 @@ the dev server running, and it uses the Chrome already installed on the machine
 
 ## Screenshots
 
-Real device captures go in `public/screenshots/en/` as these nine files:
+Real device captures go in `public/screenshots/en/` as these ten files:
 
 | File | What to capture |
 | --- | --- |
@@ -46,9 +46,11 @@ Real device captures go in `public/screenshots/en/` as these nine files:
 | `shelves.png` | the same library in the shelf layout, several shelves showing their marks |
 | `stages.png` | the stages deck with the pour profile visible |
 | `read.png` | the NFC scan overlay with the bloom part-filled - needs a real card |
-| `hero.png` | the top of the editor: dose, ratio, grind. Use a recipe on a half ratio, so the slide that claims a card cannot hold one is proving it |
+| `hero.png` | the top of the editor: dose, ratio, grind |
+| `recipe.png` | the editor on a recipe that breaks the card: a half ratio and well over nine stages, with the app's own card warning showing. Slide 3's chips are drawn over this, so the capture has to prove them |
 | `brew.png` | a live brew, mid-pour: graph part-drawn, flow rate showing, timer running - needs a machine |
 | `history.png` | one past brew's detail, with its full chart |
+| `historylist.png` | the brew history list, several brews showing |
 | `compare.png` | two brews on the compare screen, both traces drawn |
 | `hub.png` | the community hub list, scrolled so several rows show |
 
@@ -73,12 +75,17 @@ thing only existing owners already know they want.
    one image, under the store subtitle verbatim.
 2. **brew** - tilted phone, off centre, behind a rising dotted trace. The graph
    pulled out of the screen so it survives thumbnail size.
-3. **beyond** - three Doto chips over a phone. The only slide that argues rather
-   than shows: a half ratio, bypass water and a stage count no card can carry.
+3. **beyond** - three Doto chips over `recipe.png`, which shows all three in the
+   app. The only slide that argues rather than shows, and the only one that
+   names the official app: a half ratio, bypass water and a stage count no card
+   can carry, under a foot line about the nine-stage limit. See the refusals
+   section of `docs/store-listing.md` before changing that line - the stage
+   count is the only part of the comparison that is measured.
 4. **dial** - two traces, one lagging the other. The comparison screen, and the
    only slide that poses a question instead of making a claim.
-5. **history** - phone at the right, behind five fading ghosts of slide 2's
-   trace. The live graph rewritten as an archive.
+5. **history** - two phones, the list set back behind one record, over five
+   fading ghosts of slide 2's trace. "Every brew" is a claim the list makes
+   and a single record cannot.
 6. **library** - centred phone on a wall of tinted cards. The library outgrows
    the cards it started from.
 7. **shelves** - the same library sorted, over a grid of shelf marks. Paired
@@ -86,7 +93,7 @@ thing only existing owners already know they want.
    the card wall.
 8. **hub** - ragged bars in columns, a catalogue seen edge on. Deliberately not
    the card wall, so the hub and the library do not read as the same idea.
-9. **stages** - two layered phones. Depth, and the only slide with a second device.
+9. **stages** - two layered phones, the editor behind the stage deck.
 10. **read** - centred phone behind contactless arcs. The NFC shot, no longer
     the headline.
 
