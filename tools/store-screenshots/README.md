@@ -77,10 +77,11 @@ thing only existing owners already know they want.
    pulled out of the screen so it survives thumbnail size.
 3. **beyond** - three Doto chips over `recipe.png`, which shows all three in the
    app. The only slide that argues rather than shows, and the only one that
-   names the official app: a half ratio, bypass water and a stage count no card
-   can carry, under a foot line about the nine-stage limit. See the refusals
-   section of `docs/store-listing.md` before changing that line - the stage
-   count is the only part of the comparison that is measured.
+   names the official app. The chips are examples of what a card cannot hold,
+   not a comparison list: only the stage count clears both bars, and that one
+   is measured. Read the refusals section of `docs/store-listing.md` before
+   touching the headline - it records what was traded away and what the
+   fallback is if review objects.
 4. **dial** - two traces, one lagging the other. The comparison screen, and the
    only slide that poses a question instead of making a claim.
 5. **history** - two phones, the list set back behind one record, over five

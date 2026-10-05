@@ -162,7 +162,8 @@ There is also a screen listing every network call the app can make, backups now 
 - **"Brew recipes the official app cannot brew."** Refused at first, then
   **reversed by the owner on 3 October**, who has both machines and both apps
   and is content to drop the line if review objects. It now appears in the
-  description and as the foot line on slide 3.
+  description and in slide 3's headline, "Brew what neither a card nor the
+  official app can".
 
   What changed is that the claim got narrow enough to measure. The general
   version is still refused: what the official app will or will not send over
@@ -180,12 +181,20 @@ There is also a screen listing every network call the app can make, backups now 
   A ceiling in published data is evidence rather than proof, but it agrees
   with what the owner sees in the official editor.
 
-  The slide's three chips are **not** all comparisons, and the foot line is
-  worded so it cannot be read as claiming they are. Bypass in particular is a
-  field in xBloom's own share-link format (`isEnableBypassWater`,
-  `library/shareLink.ts:33`), so the official app has it. The chips are things
-  a **card** cannot hold, which is what the headline says; only the stage count
-  is a statement about the other app.
+  The slide's three chips are **not** all comparisons, and the headline does
+  not ask them to be. Only `17 stages` clears both bars. Bypass is a field in
+  xBloom's own share-link format (`isEnableBypassWater`,
+  `library/shareLink.ts:33`), so the official app has it, and the owner
+  confirms a 1:15.5 brews there too. Both chips are examples of what a **card**
+  cannot hold, which is the first half of the headline, and the capture
+  underneath is the recipe they describe.
+
+  An earlier draft put the app comparison in a separate foot line reading "the
+  official app stops at nine stages", precisely so the chips could not be read
+  as covering it. The owner chose the combined headline instead, taking the
+  chips as examples rather than as a comparison list. Recording the trade
+  rather than the outcome: **if review queries slide 3, the foot-line version
+  is the fallback**, because it says only the thing that is measured.
 - **"Unlimited stages."** The code documents seventeen stages run successfully
   over Bluetooth (`library/cardLimits.ts:53-66`), not an unbounded number, so
   the copy says "more stages than a card can carry".

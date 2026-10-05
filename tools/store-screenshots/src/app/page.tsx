@@ -581,20 +581,20 @@ const slideBrew: SlideDef = {
  * screenshot that contradicts it is the one failure this set has already made
  * once, so the capture is chosen to carry the argument rather than sit near it.
  *
- * The foot line names the official app, which nothing else in the listing does.
- * It is scoped to stages alone because that is the only part of the comparison
- * measured rather than assumed: every one of the 3,012 live recipes in
- * xBloom's own community catalogue stops at nine pours, and only two reach
- * even that. The word "stages" is in the line rather than implied, because
- * without it the sentence sits under all three chips and reads as covering
- * them all -- and bypass is a field in xBloom's own share-link format
- * (`isEnableBypassWater`, see library/shareLink.ts), so the official app has
- * it and a line that claimed otherwise would be false. It carries no full
- * stop: Doto draws one as a comma, which looks like a typo at the end of a
- * sentence.
+ * The headline names the official app, which nothing else in the listing does.
+ * One part of that is measured rather than assumed: every one of the 3,012
+ * live recipes in xBloom's own community catalogue stops at nine pours, and
+ * only two reach even that, so the stage count genuinely clears both bars.
+ * The other two chips do not, and are not meant to -- they are examples of
+ * what a card cannot hold, which is the first half of the headline. Bypass in
+ * particular is a field in xBloom's own share-link format
+ * (`isEnableBypassWater`, see library/shareLink.ts) and a half ratio brews
+ * there too, so neither is evidence against the official app. Read as a list
+ * of comparisons the row would overclaim; read as the recipe on screen, which
+ * is what the capture underneath makes it, it does not. That reading is the
+ * owner's call and is recorded in docs/store-listing.md.
  */
 const BEYOND_CHIPS = ["1:15.5", "Bypass", "17 stages"];
-const BEYOND_FOOT = "The official app stops at nine stages";
 
 const slideBeyond: SlideDef = {
     id: "beyond",
@@ -607,12 +607,15 @@ const slideBeyond: SlideDef = {
                 cW={cW}
                 eyebrow="Bluetooth"
                 eyebrowColour={ACCENT.blossom}
-                scale={0.88}
+                scale={0.78}
                 headline={
                     <>
-                        Brew what a card
+                        Brew what neither a card
                         <br />
-                        <span style={{color: ACCENT.blossom}}>can&apos;t hold</span>.
+                        <span style={{color: ACCENT.blossom}}>
+                            nor the official app can
+                        </span>
+                        .
                     </>
                 }
             />
@@ -646,24 +649,6 @@ const slideBeyond: SlideDef = {
                         {chip}
                     </div>
                 ))}
-            </div>
-            <div
-                style={{
-                    position: "absolute",
-                    top: cH * 0.332,
-                    left: 0,
-                    width: cW,
-                    textAlign: "center",
-                    fontFamily: "var(--font-doto)",
-                    fontWeight: 600,
-                    fontSize: cW * 0.036,
-                    lineHeight: 1,
-                    textTransform: "uppercase",
-                    letterSpacing: `${cW * 0.002}px`,
-                    color: "rgba(255,255,255,0.5)",
-                    zIndex: 5
-                }}>
-                {BEYOND_FOOT}
             </div>
             <Phone
                 src={img(shot("recipe"))}
