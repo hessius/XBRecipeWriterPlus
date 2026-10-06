@@ -2,9 +2,10 @@ import {useRef, useState} from "react";
 import {Linking} from "react-native";
 
 import {notify} from "@/components/XbrwToast";
-import {buildEnvelope} from "@/library/brew/handoff/envelope";
+import {buildEnvelope, type HandoffEnvelope} from "@/library/brew/handoff/envelope";
 import {encodeHandoff} from "@/library/brew/handoff/encode";
 import {backfillFromRecipe} from "@/library/brew/handoff/backfill";
+import {handoffLinkFilename, shareHandoffLink} from "@/library/brew/handoff/shareLink";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type {BrewExportSource} from "@/hooks/useBrewExport";
 import {sharedBrewDatabase} from "@/hooks/useBrewHistory";
@@ -31,6 +32,9 @@ export type HandoffStore = {markSent: (id: string, at: number) => void};
  * flight: the guard is a ref, set synchronously before the first `await`, so a
  * double tap cannot open Beanconqueror twice. `busy` is the same fact as state,
  * for a caller that wants to disable a button.
+ *
+ * `shareLink` is the Labs link export: the same URL, written to a file for the
+ * share sheet instead of opened. It is a debugging aid and a temporary one.
  */
 export function useBrewHandoff(
     source: () => BrewExportSource | null,
@@ -38,7 +42,54 @@ export function useBrewHandoff(
 ) {
     // Guards against a second press while the deep link is still opening.
     const isSendingRef = useRef(false);
+    // Separate from the send guard, so the two actions cannot clear each
+    // other's busy flag; `busy` below is their union, as in useBrewExport.
+    const isSharingLinkRef = useRef(false);
     const [busy, setBusy] = useState(false);
+
+    /**
+     * The envelope for the brew as it stands, built fresh at press time.
+     *
+     * Shared by the send and by the Labs link export so the file a tester
+     * hands over is byte for byte what the deep link would have carried.
+     */
+    function envelopeFor(opened: BrewExportSource, beanName?: string): HandoffEnvelope {
+        const recipe = new RecipeDatabase().getRecipe(opened.record.recipeUuid);
+        const backfill = recipe === null
+            ? {record: opened.record, filled: []}
+            : backfillFromRecipe(opened.record, recipe);
+        return buildEnvelope(backfill.record, opened.samples, backfill.filled, beanName);
+    }
+
+    /**
+     * Writes the handoff URL to a file and offers it to the share sheet.
+     *
+     * A Labs debugging aid: it exists so sample links can be given to
+     * Beanconqueror's maintainer, and it should go once they have them. It
+     * deliberately does not `markSent` — nothing was handed over — and it
+     * deliberately does not open Beanconqueror.
+     */
+    async function shareLink(beanName?: string): Promise<boolean> {
+        if (isSharingLinkRef.current) return false;
+        const opened = source();
+        if (opened === null) return false;
+        isSharingLinkRef.current = true;
+        setBusy(true);
+        try {
+            let url: string;
+            try {
+                ({url} = encodeHandoff(envelopeFor(opened, beanName)));
+            } catch {
+                notify({tone: "error", message: HANDOFF_TOO_LARGE});
+                return false;
+            }
+            await shareHandoffLink(url, handoffLinkFilename(opened.record));
+            return true;
+        } finally {
+            isSharingLinkRef.current = false;
+            setBusy(isSendingRef.current);
+        }
+    }
 
     async function send(beanName?: string): Promise<number | null> {
         if (isSendingRef.current) return null;
@@ -47,16 +98,11 @@ export function useBrewHandoff(
         isSendingRef.current = true;
         setBusy(true);
         try {
-            const recipe = new RecipeDatabase().getRecipe(opened.record.recipeUuid);
-            const backfill = recipe === null
-                ? {record: opened.record, filled: []}
-                : backfillFromRecipe(opened.record, recipe);
-            const envelope = buildEnvelope(backfill.record, opened.samples, backfill.filled, beanName);
             let url: string;
             try {
                 // Our side has no fidelity copy: `flow.fidelity` stays inside
                 // the envelope so Beanconqueror knows whether a trace was thinned.
-                ({url} = encodeHandoff(envelope));
+                ({url} = encodeHandoff(envelopeFor(opened, beanName)));
             } catch {
                 notify({tone: "error", message: HANDOFF_TOO_LARGE});
                 return null;
@@ -83,13 +129,13 @@ export function useBrewHandoff(
             // small, and one reset point is safer than duplicating it across
             // success and failure branches.
             isSendingRef.current = false;
-            // Unlike useBrewExport, this hook has one action, so there is no
-            // sibling export that could still keep the button busy.
-            setBusy(false);
+            // The Labs link export is the sibling that can still hold the
+            // button busy; without it this would simply be false.
+            setBusy(isSharingLinkRef.current);
         }
     }
 
-    return {send, busy};
+    return {send, shareLink, busy};
 }
 
 export default useBrewHandoff;

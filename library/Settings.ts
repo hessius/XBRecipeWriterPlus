@@ -268,6 +268,20 @@ export const DEFAULTS = {
      */
     beanconquerorHandoff: false,
     /**
+     * Offer the handoff link as a file instead of opening Beanconqueror.
+     *
+     * A debugging aid, and a temporary one: it exists so sample links can be
+     * handed to Beanconqueror's maintainer for a testing document, and it
+     * should leave again once they have them. The file carries exactly the URL
+     * the deep link would have carried, so a sample is evidence of the real
+     * encoding rather than a reconstruction of it.
+     *
+     * Deliberately does not mark the brew sent. Copying a link is not handing
+     * the brew over, and a record claiming Beanconqueror received it would be
+     * a lie the user cannot correct.
+     */
+    handoffLinkExport: false,
+    /**
      * Whether the LABS section is visible in settings.
      *
      * Off until somebody taps the version string on the about screen seven
@@ -366,6 +380,10 @@ export type SettingKey = keyof typeof DEFAULTS;
  * their recipes back, not for LABS. The cost of holding it out is that a new
  * phone needs seven taps again.
  *
+ * `beanconquerorHandoff` and `handoffLinkExport` are held out alongside it for
+ * the same reason: both are switches inside LABS, and carrying them into
+ * somebody else's phone would be unlocking the room by the back door.
+ *
  * `machineModelString` and `machineName` are held out because they are
  * readings, and a reading restored onto a phone that never took it is not
  * evidence any more. The whole reason they are stored is to be trustworthy
@@ -377,10 +395,10 @@ export type SettingKey = keyof typeof DEFAULTS;
  */
 export type BackupExcluded =
     "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "beanconquerorHandoff" |
-    "machineModelString" | "machineName" | "ratingPromptDismissed";
+    "handoffLinkExport" | "machineModelString" | "machineName" | "ratingPromptDismissed";
 export const NOT_IN_BACKUP: readonly SettingKey[] = [
     "machineDeviceId", "lastCardRead", "labsUnlocked", "beanconquerorHandoff",
-    "machineModelString", "machineName", "ratingPromptDismissed"
+    "handoffLinkExport", "machineModelString", "machineName", "ratingPromptDismissed"
 ];
 
 /**

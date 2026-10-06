@@ -33,7 +33,7 @@ export function useBrewRecordHandoff(
     const [namingBean, setNamingBean] = useState(false);
     const [ratingBeforeSend, setRatingBeforeSend] = useState(false);
 
-    const {send: sendHandoff, busy} = useBrewHandoff(() => opened === null
+    const {send: sendHandoff, shareLink, busy} = useBrewHandoff(() => opened === null
         ? null
         : {
             ...opened,
@@ -92,6 +92,21 @@ export function useBrewRecordHandoff(
         void sendNow();
     }
 
+    /**
+     * The Labs link export.
+     *
+     * Deliberately bypasses both gates `requestSend` applies. The rating
+     * prompt and the bean-name sheet exist to make a real handoff a good one;
+     * a diagnostic link should be whatever the record holds at the press, with
+     * nothing asked for first. The note draft is still committed, so what the
+     * user has typed and not yet blurred is in the file.
+     */
+    function shareLinkNow(): void {
+        if (opened === null) return;
+        commitNoteDraft();
+        void shareLink();
+    }
+
     return {
         busy,
         sentAt,
@@ -104,7 +119,8 @@ export function useBrewRecordHandoff(
         annotateBrew,
         sendNow,
         continueSend,
-        requestSend
+        requestSend,
+        shareLinkNow
     };
 }
 

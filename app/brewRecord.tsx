@@ -59,7 +59,7 @@ let sharedLookup: RecipeLookup | undefined;
 const JUDGEMENT_ACTION_GAP = "$4";
 
 type RecordAction = {
-    key: "handoff" | "export" | "compare" | "story";
+    key: "handoff" | "handoffLink" | "export" | "compare" | "story";
     label: string;
     busy: boolean;
     accessibilityLabel?: string;
@@ -195,6 +195,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     const [recordHeight, setRecordHeight] = useState(0);
 
     const [handoffEnabled] = useSetting("beanconquerorHandoff");
+    const [handoffLinkExport] = useSetting("handoffLinkExport");
     const [storyCardHidden, setStoryCardHidden] = useSetting("storyCardHidden");
     const {ratingNoteOpen} = useLiveBrew();
 
@@ -425,9 +426,22 @@ export default function BrewRecord({recipeLookup}: Props) {
         wide:  true,
         onPress: handoff.requestSend
     } : null;
+    // Labs only, and temporary: writes the link the action above would have
+    // opened to a file, so a sample can be handed to Beanconqueror's
+    // maintainer. It sits under the real action and inherits its outcome gate,
+    // so a brew nobody drank still cannot produce one.
+    const handoffLinkAction: RecordAction | null = showHandoff && handoffLinkExport ? {
+        key:                "handoffLink",
+        label:              "Share handoff link",
+        busy:               handoff.busy,
+        accessibilityLabel: "Share the Beanconqueror handoff link as a file",
+        wide:               true,
+        onPress:            handoff.shareLinkNow
+    } : null;
     const actionPairs: RecordActionPair[] = [
         [compareAction, null],
         [handoffAction, null],
+        [handoffLinkAction, null],
         [
             {
                 key:   "export",

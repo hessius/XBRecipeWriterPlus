@@ -96,6 +96,8 @@ export default function SettingsScreen({settings}: Props) {
     const [labsUnlocked, setLabsUnlocked] = useSetting("labsUnlocked", settings);
     const [beanconquerorHandoff, setBeanconquerorHandoff] =
         useSetting("beanconquerorHandoff", settings);
+    const [handoffLinkExport, setHandoffLinkExport] =
+        useSetting("handoffLinkExport", settings);
     const cloud = useCloudSession();
 
     async function signOutOfCloud() {
@@ -603,6 +605,10 @@ export default function SettingsScreen({settings}: Props) {
                         label="Send brews to Beanconqueror"
                         description="Needs a version of Beanconqueror that can read the link. Older ones will say they do not recognise it."
                         value={beanconquerorHandoff} onChange={setBeanconquerorHandoff}/>
+                    <SettingsToggleRow
+                        label="Share the handoff link as a file"
+                        description="Writes the link to a text file instead of opening Beanconqueror, for checking what gets sent. The brew is not marked as sent."
+                        value={handoffLinkExport} onChange={setHandoffLinkExport}/>
                     <SettingsActionRow label="Hide Labs"
                                        detail="Anything you switched on here stays on."
                                        onPress={() => setLabsUnlocked(false)}/>

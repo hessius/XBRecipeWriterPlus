@@ -5,6 +5,7 @@ import {notify} from "@/components/XbrwToast";
 import {backfillFromRecipe} from "@/library/brew/handoff/backfill";
 import {buildEnvelope, type HandoffEnvelope} from "@/library/brew/handoff/envelope";
 import {batchFits, encodeHandoffBatch} from "@/library/brew/handoff/encode";
+import {handoffBatchFilename, shareHandoffLink} from "@/library/brew/handoff/shareLink";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -33,6 +34,9 @@ export function useBrewBatchHandoff(
     store?: HandoffStore
 ) {
     const isSendingRef = useRef(false);
+    // Separate from the send guard so the two actions cannot clear each
+    // other's busy flag; `busy` is their union, as in useBrewExport.
+    const isSharingLinkRef = useRef(false);
     const [busy, setBusy] = useState(false);
     // Envelopes already built during this selection, keyed by brew id.
     //
@@ -100,6 +104,39 @@ export function useBrewBatchHandoff(
         builtRef.current = new Map();
     }
 
+    /**
+     * Writes the batch handoff URL to a file and offers it to the share sheet.
+     *
+     * A Labs debugging aid, for handing sample links to Beanconqueror's
+     * maintainer. Like the single-brew one it does not `markSent` and does not
+     * open Beanconqueror; the URL is exactly the one `send` would have opened.
+     */
+    async function shareLink(ids: string[]): Promise<boolean> {
+        if (isSharingLinkRef.current) return false;
+        isSharingLinkRef.current = true;
+        setBusy(true);
+        try {
+            const built = sendableEnvelopes(ids);
+            if (built.length === 0) {
+                notify({tone: "error", message: BATCH_HANDOFF_EMPTY});
+                return false;
+            }
+
+            let url: string;
+            try {
+                ({url} = encodeHandoffBatch(built.map(({envelope}) => envelope)));
+            } catch {
+                notify({tone: "error", message: BATCH_HANDOFF_TOO_LARGE});
+                return false;
+            }
+            await shareHandoffLink(url, handoffBatchFilename(built.length));
+            return true;
+        } finally {
+            isSharingLinkRef.current = false;
+            setBusy(isSendingRef.current);
+        }
+    }
+
     async function send(ids: string[]): Promise<number | null> {
         if (isSendingRef.current) return null;
         isSendingRef.current = true;
@@ -136,11 +173,11 @@ export function useBrewBatchHandoff(
             return sentAt;
         } finally {
             isSendingRef.current = false;
-            setBusy(false);
+            setBusy(isSharingLinkRef.current);
         }
     }
 
-    return {send, busy, fits, reset};
+    return {send, shareLink, busy, fits, reset};
 }
 
 export default useBrewBatchHandoff;

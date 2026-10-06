@@ -115,9 +115,11 @@ function SelectionActionRow({
     fits,
     busy,
     canSend,
+    canShareLink,
     comparable,
     onSelect,
     onSend,
+    onShareLink,
     onCompare,
     onDelete,
     onCancel
@@ -129,9 +131,12 @@ function SelectionActionRow({
     fits: boolean;
     busy: boolean;
     canSend: boolean;
+    /** Labs only: offer the handoff link as a file as well as a send. */
+    canShareLink: boolean;
     comparable: boolean;
     onSelect: () => void;
     onSend: () => void;
+    onShareLink: () => void;
     onCompare: () => void;
     onDelete: () => void;
     onCancel: () => void;
@@ -241,6 +246,28 @@ function SelectionActionRow({
                         : `${blocked} selected brews did not finish, so they cannot be sent.`}
                 </Text>
             )}
+            {/* Labs only, and temporary. Its own row rather than a fifth
+                button beside the others: at the bounded 1.4 font scale the top
+                row is already full, and a sample-link export is not worth
+                pushing CANCEL off a narrow screen for. */}
+            {canShareLink && (
+                <XStack justifyContent="flex-end">
+                    <Button
+                        accessibilityRole="button"
+                        accessibilityLabel="Share the Beanconqueror handoff link for the selected brews as a file"
+                        accessibilityState={{disabled: count === 0 || tooLarge || blocked > 0}}
+                        disabled={count === 0 || tooLarge || blocked > 0 || busy}
+                        opacity={count === 0 || tooLarge || blocked > 0 ? 0.5 : 1}
+                        chromeless
+                        size="$2"
+                        onPress={onShareLink}>
+                        <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.2}
+                                       color={palette.dim}>
+                            SHARE HANDOFF LINK
+                        </DotMatrixText>
+                    </Button>
+                </XStack>
+            )}
         </YStack>
     );
 }
@@ -306,6 +333,7 @@ export default function BrewHistory() {
     const {recipeUuid} = useLocalSearchParams<{recipeUuid?: string}>();
     const {brews, open, remove, refresh} = useBrewHistory();
     const [handoffEnabled] = useSetting("beanconquerorHandoff");
+    const [handoffLinkExport] = useSetting("handoffLinkExport");
     const handoff = useBrewBatchHandoff((id) => {
         const opened = open(id);
         return opened === null ? null : {record: opened.record, samples: opened.samples};
@@ -400,6 +428,17 @@ export default function BrewHistory() {
         handleSelectCancel();
     }
 
+    /**
+     * Labs only. Leaves the selection standing afterwards, unlike the send:
+     * somebody producing sample links is usually producing several, and the
+     * brews were not handed anywhere, so there is nothing to clear.
+     */
+    async function handleSelectionShareLink() {
+        if (selectedIds.length === 0 || !selectionFits || handoff.busy) return;
+        if (blockedCount > 0) return;
+        await handoff.shareLink(selectedIds);
+    }
+
     function handleSelectionCompare() {
         if (!comparable) return;
         // Exactly two. Quietly taking the first two out of three would answer a
@@ -485,9 +524,11 @@ export default function BrewHistory() {
                     fits={selectionFits}
                     busy={handoff.busy}
                     canSend={handoffEnabled}
+                    canShareLink={handoffEnabled && handoffLinkExport}
                     comparable={comparable}
                     onSelect={handleSelectStart}
                     onSend={() => void handleSelectionSend()}
+                    onShareLink={() => void handleSelectionShareLink()}
                     onCompare={handleSelectionCompare}
                     onDelete={() => setConfirmingBatchDelete(true)}
                     onCancel={handleSelectCancel}

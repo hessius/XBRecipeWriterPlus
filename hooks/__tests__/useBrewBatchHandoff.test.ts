@@ -12,18 +12,24 @@ import {notify} from "@/components/XbrwToast";
 import * as handoffEncode from "@/library/brew/handoff/encode";
 import type {HandoffBatch} from "@/library/brew/handoff/encode";
 import {brew, samples} from "@/library/brew/handoff/__tests__/fixtures";
+import {shareHandoffLink} from "@/library/brew/handoff/shareLink";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
+jest.mock("@/library/brew/handoff/shareLink", () => ({
+    ...jest.requireActual("@/library/brew/handoff/shareLink"),
+    shareHandoffLink: jest.fn(async () => undefined)
+}));
 jest.mock("@/library/RecipeDatabase", () => jest.fn());
 jest.mock("@/hooks/useBrewHistory", () => ({
     sharedBrewDatabase: () => ({markSent: jest.fn()})
 }));
 
 const notifyMock = notify as jest.MockedFunction<typeof notify>;
+const shareHandoffLinkMock = shareHandoffLink as jest.MockedFunction<typeof shareHandoffLink>;
 const RecipeDatabaseMock = RecipeDatabase as jest.MockedClass<typeof RecipeDatabase>;
 let openURL: jest.SpiedFunction<typeof Linking.openURL>;
 
@@ -64,6 +70,7 @@ describe("useBrewBatchHandoff", () => {
         openURL.mockReset();
         openURL.mockResolvedValue(undefined);
         notifyMock.mockClear();
+        shareHandoffLinkMock.mockClear();
     });
 
     afterEach(() => {
@@ -295,5 +302,98 @@ describe("useBrewBatchHandoff", () => {
         ]) {
             expect(message).not.toMatch(/[-–—]/);
         }
+    });
+
+    describe("the Labs link export", () => {
+        function twoBrews() {
+            return source({
+                a: {record: brew({id: "a", recipeName: "First"}), samples},
+                b: {record: brew({id: "b", recipeName: "Second"}), samples: []}
+            });
+        }
+
+        it("shares the same URL the send would have opened, named by count", async () => {
+            const {result} = await renderHook(() => useBrewBatchHandoff(twoBrews()));
+
+            await act(async () => {
+                await result.current.shareLink(["a", "b"]);
+            });
+            await act(async () => {
+                await result.current.send(["a", "b"]);
+            });
+
+            expect(shareHandoffLinkMock).toHaveBeenCalledTimes(1);
+            const [url, filename] = shareHandoffLinkMock.mock.calls[0];
+            expect(url).toMatch(/^beanconqueror:\/\/ADD_BREWS\?len=\d+&shareBrew0=/);
+            expect(url).toBe(openURL.mock.calls[0][0]);
+            expect(decode(url).brews).toHaveLength(2);
+            expect(filename).toMatch(/^handoff-batch-2-brews-\d{4}-\d{2}-\d{2}\.txt$/);
+        });
+
+        it("does not open Beanconqueror and marks nothing sent", async () => {
+            const markSent = jest.fn();
+            const {result} = await renderHook(() =>
+                useBrewBatchHandoff(twoBrews(), {markSent}));
+
+            await act(async () => {
+                await result.current.shareLink(["a", "b"]);
+            });
+
+            expect(openURL).not.toHaveBeenCalled();
+            expect(markSent).not.toHaveBeenCalled();
+            expect(result.current.busy).toBe(false);
+        });
+
+        it("names a single-brew batch in the singular", async () => {
+            const {result} = await renderHook(() => useBrewBatchHandoff(twoBrews()));
+
+            await act(async () => {
+                await result.current.shareLink(["a"]);
+            });
+
+            expect(shareHandoffLinkMock.mock.calls[0][1])
+                .toMatch(/^handoff-batch-1-brew-\d{4}-\d{2}-\d{2}\.txt$/);
+        });
+
+        it("counts what was actually built, not what was selected", async () => {
+            const {result} = await renderHook(() => useBrewBatchHandoff(twoBrews()));
+
+            await act(async () => {
+                await result.current.shareLink(["missing", "a"]);
+            });
+
+            expect(decode(shareHandoffLinkMock.mock.calls[0][0]).brews).toHaveLength(1);
+            expect(shareHandoffLinkMock.mock.calls[0][1])
+                .toMatch(/^handoff-batch-1-brew-/);
+        });
+
+        it("reports an entirely stale selection rather than sharing an empty file", async () => {
+            const {result} = await renderHook(() => useBrewBatchHandoff(twoBrews()));
+
+            await act(async () => {
+                await result.current.shareLink(["gone"]);
+            });
+
+            expect(shareHandoffLinkMock).not.toHaveBeenCalled();
+            expect(notifyMock).toHaveBeenCalledWith({
+                tone: "error", message: BATCH_HANDOFF_EMPTY
+            });
+        });
+
+        it("reports a batch too large to encode", async () => {
+            jest.spyOn(handoffEncode, "encodeHandoffBatch").mockImplementation(() => {
+                throw new Error("too large");
+            });
+            const {result} = await renderHook(() => useBrewBatchHandoff(twoBrews()));
+
+            await act(async () => {
+                await result.current.shareLink(["a", "b"]);
+            });
+
+            expect(shareHandoffLinkMock).not.toHaveBeenCalled();
+            expect(notifyMock).toHaveBeenCalledWith({
+                tone: "error", message: BATCH_HANDOFF_TOO_LARGE
+            });
+        });
     });
 });

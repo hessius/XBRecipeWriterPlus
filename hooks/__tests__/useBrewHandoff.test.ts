@@ -9,16 +9,22 @@ import {buildEnvelope, type HandoffEnvelope} from "@/library/brew/handoff/envelo
 import * as handoffEncode from "@/library/brew/handoff/encode";
 import {encodeHandoff} from "@/library/brew/handoff/encode";
 import {brew, samples} from "@/library/brew/handoff/__tests__/fixtures";
+import {shareHandoffLink} from "@/library/brew/handoff/shareLink";
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 
 jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
+jest.mock("@/library/brew/handoff/shareLink", () => ({
+    ...jest.requireActual("@/library/brew/handoff/shareLink"),
+    shareHandoffLink: jest.fn(async () => undefined)
+}));
 jest.mock("@/library/RecipeDatabase", () => jest.fn());
 jest.mock("@/hooks/useBrewHistory", () => ({
     sharedBrewDatabase: () => ({markSent: jest.fn()})
 }));
 
 const notifyMock = notify as jest.MockedFunction<typeof notify>;
+const shareHandoffLinkMock = shareHandoffLink as jest.MockedFunction<typeof shareHandoffLink>;
 const RecipeDatabaseMock = RecipeDatabase as jest.MockedClass<typeof RecipeDatabase>;
 let openURL: jest.SpiedFunction<typeof Linking.openURL>;
 
@@ -71,6 +77,7 @@ describe("useBrewHandoff", () => {
         openURL.mockReset();
         openURL.mockResolvedValue(undefined);
         notifyMock.mockClear();
+        shareHandoffLinkMock.mockClear();
     });
     afterEach(() => {
         jest.restoreAllMocks();
@@ -88,8 +95,7 @@ describe("useBrewHandoff", () => {
         ));
     });
 
-    it("records that the brew went over", async () => {
-        const markSent = jest.fn();
+    it("records that the brew went over", async () => {        const markSent = jest.fn();
         const record = brew({id: "b1"});
         const {result} = await renderHook(() =>
             useBrewHandoff(() => ({record, samples}), {markSent}));
@@ -298,5 +304,83 @@ describe("useBrewHandoff", () => {
         for (const message of [HANDOFF_OPEN_FAILED, HANDOFF_TOO_LARGE]) {
             expect(message).not.toMatch(/[-–—]/);
         }
+    });
+
+    describe("the Labs link export", () => {
+        it("shares the same URL the send would have opened, as a named file", async () => {
+            const markSent = jest.fn();
+            const {result} = await renderHook(() => useBrewHandoff(source, {markSent}));
+
+            await act(async () => {
+                await result.current.shareLink();
+            });
+            await act(async () => {
+                await result.current.send();
+            });
+
+            expect(shareHandoffLinkMock).toHaveBeenCalledTimes(1);
+            const [url, filename] = shareHandoffLinkMock.mock.calls[0];
+            expect(url).toMatch(/^beanconqueror:\/\/ADD_BREW\?len=\d+&shareBrew0=/);
+            // Byte for byte, not merely equivalent. `payload` pins gzip's
+            // mtime to 0 precisely so the same brew encodes to the same
+            // string, which is what makes a shared sample evidence of the
+            // real encoding rather than a reconstruction of it.
+            expect(url).toBe(openURL.mock.calls[0][0]);
+            expect(filename).toBe("handoff-gummy-worms-2026-09-19.txt");
+        });
+
+        it("does not open Beanconqueror and does not mark the brew sent", async () => {
+            const markSent = jest.fn();
+            const {result} = await renderHook(() => useBrewHandoff(source, {markSent}));
+
+            await act(async () => {
+                await result.current.shareLink();
+            });
+
+            expect(openURL).not.toHaveBeenCalled();
+            expect(markSent).not.toHaveBeenCalled();
+            expect(result.current.busy).toBe(false);
+        });
+
+        it("carries a bean name through, as the send does", async () => {
+            // A pod brew already knows its coffee and ignores the hint, so the
+            // hint path needs a brew that came from beans.
+            const record = brew({coffee: undefined});
+            const {result} = await renderHook(() =>
+                useBrewHandoff(() => ({record, samples})));
+
+            await act(async () => {
+                await result.current.shareLink("Finca La Esperanza");
+            });
+
+            expect(decode(shareHandoffLinkMock.mock.calls[0][0]).bean?.name)
+                .toBe("Finca La Esperanza");
+        });
+
+        it("reports a brew too large to encode rather than sharing an empty file", async () => {
+            jest.spyOn(handoffEncode, "encodeHandoff").mockImplementation(() => {
+                throw new Error("too large");
+            });
+            const {result} = await renderHook(() => useBrewHandoff(source));
+
+            await act(async () => {
+                await result.current.shareLink();
+            });
+
+            expect(shareHandoffLinkMock).not.toHaveBeenCalled();
+            expect(notifyMock).toHaveBeenCalledWith({
+                tone: "error", message: HANDOFF_TOO_LARGE
+            });
+        });
+
+        it("does nothing when there is no brew", async () => {
+            const {result} = await renderHook(() => useBrewHandoff(() => null));
+
+            await act(async () => {
+                await result.current.shareLink();
+            });
+
+            expect(shareHandoffLinkMock).not.toHaveBeenCalled();
+        });
     });
 });
