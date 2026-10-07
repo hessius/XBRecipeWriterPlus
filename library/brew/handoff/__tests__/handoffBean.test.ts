@@ -8,7 +8,7 @@ describe("handoffBean", () => {
         roastingDate: "2026-09-01",
         roast: "Medium",
         origin: "Kenya",
-        country: "Kenya",
+        country: "Ethiopia",
         region: "Nyeri",
         farm: "Sakami",
         farmer: "Gloria",
@@ -77,12 +77,20 @@ describe("handoffBean", () => {
         // A pod endpoint that answers with an empty string has not told us
         // anything, and a field sent empty looks to the receiving app like a
         // field somebody filled in with nothing.
-        expect(handoffBean({
+        const bean = handoffBean({
             name: "A coffee",
             region: "",
             farm: "   ",
             note: "\n\t"
-        })).toEqual({name: "A coffee"});
+        });
+
+        expect(bean).toEqual({name: "A coffee"});
+
+        // `toEqual` ignores a key whose value is undefined, and absence
+        // rather than presence is this module's whole contract.
+        expect(bean).not.toHaveProperty("region");
+        expect(bean).not.toHaveProperty("farm");
+        expect(bean).not.toHaveProperty("note");
     });
 
     it("falls back to country when a coffee's origin is blank", () => {
@@ -99,6 +107,29 @@ describe("handoffBean", () => {
             origin: "   ",
             country: "Colombia"
         }).origin).toBe("Colombia");
+    });
+
+    it("drops origin when both origin and country are blank", () => {
+        // Both blank is nothing said, not an empty origin.
+        expect(handoffBean({name: "A coffee", origin: "", country: "  "}))
+            .not.toHaveProperty("origin");
+    });
+
+    it("prefers a named origin over a different country", () => {
+        // The fallback is a fallback. Reversing the pair would pass every
+        // other test in this file, which is why this one exists.
+        expect(handoffBean({
+            name: "A coffee",
+            origin: "Kenya",
+            country: "Ethiopia"
+        }).origin).toBe("Kenya");
+    });
+
+    it("passes a value on exactly as it arrived", () => {
+        // Blank means nothing said, but a value that says something is not
+        // ours to tidy. Trimming would be a separate decision from this one.
+        expect(handoffBean({name: "A coffee", farm: " Sakami "}).farm)
+            .toBe(" Sakami ");
     });
 
     it("keeps a decaffeinated coffee's answer, including no", () => {
