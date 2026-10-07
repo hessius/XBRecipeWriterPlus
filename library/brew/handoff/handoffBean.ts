@@ -20,7 +20,9 @@
  *
  * `origin` falls back to `country` because Beanconqueror stores the contract's
  * `origin` as `country`, and a coffee that names one and not the other means
- * the same thing either way.
+ * the same thing either way. The fallback runs on a blank origin as well as a
+ * missing one, because an endpoint that answers with an empty string has not
+ * named an origin.
  */
 import type {PodCoffee} from "@/library/podCoffee";
 
@@ -45,12 +47,34 @@ export type HandoffBean = {
     imageUrl?: string;
 };
 
-/** Contributes the key only when there is something to say. */
+/**
+ * Contributes the key only when there is something to say.
+ *
+ * A blank string is nothing said. The endpoints behind `PodCoffee` answer an
+ * unknown field with an empty string about as often as they omit it, and a
+ * field that arrives empty looks to the receiving app like a field somebody
+ * filled in with nothing, which is a worse claim than silence.
+ *
+ * The check is on strings alone, deliberately. `decaffeinated: false` is an
+ * answer and must survive, and an elevation of zero reaches here as the string
+ * `"0"`, which is not blank.
+ */
 function whenSaid<K extends string, T>(
     key: K,
     value: T | undefined
 ): Partial<Record<K, T>> {
-    return value === undefined ? {} : ({[key]: value} as Partial<Record<K, T>>);
+    if (value === undefined) return {};
+    if (typeof value === "string" && value.trim() === "") return {};
+    return {[key]: value} as Partial<Record<K, T>>;
+}
+
+/** The first of these that says anything, if any of them do. */
+function firstSaid(
+    ...values: (string | undefined)[]
+): string | undefined {
+    return values.find(
+        value => value !== undefined && value.trim() !== ""
+    );
 }
 
 export function handoffBean(coffee: PodCoffee): HandoffBean {
@@ -58,7 +82,7 @@ export function handoffBean(coffee: PodCoffee): HandoffBean {
         name: coffee.name,
         ...whenSaid("roaster", coffee.roaster),
         ...whenSaid("roastingDate", coffee.roastingDate),
-        ...whenSaid("origin", coffee.origin ?? coffee.country),
+        ...whenSaid("origin", firstSaid(coffee.origin, coffee.country)),
         ...whenSaid("region", coffee.region),
         ...whenSaid("farm", coffee.farm),
         ...whenSaid("farmer", coffee.farmer),

@@ -73,6 +73,34 @@ describe("handoffBean", () => {
         expect(handoffBean({name: "A coffee"})).toEqual({name: "A coffee"});
     });
 
+    it("treats a blank field as nothing said", () => {
+        // A pod endpoint that answers with an empty string has not told us
+        // anything, and a field sent empty looks to the receiving app like a
+        // field somebody filled in with nothing.
+        expect(handoffBean({
+            name: "A coffee",
+            region: "",
+            farm: "   ",
+            note: "\n\t"
+        })).toEqual({name: "A coffee"});
+    });
+
+    it("falls back to country when a coffee's origin is blank", () => {
+        // `??` only falls through on null and undefined, so an empty origin
+        // used to win over a real country and the fallback never ran.
+        expect(handoffBean({
+            name: "A coffee",
+            origin: "",
+            country: "Colombia"
+        }).origin).toBe("Colombia");
+
+        expect(handoffBean({
+            name: "A coffee",
+            origin: "   ",
+            country: "Colombia"
+        }).origin).toBe("Colombia");
+    });
+
     it("keeps a decaffeinated coffee's answer, including no", () => {
         // `false` is an answer and must survive a presence check that would
         // treat it as absence.
