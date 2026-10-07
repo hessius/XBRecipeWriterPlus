@@ -109,6 +109,60 @@ describe("readDialAfterBrew", () => {
 });
 
 describe("dialNote", () => {
+    it("falls back to the recipe's own grind when no dial reading arrived", () => {
+        const figure = dialNote(record({
+            grinderUsed: true, pouringAt: 1, grindSize: 58, dialAfter: undefined
+        }));
+        expect(figure).toEqual({kind: "recipe", recipe: 58});
+    });
+
+    it("prefers the confirmed dial over the recipe when it has one", () => {
+        const figure = dialNote(record({
+            grinderUsed: true, pouringAt: 1, grindSize: 58, dialAfter: 62
+        }));
+        expect(figure).toEqual({kind: "dial", dial: 62, recipe: 58});
+    });
+
+    it("still says nothing when the grinder never ran", () => {
+        // The fallback is about a missing reading, not a missing grind. A brew
+        // that ground nothing has no grind to report whatever the recipe said.
+        expect(dialNote(record({
+            grinderUsed: undefined, pouringAt: 0, grindSize: 58, dialAfter: undefined
+        }))).toBeNull();
+    });
+
+    it("still says nothing when the recipe grind is not a real setting", () => {
+        expect(dialNote(record({
+            grinderUsed: true, pouringAt: 1, grindSize: undefined, dialAfter: undefined
+        }))).toBeNull();
+    });
+
+    it("still says nothing when the fallback guard rejects an out-of-band grind", () => {
+        jest.isolateModules(() => {
+            const grindBand = jest.fn()
+                .mockReturnValueOnce({label: "Mock", longLabel: "mock", onCard: true})
+                .mockReturnValueOnce(undefined);
+            jest.doMock("@/library/grindBands", () => ({
+                grindBand,
+                grindValueMeansOff: () => false
+            }));
+            const {dialNote: isolatedDialNote} =
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                require("@/library/brew/dialAfterBrew") as typeof import("@/library/brew/dialAfterBrew");
+            expect(isolatedDialNote(record({
+                grinderUsed: true, pouringAt: 1, grindSize: 99, dialAfter: undefined
+            }))).toBeNull();
+            expect(grindBand).toHaveBeenCalledTimes(2);
+        });
+        jest.dontMock("@/library/grindBands");
+    });
+
+    it("prefers the off fact over the recipe fallback", () => {
+        expect(dialNote(record({
+            grinderUsed: false, pouringAt: 1, grindSize: 58, dialAfter: undefined
+        }))).toEqual({kind: "off"});
+    });
+
     it("reports the confirmed dial as the grind figure", () => {
         expect(dialNote(record({grinderUsed: true, grindSize: 47, dialAfter: 47})))
             .toEqual({kind: "dial", dial: 47, recipe: null});

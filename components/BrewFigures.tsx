@@ -223,9 +223,11 @@ export default function BrewFigures(
         ? undefined
         : grind.kind === "off"
             ? "Grind, the grinder was off"
-            : `Grind, dial ${grind.dial}${
-                grind.recipe === null ? "" : `, recipe ${grind.recipe}`
-            }`;
+            : grind.kind === "recipe"
+                ? `Grind, recipe ${grind.recipe}`
+                : `Grind, dial ${grind.dial}${
+                    grind.recipe === null ? "" : `, recipe ${grind.recipe}`
+                }`;
 
     return (
         <YStack testID="brew-figures" gap={BREW_FIGURE_ROW_GAP}>
@@ -307,14 +309,18 @@ export default function BrewFigures(
                                     // overflowing a 102.33 pt slot on a
                                     // 393 pt screen.
                                     label="GRIND"
-                                    value={grind.kind === "off" ? "OFF" : String(grind.dial)}
+                                    value={grind.kind === "off"
+                                        ? "OFF"
+                                        : String(grind.kind === "recipe"
+                                            ? grind.recipe
+                                            : grind.dial)}
                                     color={palette.text}
                                     fontSize={figureText.detailValueSize}
                                     badgeGap={badgeGeometry.gap}
                                     labelSize={figureText.labelSize}
                                     labelTracking={figureText.labelTracking}
                                     valueTracking={figureText.valueTracking}
-                                    badge={grind.kind === "off" || grind.recipe === null
+                                    badge={grind.kind !== "dial" || grind.recipe === null
                                         ? undefined
                                         : (
                                             <FigureBadge testID="figures-grind-recipe"
