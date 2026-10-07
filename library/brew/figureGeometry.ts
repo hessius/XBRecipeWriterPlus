@@ -79,9 +79,11 @@ export function brewFigureBadgeWidth(
  *
  * Four columns hold at the default size and up to here. Past it the only
  * string that cannot follow is the `RECIPE nn` badge, which needs about
- * 99.8 pt at the 1.4 accessibility cap against the 71.7 pt a quarter of the
- * row would give it. Nothing is truncated and nothing is abbreviated; the row
- * simply spends its width on three columns instead of four.
+ * 97.16 pt at the 1.4 accessibility cap against the 74.32 pt an equal
+ * quarter of the corrected narrow row would give it. With the weighted shares
+ * below, GRIND gets 92.9 pt, which still cannot hold the badge at the cap.
+ * Nothing is truncated and nothing is abbreviated; the row simply spends its
+ * width on three columns instead of four.
  *
  * Exact, and here rather than inline at the call site, so the fallback is a
  * documented threshold both the layout and its test read from one place.
@@ -94,6 +96,14 @@ export const BREW_FIGURE_FOUR_COLUMN_MAX_SCALE = 1.2;
  */
 export const BREW_FIGURE_DRAWDOWN_FLEX = 1.4;
 
+/**
+ * GRIND carries the longest quiet-line text in the row (`RECIPE nn`), while
+ * DELAY's value is the shortest (`+N`), so DELAY yields share to GRIND without
+ * changing the DRAWDOWN slot or the row's total flex.
+ */
+export const BREW_FIGURE_GRIND_FLEX = 1.25;
+export const BREW_FIGURE_DELAY_FLEX = 0.75;
+
 /** Whether the detail row can afford four columns at this text scale. */
 export function brewFigureUsesFourColumns(fontScale: number): boolean {
     return fontScale <= BREW_FIGURE_FOUR_COLUMN_MAX_SCALE;
@@ -102,7 +112,12 @@ export function brewFigureUsesFourColumns(fontScale: number): boolean {
 /** The flex shares the detail row's columns take, left to right. */
 export function brewFigureColumnFlex(fontScale: number): number[] {
     return brewFigureUsesFourColumns(fontScale)
-        ? [1, 1, BREW_FIGURE_DRAWDOWN_FLEX, 1]
+        ? [
+            BREW_FIGURE_GRIND_FLEX,
+            BREW_FIGURE_DELAY_FLEX,
+            BREW_FIGURE_DRAWDOWN_FLEX,
+            1
+        ]
         : [1, 1, 1];
 }
 
@@ -120,7 +135,8 @@ export function brewFigureColumnWidths(
     scale = 1
 ): number[] {
     const flex = brewFigureColumnFlex(fontScale);
-    const free = contentWidth - BREW_FIGURE_COLUMN_GAP * scale * (flex.length - 1);
+    const geometry = brewFigureTextGeometry(scale);
+    const free = Math.max(0, contentWidth - geometry.columnGap * (flex.length - 1));
     const total = flex.reduce((sum, share) => sum + share, 0);
     return flex.map((share) => (free * share) / total);
 }
