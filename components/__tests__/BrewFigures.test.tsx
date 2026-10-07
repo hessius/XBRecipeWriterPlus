@@ -1,6 +1,6 @@
 import React from "react";
 import {screen} from "@testing-library/react-native";
-import {PixelRatio} from "react-native";
+import {Dimensions, PixelRatio} from "react-native";
 
 import BrewFigures, {detailRowMinHeight, flowRowMinHeight} from "@/components/BrewFigures";
 import {FLOW_SPARKLINE_HEIGHT} from "@/components/FlowSparkline";
@@ -30,8 +30,18 @@ jest.mock("@/components/FlowSparkline", () => {
 });
 
 const TEST_ACCENT = accents.coffee[1];
+const DEFAULT_WINDOW = {fontScale: 1, height: 852, scale: 3, width: 393};
+
+function mockWindowFontScale(fontScale: number): void {
+    const window = {...DEFAULT_WINDOW, fontScale};
+    Dimensions.set({screen: window, window});
+}
 
 describe("BrewFigures", () => {
+    beforeEach(() => {
+        mockWindowFontScale(1);
+    });
+
     it("shows water, cup and time", async () => {
         const {getByText} = await renderWithProviders(
             <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT} />
@@ -255,9 +265,12 @@ describe("BrewFigures", () => {
         expect(screen.getByTestId("figures-rate")).toBeTruthy();
         expect(screen.getByText("RATE G/S")).toBeTruthy();
         expect(screen.getByText("2.0")).toBeTruthy();
-        expect(screen.getAllByLabelText(
+        expect(screen.getByLabelText(
             "Drawdown, 40 seconds, average 2.0 grams per second"
-        )).toHaveLength(2);
+        )).toBeTruthy();
+        expect(screen.getByLabelText(
+            "Average rate, 2.0 grams per second"
+        )).toBeTruthy();
     });
 
     it("leaves the drawdown badge out when there is no rate", async () => {
@@ -333,9 +346,11 @@ describe("BrewFigures", () => {
                 expect(screen.queryByTestId("figures-grind-recipe")).toBeNull();
             });
 
-        it("falls back to three columns above the threshold", async () => {
+        it("falls back to three columns above the OS font scale threshold", async () => {
+            mockWindowFontScale(DOTO_MAX_FONT_SCALE);
+
             await detail({
-                drawdownRate: 1.04, textScale: DOTO_MAX_FONT_SCALE,
+                drawdownRate: 1.04,
                 grind: {kind: "dial", dial: 62, recipe: 58}
             });
             // The rate rejoins drawdown as its quiet line, which is the layout
@@ -344,10 +359,23 @@ describe("BrewFigures", () => {
             expect(screen.getByTestId("figures-drawdown-rate")).toBeTruthy();
         });
 
+        it("keeps four columns for a shrunken story card at default OS font scale",
+            async () => {
+                mockWindowFontScale(1);
+
+                await detail({
+                    drawdownRate: 1.04, textScale: 0.5,
+                    grind: {kind: "dial", dial: 62, recipe: 58}
+                });
+                expect(screen.getByTestId("figures-rate")).toBeTruthy();
+                expect(screen.getByText("RATE")).toBeTruthy();
+            });
+
         it("still says nothing about a rate nobody could measure", async () => {
             await detail({
                 drawdownRate: null, grind: {kind: "dial", dial: 62, recipe: 58}
             });
+            expect(screen.getByTestId("figures-grind")).toBeTruthy();
             expect(screen.queryByTestId("figures-rate")).toBeNull();
             expect(screen.queryByTestId("figures-drawdown-rate")).toBeNull();
         });
@@ -364,6 +392,7 @@ describe("BrewFigures", () => {
 
         it("draws a confirmed dial without the outline", async () => {
             await detail({grind: {kind: "dial", dial: 62, recipe: 58}});
+            expect(screen.getByTestId("figures-grind")).toBeTruthy();
             expect(screen.queryByTestId("figures-grind-outline")).toBeNull();
         });
     });

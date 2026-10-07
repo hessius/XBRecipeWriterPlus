@@ -1,4 +1,5 @@
 import React from "react";
+import {useWindowDimensions} from "react-native";
 import {XStack, YStack} from "tamagui";
 
 import DotMatrixText, {drawnFontSize} from "@/components/DotMatrixText";
@@ -223,6 +224,7 @@ export default function BrewFigures(
         drawdownRate = null, delay = null, grind = null, textScale = 1
     }: Props
 ) {
+    const {fontScale = 1} = useWindowDimensions();
     const figureText = brewFigureTextGeometry(textScale);
     const badgeGeometry = brewFigureBadgeGeometry(textScale);
     const badge = bypass === undefined || bypass <= 0 ? undefined : (
@@ -252,6 +254,9 @@ export default function BrewFigures(
                 ? ""
                 : `, average ${drawdownRateText} grams per second`
         }`;
+    const rateAccessibility = drawdownRateText === null
+        ? undefined
+        : `Average rate, ${drawdownRateText} grams per second`;
     const delayAccessibility = delay === null ? undefined : `Delay, ${delay} seconds`;
     const grindAccessibility = grind === null
         ? undefined
@@ -262,12 +267,11 @@ export default function BrewFigures(
                 : `Grind, dial ${grind.dial}${
                     grind.recipe === null ? "" : `, recipe ${grind.recipe}`
                 }`;
-    // Four columns normally, three once the text is large enough that the
-    // recipe badge can no longer fit its weighted GRIND column. The threshold
-    // and the shares both live in `figureGeometry`, so what is drawn and what
-    // is measured cannot drift apart.
-    const fourColumns = brewFigureUsesFourColumns(textScale);
-    const columnFlex = brewFigureColumnFlex(textScale);
+    // `fontScale` is the user's OS text size; `textScale` is only the story
+    // card's width shrink. The detail row needs both and must not conflate
+    // them, because story cards can be shrunken while OS text is enlarged.
+    const fourColumns = brewFigureUsesFourColumns(fontScale);
+    const columnFlex = brewFigureColumnFlex(fontScale);
     const grindValue = grind === null
         ? ""
         : grind.kind === "off"
@@ -451,7 +455,7 @@ export default function BrewFigures(
                                             G/S
                                         </DotMatrixText>
                                     ) : undefined}
-                                    accessibilityLabel={drawdownAccessibility}
+                                    accessibilityLabel={rateAccessibility}
                                 />
                             )}
                         </XStack>

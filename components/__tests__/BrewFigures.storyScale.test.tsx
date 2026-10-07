@@ -2,6 +2,7 @@ import React from "react";
 import {
     StyleSheet,
     Text,
+    Dimensions,
     type StyleProp,
     type TextStyle,
     type ViewStyle
@@ -24,6 +25,7 @@ import {renderWithProviders} from "@/test-utils/render";
 
 const MockText = Text;
 type MockTextStyle = TextStyle & {minFontSize?: number};
+const mockWindow = {fontScale: 1, height: 852, scale: 3, width: 393};
 
 jest.mock("@/components/DotMatrixText", () => ({
     __esModule: true,
@@ -60,6 +62,10 @@ function viewStyleOf(testID: string): ViewStyle {
 }
 
 describe("BrewFigures story scaling", () => {
+    beforeEach(() => {
+        Dimensions.set({screen: mockWindow, window: mockWindow});
+    });
+
     it("passes the story text scale to both value and label text", async () => {
         await renderWithProviders(
             <BrewFigures water={240} cup={200} seconds={196}
