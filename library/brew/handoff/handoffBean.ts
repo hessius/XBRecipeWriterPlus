@@ -45,8 +45,8 @@ export type HandoffBean = {
     imageUrl?: string;
 };
 
-/** Present only when there is something to say. */
-function said<K extends string, T>(
+/** Contributes the key only when there is something to say. */
+function whenSaid<K extends string, T>(
     key: K,
     value: T | undefined
 ): Partial<Record<K, T>> {
@@ -56,26 +56,26 @@ function said<K extends string, T>(
 export function handoffBean(coffee: PodCoffee): HandoffBean {
     return {
         name: coffee.name,
-        ...said("roaster", coffee.roaster),
-        ...said("roastingDate", coffee.roastingDate),
-        ...said("origin", coffee.origin ?? coffee.country),
-        ...said("region", coffee.region),
-        ...said("farm", coffee.farm),
-        ...said("farmer", coffee.farmer),
-        ...said(
+        ...whenSaid("roaster", coffee.roaster),
+        ...whenSaid("roastingDate", coffee.roastingDate),
+        ...whenSaid("origin", coffee.origin ?? coffee.country),
+        ...whenSaid("region", coffee.region),
+        ...whenSaid("farm", coffee.farm),
+        ...whenSaid("farmer", coffee.farmer),
+        ...whenSaid(
             "elevation",
             typeof coffee.elevation === "number" &&
                 Number.isFinite(coffee.elevation)
                 ? String(coffee.elevation)
                 : undefined
         ),
-        ...said("process", coffee.processing),
-        ...said("variety", coffee.variety),
-        ...said("aromatics", coffee.aromatics),
-        ...said("note", coffee.note),
-        ...said("beanMix", coffee.beanMix),
-        ...said("decaffeinated", coffee.decaffeinated),
-        ...said("imageUrl", coffee.imageUrl)
+        ...whenSaid("process", coffee.processing),
+        ...whenSaid("variety", coffee.variety),
+        ...whenSaid("aromatics", coffee.aromatics),
+        ...whenSaid("note", coffee.note),
+        ...whenSaid("beanMix", coffee.beanMix),
+        ...whenSaid("decaffeinated", coffee.decaffeinated),
+        ...whenSaid("imageUrl", coffee.imageUrl)
     };
 }
 
