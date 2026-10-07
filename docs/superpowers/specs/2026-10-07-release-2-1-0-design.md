@@ -12,7 +12,7 @@ the measurement is written down here as Appendix A rather than guessed at.
 | 1 | Close out PR #191 | 4 review findings | XS | ready |
 | 2 | Papercuts | a, b, g, i, GRIND defect | S | ready |
 | 3 | Scroll affordance | j | S | ready |
-| 4 | Beanconqueror GA | k | XS | ready, gated on their release |
+| 4 | Beanconqueror GA | k | XS | last, gated on their release |
 | 5 | Drawer reveal | c1, c2 | M | ready |
 | 6 | Quick edits | d | M/L | ready |
 | 7 | Hardware spike | e, h research | XS | needs the machine |
@@ -23,9 +23,10 @@ the measurement is written down here as Appendix A rather than guessed at.
 Order is 1, 2, 5, 6, with 3 slotting in anywhere and 7 pulled forward the
 moment the machine is reachable, because 7 decides whether 8 and 9 exist at all.
 
-Package 4 sits outside that order. It is ready at any time but must not merge
-before Beanconqueror's own release, for the reason in its section: it is a
-one-way door tied to somebody else's schedule.
+**Package 4 goes last**, after everything else has landed. It must not merge
+before Beanconqueror's own release, for the reason in its section, and holding
+an open PR across five merges invites a rebase for no gain. Build it when their
+release is certain.
 
 Package 10 ships as a GitHub issue carrying the agreed shape and the four open
 protocol questions. The reasoning is in its section.
@@ -209,10 +210,12 @@ Deleting the key removes it from `DEFAULTS`, `BackupExcluded` and
 `NOT_IN_BACKUP` together, and needs no `settingsSnapshot()` change, because the
 snapshot's type derives from the key set.
 
-**This package must not merge before Beanconqueror's release is out.** It is a
-one-way door: if we ship first, every user gets a handoff URL their app does not
-recognise and no setting with which to stop it. Ordering is the whole
-mitigation.
+**This package goes last and must not merge before Beanconqueror's release is
+out.** It is a one-way door: if we ship first, every user gets a handoff URL
+their app does not recognise and no setting with which to stop it. Ordering is
+the whole mitigation, so do not start it early and hold the PR open either; five
+merges landing underneath it would mean rebasing a branch that gained nothing by
+existing.
 
 ## Package 5 — the drawer reveal
 
