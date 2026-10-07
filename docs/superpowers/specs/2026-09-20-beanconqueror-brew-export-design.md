@@ -465,7 +465,7 @@ A pod endpoint carries no `roaster` and no roast date, so for a pod those stay
 empty rather than being invented. They are in the block all the same, because
 a coffee can also reach `PodCoffee` from a BrewMind link, which states them
 outright. The same goes for the finer origin fields #159 added: `region`,
-`farm`, `farmer` and `elevation` are sent when something knew them.
+`farm`, `farmer` and `elevation` are sent when something knows them.
 
 The block is BC's vocabulary, not ours, and `library/brew/handoff/handoffBean.ts`
 is the one place that translates. That module exists because the two are nearly
