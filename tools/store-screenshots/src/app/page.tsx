@@ -65,7 +65,19 @@ const ACCENT = {
 
 /* ------------------------------------------------------------------- images */
 
-const SHOTS = ["home", "import", "stages", "read", "hero", "brew", "history"] as const;
+const SHOTS = [
+    "home",
+    "stages",
+    "read",
+    "hero",
+    "recipe",
+    "brew",
+    "history",
+    "historylist",
+    "compare",
+    "hub",
+    "shelves"
+] as const;
 type Shot = (typeof SHOTS)[number];
 
 const shot = (name: Shot) => `/screenshots/en/${name}.png`;
@@ -323,9 +335,13 @@ const frame: React.CSSProperties = {
  *
  * Three phones rather than one, because the app is no longer one thing. The
  * order left to right is the arc of the whole product -- read a card, rewrite
- * it, brew it -- so the slide carries the "come for the cards, stay for the
- * brews" story without the headline having to say two things at once. The
- * headline still sells the cards alone: that is what people arrive looking for.
+ * it, brew it.
+ *
+ * The headline used to be "Rewrite the card that came with your coffee", which
+ * promised the cards alone and was true when the cards were all there was. It
+ * is now the smallest thing in here, and a first slide that sells it is selling
+ * the 1.x app. This line is the store subtitle word for word, so the two
+ * loudest pieces of type on the product page say one thing rather than two.
  */
 const HERO_FAN: {name: Shot; alt: string; left: string; scale: number; rotate: number; z: number; opacity: number}[] = [
     {name: "home", alt: "Recipe library", left: "21%", scale: 0.88, rotate: -9, z: 1, opacity: 0.62},
@@ -347,11 +363,9 @@ const slideHero: SlideDef = {
                     eyebrow="XBRW++"
                     headline={
                         <>
-                            Rewrite the card
+                            Your xBloom,
                             <br />
-                            that came with
-                            <br />
-                            <span style={{color: C.brand}}>your</span> coffee.
+                            <span style={{color: C.brand}}>unleashed</span>.
                         </>
                     }
                 />
@@ -377,7 +391,7 @@ const slideHero: SlideDef = {
 };
 
 /**
- * 2 - Library. What the app becomes once you have used it for a month.
+ * 6 - Library. What the app becomes once you have used it for a month.
  *
  * The wall of tinted cards behind the phone is the point of the slide: the
  * library outgrows the cards it started from, and a single centred phone on an
@@ -466,7 +480,7 @@ const slideLibrary: SlideDef = {
 };
 
 /**
- * 3 - Brew. The feature that turned a card writer into an app you open daily.
+ * 2 - Brew. The feature that turned a card writer into an app you open daily.
  *
  * The rising dotted trace behind the phone is the brew graph pulled out of the
  * screen and drawn at slide scale, so the idea survives being seen at thumbnail
@@ -553,105 +567,258 @@ const slideBrew: SlideDef = {
 };
 
 /**
- * 5 - Import. The four-step card flow, then the phone.
+ * 3 - Beyond the card. The slide that argues the app is worth having.
  *
- * The steps run horizontally rather than down a column so the phone can keep
- * its full width: the interesting half of this capture is the middle band, and
- * cropping horizontally to make room for a text column was eating into it. The
- * phone bleeds off the bottom instead, which costs only the button rail.
+ * Three chips rather than prose, because the claim is only convincing when it
+ * is specific: a card byte holds a whole number, has nowhere to put bypass, and
+ * runs out of room for stages. Each chip is a thing the card format genuinely
+ * cannot represent and the Bluetooth path genuinely can, so the slide is a list
+ * of facts rather than an adjective.
+ *
+ * The chips sit over a capture that proves them from the inside: the recipe on
+ * screen is named "No Stage Fright" and reads STAGES 17, RATIO 15.5, with the
+ * app's own warning that a card holds whole ratios only. A chip drawn over a
+ * screenshot that contradicts it is the one failure this set has already made
+ * once, so the capture is chosen to carry the argument rather than sit near it.
+ *
+ * The headline names the official app, which nothing else in the listing does.
+ * One part of that is measured rather than assumed: every one of the 3,012
+ * live recipes in xBloom's own community catalogue stops at nine pours, and
+ * only two reach even that, so the stage count genuinely clears both bars.
+ * The other two chips do not, and are not meant to -- they are examples of
+ * what a card cannot hold, which is the first half of the headline. Bypass in
+ * particular is a field in xBloom's own share-link format
+ * (`isEnableBypassWater`, see library/shareLink.ts) and a half ratio brews
+ * there too, so neither is evidence against the official app. Read as a list
+ * of comparisons the row would overclaim; read as the recipe on screen, which
+ * is what the capture underneath makes it, it does not. That reading is the
+ * owner's call and is recorded in docs/store-listing.md.
  */
-const IMPORT_STEPS = ["Paste a link", "Write the card", "Tap it", "Brew it"];
+const BEYOND_CHIPS = ["1:15.5", "Bypass", "17 stages"];
 
-const slideImport: SlideDef = {
-    id: "import",
+const slideBeyond: SlideDef = {
+    id: "beyond",
     component: ({cW, cH}) => (
         <div style={frame}>
-            <Glow cW={cW} colour={ACCENT.sky} x="78%" y="18%" size={1.2} opacity={0.28} />
-            <Glow cW={cW} colour={C.brand} x="5%" y="80%" size={1.0} opacity={0.26} />
+            <Glow cW={cW} colour={ACCENT.blossom} x="50%" y="32%" size={1.3} opacity={0.3} />
+            <Glow cW={cW} colour={C.brand} x="12%" y="86%" size={1.0} opacity={0.24} />
             <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
             <Caption
                 cW={cW}
-                eyebrow="Import"
-                eyebrowColour={ACCENT.sky}
+                eyebrow="Bluetooth"
+                eyebrowColour={ACCENT.blossom}
+                scale={0.78}
                 headline={
                     <>
-                        Link in.
+                        Brew what neither a card
                         <br />
-                        <span style={{color: ACCENT.sky}}>Coffee out.</span>
+                        <span style={{color: ACCENT.blossom}}>
+                            nor the official app can
+                        </span>
+                        .
                     </>
                 }
             />
             <div
                 style={{
                     position: "absolute",
-                    top: cH * 0.205,
-                    left: cW * 0.075,
-                    right: cW * 0.075,
-                    zIndex: 6,
+                    top: cH * 0.272,
+                    left: 0,
+                    width: cW,
                     display: "flex",
-                    alignItems: "flex-start"
+                    justifyContent: "center",
+                    gap: cW * 0.03,
+                    zIndex: 5
                 }}>
-                {IMPORT_STEPS.map((step, i) => {
-                    const last = i === IMPORT_STEPS.length - 1;
-                    return (
-                        <div
-                            key={step}
-                            style={{
-                                flex: 1,
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                gap: cW * 0.022
-                            }}>
-                            <div
-                                style={{
-                                    width: cW * 0.066,
-                                    height: cW * 0.066,
-                                    borderRadius: cW * 0.017,
-                                    background: last ? ACCENT.sky : "transparent",
-                                    border: `${cW * 0.0038}px solid ${ACCENT.sky}`,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontFamily: "var(--font-mono)",
-                                    fontWeight: 700,
-                                    fontSize: cW * 0.03,
-                                    color: last ? C.ink : ACCENT.sky
-                                }}>
-                                {i + 1}
-                            </div>
-                            <div
-                                style={{
-                                    fontFamily: "var(--font-inter)",
-                                    fontWeight: 700,
-                                    fontSize: cW * 0.026,
-                                    letterSpacing: `-${cW * 0.0004}px`,
-                                    color: last ? C.text : C.dim,
-                                    textAlign: "center",
-                                    whiteSpace: "nowrap"
-                                }}>
-                                {step}
-                            </div>
-                        </div>
-                    );
-                })}
+                {BEYOND_CHIPS.map((chip) => (
+                    <div
+                        key={chip}
+                        style={{
+                            fontFamily: "var(--font-doto)",
+                            fontWeight: 800,
+                            fontSize: cW * 0.044,
+                            lineHeight: 1,
+                            textTransform: "uppercase",
+                            whiteSpace: "nowrap",
+                            color: ACCENT.blossom,
+                            border: `${cW * 0.0035}px solid ${ACCENT.blossom}`,
+                            borderRadius: cW * 0.028,
+                            padding: `${cW * 0.019}px ${cW * 0.032}px ${cW * 0.014}px`,
+                            background: "rgba(0,0,0,0.4)"
+                        }}>
+                        {chip}
+                    </div>
+                ))}
             </div>
             <Phone
-                src={img(shot("import"))}
-                alt="Import sheet"
+                src={img(shot("recipe"))}
+                alt="Recipe editor"
                 style={{
                     position: "absolute",
-                    top: cH * 0.295,
-                    width: "94%",
+                    bottom: 0,
+                    width: "76%",
                     left: "50%",
-                    transform: "translateX(-50%)"
+                    transform: "translateX(-50%) translateY(12%)"
                 }}
             />
         </div>
     )
 };
 
-/** 4 - Editor. Two phones layered, to say "there is a lot in here". */
+/**
+ * 4 - Compare. Two traces, because one trace is just slide 2 again.
+ *
+ * The second trace is drawn shorter and dimmer rather than in a mirrored
+ * position, so the pair reads as "the same brew, done differently" instead of
+ * two unrelated graphs sharing a canvas. That is the whole proposition of the
+ * compare screen, and it has to survive at thumbnail size.
+ */
+const slideDial: SlideDef = {
+    id: "dial",
+    component: ({cW, cH}) => (
+        <div style={frame}>
+            <Glow cW={cW} colour={ACCENT.sky} x="68%" y="34%" size={1.4} opacity={0.3} />
+            <Glow cW={cW} colour={ACCENT.peach} x="10%" y="20%" size={0.9} opacity={0.16} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
+            <div style={{position: "absolute", left: 0, top: cH * 0.185, width: cW, height: cH * 0.36}}>
+                <TraceMotif cW={cW} cH={cH * 0.36} colour={ACCENT.sky} />
+            </div>
+            <div
+                style={{
+                    position: "absolute",
+                    left: 0,
+                    top: cH * 0.185,
+                    width: cW,
+                    height: cH * 0.36,
+                    // Only the top 60% of this box clears the phone, so the two
+                    // traces have to diverge *there*. Scaling vertically either
+                    // buries the second one behind the phone or stacks it a few
+                    // pixels off the first, which reads as a drop shadow. A
+                    // horizontal lag separates them in the visible band and
+                    // happens to mean something: the same climb, later.
+                    transform: `translateX(${cW * 0.13}px) scaleY(0.9)`,
+                    transformOrigin: "top"
+                }}>
+                <TraceMotif cW={cW} cH={cH * 0.36} colour={ACCENT.peach} opacity={0.8} />
+            </div>
+            <Caption
+                cW={cW}
+                eyebrow="Compare"
+                eyebrowColour={ACCENT.sky}
+                scale={0.88}
+                headline={
+                    <>
+                        Why was that one
+                        <br />
+                        <span style={{color: ACCENT.sky}}>better</span>?
+                    </>
+                }
+            />
+            <Phone
+                src={img(shot("compare"))}
+                alt="Two brews compared"
+                style={{
+                    position: "absolute",
+                    bottom: 0,
+                    width: "74%",
+                    left: "50%",
+                    transform: "translateX(-50%) translateY(12%) rotate(3deg)"
+                }}
+            />
+        </div>
+    )
+};
+
+/**
+ * 8 - Community catalogue. Somebody else has already done the work.
+ *
+ * Columns of bars rather than the card wall used on the library slide: that
+ * wall says "a lot of cards", and this needs to say "a very long list". Reusing
+ * it would have made the two slides read as the same idea twice, which is the
+ * one thing a listing cannot afford when it has ten slides to fill.
+ */
+function CatalogueColumns({cW, cH, colour}: {cW: number; cH: number; colour: string}) {
+    const cols = 5;
+    const rows = 30;
+    const barH = cH * 0.0125;
+    const gap = cH * 0.0115;
+    return (
+        <div
+            style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                justifyContent: "center",
+                gap: cW * 0.028,
+                transform: "rotate(-6deg) scale(1.3)",
+                pointerEvents: "none"
+            }}>
+            {Array.from({length: cols}).map((_, c) => (
+                <div
+                    key={c}
+                    style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap,
+                        marginTop: c % 2 ? cH * 0.035 : 0
+                    }}>
+                    {Array.from({length: rows}).map((_, r) => (
+                        <div
+                            key={r}
+                            style={{
+                                // Varied widths, because a column of identical
+                                // bars is a loading skeleton and a column of
+                                // ragged ones is a list of names.
+                                width: cW * (0.1 + ((r * 5 + c * 3) % 7) * 0.013),
+                                height: barH,
+                                borderRadius: barH / 2,
+                                background: colour,
+                                opacity: 0.06 + ((r * 7 + c * 3) % 5) * 0.022
+                            }}
+                        />
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+const slideHub: SlideDef = {
+    id: "hub",
+    component: ({cW, cH}) => (
+        <div style={frame}>
+            <Glow cW={cW} colour={ACCENT.mint} x="50%" y="66%" size={1.5} opacity={0.3} />
+            <CatalogueColumns cW={cW} cH={cH} colour={ACCENT.mint} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
+            <Caption
+                cW={cW}
+                eyebrow="Community"
+                eyebrowColour={ACCENT.mint}
+                scale={0.88}
+                headline={
+                    <>
+                        Someone already
+                        <br />
+                        <span style={{color: ACCENT.mint}}>dialled it in</span>.
+                    </>
+                }
+            />
+            <Phone
+                src={img(shot("hub"))}
+                alt="The community catalogue"
+                style={{
+                    position: "absolute",
+                    bottom: 0,
+                    width: "74%",
+                    left: "50%",
+                    transform: "translateX(-50%) translateY(12%) rotate(-3deg)"
+                }}
+            />
+        </div>
+    )
+};
+
+/** 9 - Editor. Two phones layered, to say "there is a lot in here". */
 const slideStages: SlideDef = {
     id: "stages",
     component: ({cW, cH}) => (
@@ -699,7 +866,7 @@ const slideStages: SlideDef = {
     )
 };
 
-/** 6 - Read. Contactless arcs behind the phone, echoing the scan overlay. */
+/** 10 - Read. Contactless arcs behind the phone, echoing the scan overlay. */
 const slideRead: SlideDef = {
     id: "read",
     component: ({cW, cH}) => (
@@ -758,9 +925,9 @@ const slideRead: SlideDef = {
 };
 
 /**
- * 7 - History. The quiet feature that keeps people in the app.
+ * 5 - History. The quiet feature that keeps people in the app.
  *
- * Five ghosts of slide 3's trace, stacked and fading backwards. Rewriting the
+ * Five ghosts of slide 2's trace, stacked and fading backwards. Rewriting the
  * live graph as an archive says "every brew" in one glance, where the screen
  * itself -- a list of rows -- is unreadable at thumbnail size. An earlier pass
  * drew flat bars instead and they read as a loading skeleton, which is the one
@@ -804,6 +971,23 @@ const slideHistory: SlideDef = {
                     </>
                 }
             />
+            {/* The list behind the record, because "every brew" is a claim the
+                list makes and the record cannot: one record is one brew. It sits
+                back and dim so the pair still reads as a single idea, and the
+                record keeps the foreground because it is the one worth looking
+                at on a 400 pixel thumbnail. */}
+            <Phone
+                src={img(shot("historylist"))}
+                alt="Brew history"
+                style={{
+                    position: "absolute",
+                    bottom: 0,
+                    width: "58%",
+                    left: "-6%",
+                    transform: "translateY(-2%) rotate(-7deg)",
+                    opacity: 0.5
+                }}
+            />
             <Phone
                 src={img(shot("history"))}
                 alt="A past brew"
@@ -820,103 +1004,146 @@ const slideHistory: SlideDef = {
 };
 
 /**
- * 8 - Privacy. The contrast slide: inverted, no device, all type.
+ * 7 - Shelves. The other half of the library, and the reason it has two slides.
  *
- * The headline is the app's own ticker line. It is the loudest thing XBRW++
- * says about itself, and a listing that buries "no account" under a screenshot
- * of a settings screen is throwing away the clearest reason to choose it.
+ * The privacy slide used to sit here. It said "No cloud. No account." and
+ * credited the app's About ticker, and both halves went stale in 2.0: the
+ * ticker lines are crack-intro nonsense that never said it, and the app now has
+ * a community catalogue, an optional xBloom sign-in and a share service, so "no
+ * cloud" is untrue. Rather than restate a weaker version of the claim, the slot
+ * went to the thing a buyer can actually see the value of.
+ *
+ * The motif is a grid of shelf marks, not the card wall from the slide before:
+ * the pair has to read as two views of one library, and repeating the wall
+ * would make it read as two libraries.
  */
-const slidePrivacy: SlideDef = {
-    id: "privacy",
+function MarkGrid({cW, cH}: {cW: number; cH: number}) {
+    const tints = [ACCENT.mint, ACCENT.lilac, ACCENT.peach, ACCENT.sky, ACCENT.blossom, ACCENT.oolong];
+    const cols = 5;
+    const rows = 7;
+    const size = cW * 0.135;
+    const gap = cW * 0.045;
+    return (
+        <div
+            style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap,
+                transform: "rotate(-5deg) scale(1.25)",
+                pointerEvents: "none"
+            }}>
+            {Array.from({length: rows}).map((_, r) => (
+                <div key={r} style={{display: "flex", gap}}>
+                    {Array.from({length: cols}).map((_, c) => {
+                        const i = r * cols + c;
+                        return (
+                            <div
+                                key={c}
+                                style={{
+                                    width: size,
+                                    height: size,
+                                    borderRadius: size * 0.26,
+                                    background: tints[i % tints.length],
+                                    opacity: 0.1 + ((i * 3) % 4) * 0.035
+                                }}
+                            />
+                        );
+                    })}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+const slideShelves: SlideDef = {
+    id: "shelves",
     component: ({cW, cH}) => (
-        <div style={{...frame, background: C.brand}}>
-            <DotScreen cW={cW} colour="rgba(0,0,0,0.22)" size={0.016} />
-            <Glow cW={cW} colour="rgba(255,255,255,0.55)" x="50%" y="2%" size={1.4} opacity={0.3} />
-            <div
+        <div style={frame}>
+            <MarkGrid cW={cW} cH={cH} />
+            <Glow cW={cW} colour={ACCENT.mint} x="50%" y="76%" size={1.5} opacity={0.26} />
+            <Glow cW={cW} colour={C.base} x="50%" y="8%" size={1.8} opacity={0.78} />
+            <Glow cW={cW} colour={C.base} x="50%" y="66%" size={1.7} opacity={0.85} />
+            <DotScreen cW={cW} colour="rgba(255,255,255,0.09)" />
+            <Caption
+                cW={cW}
+                eyebrow="Shelves"
+                eyebrowColour={ACCENT.mint}
+                scale={0.9}
+                headline={
+                    <>
+                        It sorts itself
+                        <br />
+                        <span style={{color: ACCENT.mint}}>as you brew</span>.
+                    </>
+                }
+            />
+            <Phone
+                src={img(shot("shelves"))}
+                alt="Library shelves"
                 style={{
                     position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: cW * 0.06,
-                    zIndex: 5
-                }}>
-                <img
-                    src={img("/app-icon.png")}
-                    alt=""
-                    style={{
-                        width: cW * 0.19,
-                        height: cW * 0.19,
-                        borderRadius: cW * 0.042,
-                        marginBottom: cW * 0.09,
-                        boxShadow: `0 ${cW * 0.015}px ${cW * 0.05}px rgba(0,0,0,0.35)`
-                    }}
-                    draggable={false}
-                />
-                <div
-                    style={{
-                        fontFamily: "var(--font-doto)",
-                        fontWeight: 800,
-                        fontSize: cW * 0.112,
-                        lineHeight: 1.12,
-                        color: C.ink,
-                        textAlign: "center",
-                        // Doto is a wide face: let a line that no longer fits
-                        // overflow visibly rather than silently rewrap into a
-                        // ragged "NO / ACCOUNT." that reads as a fourth line.
-                        whiteSpace: "nowrap",
-                        textTransform: "uppercase"
-                    }}>
-                    No cloud.
-                    <br />
-                    No account.
-                    <br />
-                    No thanks.
-                </div>
-                <div
-                    style={{
-                        marginTop: cH * 0.045,
-                        fontFamily: "var(--font-mono)",
-                        fontSize: cW * 0.034,
-                        lineHeight: 1.5,
-                        color: "rgba(0,0,0,0.72)",
-                        textAlign: "center",
-                        maxWidth: cW * 0.76
-                    }}>
-                    Your recipes stay on your phone. No sync, no analytics, no sign-up.
-                </div>
-            </div>
+                    bottom: 0,
+                    width: "82%",
+                    left: "50%",
+                    transform: "translateX(-50%) translateY(10%)"
+                }}
+            />
         </div>
     )
 };
 
 const SLIDES: SlideDef[] = [
     slideHero,
-    slideLibrary,
     slideBrew,
-    slideStages,
-    slideImport,
-    slideRead,
+    slideBeyond,
+    slideDial,
     slideHistory,
-    slidePrivacy
+    slideLibrary,
+    slideShelves,
+    slideHub,
+    slideStages,
+    slideRead
 ];
 
 /* -------------------------------------------------------------- promo image */
 
 /**
- * Landscape banner for Discord recruitment. Not a store asset -- Apple never
- * sees this -- so it carries the repo URL and the "testers wanted" framing that
- * would be out of place on a listing.
+ * Landscape banner for Discord. Not a store asset -- Apple never sees this --
+ * so it can carry a link and a call to action that would be out of place on a
+ * listing.
+ *
+ * Rewritten for 2.0. The old banner recruited testers for an app that was not
+ * out yet, and sold "rewrite the card that came with your coffee", which was
+ * the whole product in 1.x and is now the smallest part of it. Both were true
+ * when written and neither is now, which is the failure mode a banner living
+ * in a repo is prone to: nothing breaks when it goes stale.
+ *
+ * The headline is the store subtitle verbatim, as it is on slide 1. Three
+ * places now say one thing rather than three.
+ *
+ * The body deliberately does not say "no cloud". The app makes seven kinds of
+ * call (`constants/network.ts`) -- the hub, the share-link mint, BrewMind --
+ * and the listing already refused that claim once, so repeating it here would
+ * leave the two documents disagreeing. It sells what 2.0 actually added.
+ *
+ * The pill is plain text rather than Apple's badge artwork. The badge has its
+ * own guidelines and cannot be redrawn by hand, and an approximation of it is
+ * worse than not using it.
  */
+const APP_STORE_URL = "apps.apple.com/app/id6806339475";
+
 const promoSlide: SlideDef = {
     id: "promo",
     component: ({cW, cH}) => {
+        /* brew in front: 2.0 leads on the machine, so the banner does too. */
         const fan: {name: Shot; left: string; scale: number; rotate: number; z: number; opacity: number}[] = [
-            {name: "stages", left: "63%", scale: 0.84, rotate: -9, z: 1, opacity: 0.7},
-            {name: "brew", left: "87%", scale: 0.84, rotate: 9, z: 1, opacity: 0.7},
-            {name: "home", left: "75%", scale: 1, rotate: 0, z: 2, opacity: 1}
+            {name: "home", left: "63%", scale: 0.84, rotate: -9, z: 1, opacity: 0.7},
+            {name: "history", left: "87%", scale: 0.84, rotate: 9, z: 1, opacity: 0.7},
+            {name: "brew", left: "75%", scale: 1, rotate: 0, z: 2, opacity: 1}
         ];
         const base = cH * 0.88 * MK_RATIO;
         return (
@@ -930,7 +1157,7 @@ const promoSlide: SlideDef = {
                         top: "50%",
                         left: cW * 0.055,
                         width: cW * 0.5,
-                        marginTop: -cH * 0.29,
+                        marginTop: -cH * 0.4,
                         zIndex: 5
                     }}>
                     <div style={{display: "flex", alignItems: "center", gap: cW * 0.018, marginBottom: cW * 0.03}}>
@@ -960,9 +1187,9 @@ const promoSlide: SlideDef = {
                             letterSpacing: `-${cW * 0.0018}px`,
                             color: C.text
                         }}>
-                        Rewrite the card that
+                        Your xBloom,
                         <br />
-                        came with <span style={{color: C.brand}}>your</span> coffee.
+                        <span style={{color: C.brand}}>unleashed</span>.
                     </div>
                     <div
                         style={{
@@ -973,8 +1200,8 @@ const promoSlide: SlideDef = {
                             color: C.dim,
                             maxWidth: cW * 0.46
                         }}>
-                        Read, edit and write xBloom recipe cards from your phone. No account, no
-                        cloud, no analytics.
+                        Brew over Bluetooth, watch every pour land, and keep every brew.
+                        Reads and writes the cards too.
                     </div>
                     <div
                         style={{
@@ -995,12 +1222,21 @@ const promoSlide: SlideDef = {
                                 fontWeight: 700,
                                 whiteSpace: "nowrap"
                             }}>
-                            TESTERS WANTED
+                            ON THE APP STORE
                         </span>
                         <span
                             style={{
                                 fontFamily: "var(--font-mono)",
                                 fontSize: cW * 0.018,
+                                color: C.text,
+                                whiteSpace: "nowrap"
+                            }}>
+                            {APP_STORE_URL}
+                        </span>
+                        <span
+                            style={{
+                                fontFamily: "var(--font-mono)",
+                                fontSize: cW * 0.0155,
                                 color: C.dim,
                                 whiteSpace: "nowrap"
                             }}>
