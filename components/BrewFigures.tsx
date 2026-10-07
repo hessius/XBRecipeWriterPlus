@@ -15,6 +15,8 @@ import {
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
     brewFigureBadgeGeometry,
+    brewFigureColumnFlex,
+    brewFigureUsesFourColumns,
     brewFigureTextGeometry
 } from "@/library/brew/figureGeometry";
 import {formatFlowRate} from "@/library/brew/flowRate";
@@ -123,7 +125,8 @@ function FigureBadge({children, testID, textScale = 1}: {
                 paddingVertical={badge.paddingVertical}
                 borderRadius={badge.borderRadius}
                 borderWidth={badge.borderWidth} borderStyle="dashed"
-                borderColor={palette.line}>
+                borderColor={palette.line}
+                flexShrink={0}>
             <DotMatrixText fontSize={badge.fontSize} weight="bold" color={palette.dim}
                            letterSpacing={badge.tracking}
                            minFontSize={DOTO_MIN_FONT_SIZE * textScale}>
@@ -135,7 +138,7 @@ function FigureBadge({children, testID, textScale = 1}: {
 
 function Figure({
     label, value, color, badge, badgeGap, fontSize, labelSize, labelTracking, valueTracking,
-    testID, accessibilityLabel
+    testID, accessibilityLabel, flex = 1, quiet, outlined = false, textScale = 1
 }: {
     label: string;
     value: string;
@@ -148,9 +151,34 @@ function Figure({
     valueTracking?: number;
     testID?: string;
     accessibilityLabel?: string;
+    /** The column's share of the row. DRAWDOWN takes more; see `figureGeometry`. */
+    flex?: number;
+    /**
+     * A third line under the value, in label colour.
+     *
+     * Separate from `badge`, which sits beside the value: the detail row needs
+     * its extra text below, where it costs height the row already has rather
+     * than width the row does not.
+     */
+    quiet?: React.ReactNode;
+    /**
+     * Draw the value in the dashed outline that means asked for rather than
+     * confirmed. Used by the grind figure when the machine never reported a
+     * dial and the recipe's own setting is all the record can say.
+     */
+    outlined?: boolean;
+    textScale?: number;
 }) {
+    const badgeGeometry = brewFigureBadgeGeometry(textScale);
+    const valueText = (
+        <DotMatrixText fontSize={fontSize} weight="bold" color={color}
+                       letterSpacing={valueTracking ?? 0.5}
+                       numberOfLines={1}>
+            {value}
+        </DotMatrixText>
+    );
     return (
-        <YStack flex={1} gap={BREW_FIGURE_INTERNAL_GAP} testID={testID}
+        <YStack flex={flex} gap={BREW_FIGURE_INTERNAL_GAP} testID={testID}
                 minWidth={0}
                 accessible={accessibilityLabel !== undefined}
                 accessibilityLabel={accessibilityLabel}>
@@ -161,19 +189,25 @@ function Figure({
             </DotMatrixText>
             <XStack testID={testID === undefined ? undefined : `${testID}-value-row`}
                     alignItems="center" gap={badgeGap}>
-                <DotMatrixText fontSize={fontSize} weight="bold" color={color}
-                               letterSpacing={valueTracking ?? 0.5}
-                               numberOfLines={1}>
-                    {value}
-                </DotMatrixText>
+                {outlined ? (
+                    <XStack testID={testID === undefined ? undefined : `${testID}-outline`}
+                            borderWidth={badgeGeometry.borderWidth}
+                            borderStyle="dashed" borderColor={palette.line}
+                            borderRadius={badgeGeometry.borderRadius}
+                            paddingHorizontal={badgeGeometry.paddingHorizontal}
+                            alignSelf="flex-start" flexShrink={0}>
+                        {valueText}
+                    </XStack>
+                ) : valueText}
                 {badge}
             </XStack>
+            {quiet}
         </YStack>
     );
 }
 
-function FigurePlaceholder({testID}: {testID: string}) {
-    return <YStack testID={testID} flex={1} />;
+function FigurePlaceholder({testID, flex = 1}: {testID: string; flex?: number}) {
+    return <YStack testID={testID} flex={flex} />;
 }
 
 /**
@@ -228,6 +262,27 @@ export default function BrewFigures(
                 : `Grind, dial ${grind.dial}${
                     grind.recipe === null ? "" : `, recipe ${grind.recipe}`
                 }`;
+    // Four columns normally, three once the text is large enough that the
+    // recipe badge can no longer fit its weighted GRIND column. The threshold
+    // and the shares both live in `figureGeometry`, so what is drawn and what
+    // is measured cannot drift apart.
+    const fourColumns = brewFigureUsesFourColumns(textScale);
+    const columnFlex = brewFigureColumnFlex(textScale);
+    const grindValue = grind === null
+        ? ""
+        : grind.kind === "off"
+            ? "OFF"
+            : String(grind.kind === "recipe" ? grind.recipe : grind.dial);
+    const recipeBadgeText = grind === null || grind.kind !== "dial"
+            || grind.recipe === null
+        ? null
+        : `RECIPE ${grind.recipe}`;
+    // The quiet line is all or nothing. It exists to carry the recipe badge;
+    // with no badge to carry there is nothing worth a third line, so the rate's
+    // unit goes up into its own label instead and the row stays two lines tall.
+    const hasQuietLine = fourColumns && recipeBadgeText !== null;
+    const rateColumn = fourColumns ? drawdownRateText : null;
+    const rateInDrawdown = fourColumns ? null : drawdownRateText;
 
     return (
         <YStack testID="brew-figures" gap={BREW_FIGURE_ROW_GAP}>
@@ -300,47 +355,44 @@ export default function BrewFigures(
                             {/* TIME is the right figure above, and DRAWDOWN is
                                 also a duration, so the right column rhymes. */}
                             {grind === null ? (
-                                <FigurePlaceholder testID="figures-grind-placeholder" />
+                                <FigurePlaceholder testID="figures-grind-placeholder"
+                                                   flex={columnFlex[0]} />
                             ) : (
                                 <Figure
                                     testID="figures-grind"
-                                    // GRIND SIZE is 80.4 pt at font scale 1.0
-                                    // and 106.83 pt at the bounded 1.4 scale,
-                                    // overflowing a 102.33 pt slot on a
-                                    // 393 pt screen.
+                                    flex={columnFlex[0]}
                                     label="GRIND"
-                                    value={grind.kind === "off"
-                                        ? "OFF"
-                                        : String(grind.kind === "recipe"
-                                            ? grind.recipe
-                                            : grind.dial)}
+                                    value={grindValue}
+                                    outlined={grind.kind === "recipe"}
                                     color={palette.text}
                                     fontSize={figureText.detailValueSize}
                                     badgeGap={badgeGeometry.gap}
+                                    textScale={textScale}
                                     labelSize={figureText.labelSize}
                                     labelTracking={figureText.labelTracking}
                                     valueTracking={figureText.valueTracking}
-                                    badge={grind.kind !== "dial" || grind.recipe === null
-                                        ? undefined
-                                        : (
-                                            <FigureBadge testID="figures-grind-recipe"
-                                                         textScale={textScale}>
-                                                {`RECIPE ${grind.recipe}`}
-                                            </FigureBadge>
-                                        )}
+                                    quiet={recipeBadgeText === null ? undefined : (
+                                        <FigureBadge testID="figures-grind-recipe"
+                                                     textScale={textScale}>
+                                            {recipeBadgeText}
+                                        </FigureBadge>
+                                    )}
                                     accessibilityLabel={grindAccessibility}
                                 />
                             )}
                             {delay === null ? (
-                                <FigurePlaceholder testID="figures-delay-placeholder" />
+                                <FigurePlaceholder testID="figures-delay-placeholder"
+                                                   flex={columnFlex[1]} />
                             ) : (
                                 <Figure
                                     testID="figures-delay"
+                                    flex={columnFlex[1]}
                                     label="DELAY"
                                     value={`+${delay}`}
                                     color={palette.warn}
                                     fontSize={figureText.detailValueSize}
                                     badgeGap={badgeGeometry.gap}
+                                    textScale={textScale}
                                     labelSize={figureText.labelSize}
                                     labelTracking={figureText.labelTracking}
                                     valueTracking={figureText.valueTracking}
@@ -348,26 +400,57 @@ export default function BrewFigures(
                                 />
                             )}
                             {drawdownText === null ? (
-                                <FigurePlaceholder testID="figures-drawdown-placeholder" />
+                                <FigurePlaceholder testID="figures-drawdown-placeholder"
+                                                   flex={columnFlex[2]} />
                             ) : (
                                 <Figure
                                     testID="figures-drawdown"
+                                    flex={columnFlex[2]}
                                     label="DRAWDOWN"
                                     value={drawdownText}
                                     color={palette.text}
                                     fontSize={figureText.detailValueSize}
                                     badgeGap={badgeGeometry.gap}
+                                    textScale={textScale}
                                     labelSize={figureText.labelSize}
                                     labelTracking={figureText.labelTracking}
                                     valueTracking={figureText.valueTracking}
-                                    badge={drawdownRateText === null
-                                        ? undefined
-                                        : (
-                                            <FigureBadge testID="figures-drawdown-rate"
-                                                         textScale={textScale}>
-                                                {`${drawdownRateText} G/S`}
-                                            </FigureBadge>
-                                        )}
+                                    quiet={rateInDrawdown === null ? undefined : (
+                                        <DotMatrixText
+                                            testID="figures-drawdown-rate"
+                                            fontSize={badgeGeometry.fontSize}
+                                            weight="bold" color={palette.dim}
+                                            letterSpacing={badgeGeometry.tracking}
+                                            numberOfLines={1}>
+                                            {`${rateInDrawdown} G/S`}
+                                        </DotMatrixText>
+                                    )}
+                                    accessibilityLabel={drawdownAccessibility}
+                                />
+                            )}
+                            {rateColumn !== null && (
+                                <Figure
+                                    testID="figures-rate"
+                                    flex={columnFlex[3]}
+                                    label={hasQuietLine ? "RATE" : "RATE G/S"}
+                                    value={rateColumn}
+                                    color={palette.text}
+                                    fontSize={figureText.detailValueSize}
+                                    badgeGap={badgeGeometry.gap}
+                                    textScale={textScale}
+                                    labelSize={figureText.labelSize}
+                                    labelTracking={figureText.labelTracking}
+                                    valueTracking={figureText.valueTracking}
+                                    quiet={hasQuietLine ? (
+                                        <DotMatrixText
+                                            testID="figures-drawdown-rate"
+                                            fontSize={badgeGeometry.fontSize}
+                                            weight="bold" color={palette.dim}
+                                            letterSpacing={badgeGeometry.tracking}
+                                            numberOfLines={1}>
+                                            G/S
+                                        </DotMatrixText>
+                                    ) : undefined}
                                     accessibilityLabel={drawdownAccessibility}
                                 />
                             )}

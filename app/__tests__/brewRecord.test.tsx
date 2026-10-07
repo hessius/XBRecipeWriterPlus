@@ -1115,12 +1115,13 @@ describe("the drawdown on the record screen", () => {
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
     });
 
-    it("charts the rate and names it on the drawdown line", async () => {
+    it("charts the rate and names it in the figures", async () => {
         mockOpened = {record: recordWithDrawdownRate(), samples: samplesForRate()};
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
         expect(await screen.findByTestId("rate-chart")).toBeTruthy();
-        expect(screen.getByTestId("figures-drawdown-rate")).toBeTruthy();
+        expect(screen.getByTestId("figures-rate")).toBeTruthy();
+        expect(screen.getAllByLabelText(/average .* grams per second/)).toHaveLength(2);
     });
 
     it("still names the rate when the stream has been swept", async () => {
@@ -1131,7 +1132,8 @@ describe("the drawdown on the record screen", () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
         expect(screen.queryByTestId("rate-chart")).toBeNull();
-        expect(screen.getByTestId("figures-drawdown-rate")).toBeTruthy();
+        expect(screen.getByTestId("figures-rate")).toBeTruthy();
+        expect(screen.getAllByLabelText(/average .* grams per second/)).toHaveLength(2);
     });
 
     it("keeps the rate chart inside the shared capture", async () => {

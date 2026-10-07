@@ -9,6 +9,7 @@ import {
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_ROW_GAP
 } from "@/library/brew/figureGeometry";
+import {DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
 import {renderWithProviders} from "@/test-utils/render";
 
 jest.mock("@/components/FlowSparkline", () => {
@@ -243,7 +244,7 @@ describe("BrewFigures", () => {
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
     });
 
-    it("puts the average rate on the drawdown badge", async () => {
+    it("puts the average rate in its own figure", async () => {
         await renderWithProviders(
             <BrewFigures
                 water={240} cup={200} seconds={140} accent={TEST_ACCENT}
@@ -251,10 +252,12 @@ describe("BrewFigures", () => {
             />
         );
         expect(screen.getByText("0:40")).toBeTruthy();
-        expect(screen.getByText("2.0 G/S")).toBeTruthy();
-        expect(screen.getByLabelText(
+        expect(screen.getByTestId("figures-rate")).toBeTruthy();
+        expect(screen.getByText("RATE G/S")).toBeTruthy();
+        expect(screen.getByText("2.0")).toBeTruthy();
+        expect(screen.getAllByLabelText(
             "Drawdown, 40 seconds, average 2.0 grams per second"
-        )).toBeTruthy();
+        )).toHaveLength(2);
     });
 
     it("leaves the drawdown badge out when there is no rate", async () => {
@@ -301,6 +304,68 @@ describe("BrewFigures", () => {
             <BrewFigures water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
         );
         expect(screen.queryByTestId("figures-detail-slot")).toBeNull();
+    });
+
+    describe("the detail row's columns", () => {
+        /** The three figures above are required props and say nothing here. */
+        const detail = (props: Partial<React.ComponentProps<typeof BrewFigures>>) =>
+            renderWithProviders(
+                <BrewFigures water={182} cup={174} seconds={126}
+                             accent={TEST_ACCENT} drawdown={30} {...props} />
+            );
+
+        it("gives the rate its own column at the default text size", async () => {
+            await detail({
+                drawdownRate: 1.04, grind: {kind: "dial", dial: 62, recipe: 58}
+            });
+            expect(screen.getByTestId("figures-rate")).toBeTruthy();
+            expect(screen.getByText("RATE")).toBeTruthy();
+            expect(screen.getByTestId("figures-grind-recipe")).toBeTruthy();
+        });
+
+        it("drops the quiet line and moves the unit into the label with no badge",
+            async () => {
+                await detail({
+                    drawdownRate: 1.04, grind: {kind: "dial", dial: 62, recipe: null}
+                });
+                expect(screen.getByText("RATE G/S")).toBeTruthy();
+                expect(screen.queryByText("RATE")).toBeNull();
+                expect(screen.queryByTestId("figures-grind-recipe")).toBeNull();
+            });
+
+        it("falls back to three columns above the threshold", async () => {
+            await detail({
+                drawdownRate: 1.04, textScale: DOTO_MAX_FONT_SCALE,
+                grind: {kind: "dial", dial: 62, recipe: 58}
+            });
+            // The rate rejoins drawdown as its quiet line, which is the layout
+            // large type can afford. It is still said, just not in a column.
+            expect(screen.queryByTestId("figures-rate")).toBeNull();
+            expect(screen.getByTestId("figures-drawdown-rate")).toBeTruthy();
+        });
+
+        it("still says nothing about a rate nobody could measure", async () => {
+            await detail({
+                drawdownRate: null, grind: {kind: "dial", dial: 62, recipe: 58}
+            });
+            expect(screen.queryByTestId("figures-rate")).toBeNull();
+            expect(screen.queryByTestId("figures-drawdown-rate")).toBeNull();
+        });
+
+        it("draws a recipe-only grind in the outline that means asked for",
+            async () => {
+                // Task 5's variant, seen from the renderer. The outline is the
+                // whole distinction: 58 plain would read as a measurement.
+                await detail({grind: {kind: "recipe", recipe: 58}});
+                expect(screen.getByText("58")).toBeTruthy();
+                expect(screen.getByTestId("figures-grind-outline")).toBeTruthy();
+                expect(screen.queryByTestId("figures-grind-recipe")).toBeNull();
+            });
+
+        it("draws a confirmed dial without the outline", async () => {
+            await detail({grind: {kind: "dial", dial: 62, recipe: 58}});
+            expect(screen.queryByTestId("figures-grind-outline")).toBeNull();
+        });
     });
 });
 
