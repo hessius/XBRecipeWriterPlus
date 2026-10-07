@@ -73,3 +73,54 @@ export function brewFigureBadgeWidth(
     )
         + (badge.paddingHorizontal + badge.borderWidth) * 2;
 }
+
+/**
+ * The text scale above which the detail row drops to three columns.
+ *
+ * Four columns hold at the default size and up to here. Past it the only
+ * string that cannot follow is the `RECIPE nn` badge, which needs about
+ * 99.8 pt at the 1.4 accessibility cap against the 71.7 pt a quarter of the
+ * row would give it. Nothing is truncated and nothing is abbreviated; the row
+ * simply spends its width on three columns instead of four.
+ *
+ * Exact, and here rather than inline at the call site, so the fallback is a
+ * documented threshold both the layout and its test read from one place.
+ */
+export const BREW_FIGURE_FOUR_COLUMN_MAX_SCALE = 1.2;
+
+/**
+ * DRAWDOWN is the only eight-character label in the row, so its column is
+ * wider than the others rather than the row being sized for its longest word.
+ */
+export const BREW_FIGURE_DRAWDOWN_FLEX = 1.4;
+
+/** Whether the detail row can afford four columns at this text scale. */
+export function brewFigureUsesFourColumns(fontScale: number): boolean {
+    return fontScale <= BREW_FIGURE_FOUR_COLUMN_MAX_SCALE;
+}
+
+/** The flex shares the detail row's columns take, left to right. */
+export function brewFigureColumnFlex(fontScale: number): number[] {
+    return brewFigureUsesFourColumns(fontScale)
+        ? [1, 1, BREW_FIGURE_DRAWDOWN_FLEX, 1]
+        : [1, 1, 1];
+}
+
+/**
+ * What each detail column actually measures, so a test can ask whether the
+ * text fits instead of looking at a picture of it.
+ *
+ * @param contentWidth the row's width, after the screen's padding.
+ * @param fontScale the user's text scale, which decides the column count.
+ * @param scale the story card's shrink from the reference width.
+ */
+export function brewFigureColumnWidths(
+    contentWidth: number,
+    fontScale: number,
+    scale = 1
+): number[] {
+    const flex = brewFigureColumnFlex(fontScale);
+    const free = contentWidth - BREW_FIGURE_COLUMN_GAP * scale * (flex.length - 1);
+    const total = flex.reduce((sum, share) => sum + share, 0);
+    return flex.map((share) => (free * share) / total);
+}
