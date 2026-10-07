@@ -82,7 +82,7 @@ export default function RenameSheet({open, onOpenChange, name, onRename}: {
                     autoFocus
                     returnKeyType="done"
                     onSubmitEditing={submit}
-                    placeholder="Yirgacheffe"
+                    placeholder="e.g. Yirgacheffe"
                     placeholderTextColor={palette.placeholder}
                     autoCorrect={false}
                     style={{

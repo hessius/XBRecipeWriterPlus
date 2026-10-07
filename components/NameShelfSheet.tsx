@@ -103,7 +103,7 @@ export default function NameShelfSheet({
                     autoFocus
                     returnKeyType="done"
                     onSubmitEditing={submit}
-                    placeholder="MORNINGS"
+                    placeholder="e.g. MORNINGS"
                     placeholderTextColor={palette.placeholder}
                     maxFontSizeMultiplier={doto.maxFontSizeMultiplier}
                     // Shift-locked, so a lower case letter is upper case before

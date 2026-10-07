@@ -39,7 +39,7 @@ export default function NoteSection({initialValue, onDraft, onCommit}: {
                 accessibilityHint={`One line about this recipe, up to ${MAX_DESCRIPTION} characters.`}
                 defaultValue={initialValue}
                 maxLength={MAX_DESCRIPTION}
-                placeholder="Sweet and light, good for mornings"
+                placeholder="e.g. Sweet and light, good for mornings"
                 placeholderTextColor={palette.placeholder}
                 returnKeyType="done"
                 onChangeText={(value) => {

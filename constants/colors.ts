@@ -59,13 +59,15 @@ export const palette = {
      * like it already had a pod ID. `muted` is 3.55:1 on `raised`, under the
      * 4.5:1 floor, which is why the note field was moved off it.
      *
-     * 4.97:1 on `raised` and better on `surface` and `base`, so it clears the
-     * floor wherever a field is drawn, while sitting far enough below `dim` to
-     * read as an example rather than an entry. Call sites help it say so by
-     * phrasing theirs as examples ("e.g. CGL12"); the colour is not asked to
-     * carry that alone.
+     * 4.52:1 on `raised`, 4.75 on `surface` and 5.24 on `base`, so it clears
+     * the floor wherever a field is drawn while sitting far enough below `dim`
+     * to read as an example rather than an entry. This is the darkest value
+     * that still clears AA on the lightest surface it appears over, so there
+     * is no headroom left: a placeholder that still reads as input has to be
+     * fixed in its words. Call sites help by phrasing theirs as examples
+     * ("e.g. CGL12"); the colour is not asked to carry that alone.
      */
-    placeholder: "#868686",
+    placeholder: "#7F7F7F",
     /** Primary text. */
     text:    "#FFFFFF",
 
