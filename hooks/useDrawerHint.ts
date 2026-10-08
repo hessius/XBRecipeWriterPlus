@@ -16,6 +16,7 @@ export type DrawerHint = {
     /** Which tray this row should demonstrate, or null for silence. */
     trayFor: (recipeIndex: number) => "action" | "management" | null;
     delayFor: (recipeIndex: number) => number;
+    noteBounced: (recipeIndex: number) => void;
     noteManualOpen: () => void;
     dismiss: () => void;
 };
@@ -62,6 +63,7 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
         };
     });
     const [showing, setShowing] = useState(decision.showing);
+    const [bouncedRows, setBouncedRows] = useState<ReadonlySet<number>>(() => new Set());
 
     useEffect(() => {
         // Count the lesson when the launch decision is made, not when either
@@ -74,7 +76,7 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
     }, [decision, settings]);
 
     function trayFor(recipeIndex: number): "action" | "management" | null {
-        if (!showing) return null;
+        if (!showing || bouncedRows.has(recipeIndex)) return null;
         if (recipeIndex === 0) return "action";
         if (recipeIndex === 1) return "management";
         return null;
@@ -82,6 +84,15 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
 
     function delayFor(recipeIndex: number): number {
         return recipeIndex === 1 ? STAGGER.drawerHint : 0;
+    }
+
+    function noteBounced(recipeIndex: number) {
+        setBouncedRows((current) => {
+            if (current.has(recipeIndex)) return current;
+            const next = new Set(current);
+            next.add(recipeIndex);
+            return next;
+        });
     }
 
     function noteManualOpen() {
@@ -95,6 +106,5 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
         setShowing(false);
     }
 
-    return {trayFor, delayFor, noteManualOpen, dismiss};
+    return {trayFor, delayFor, noteBounced, noteManualOpen, dismiss};
 }
-

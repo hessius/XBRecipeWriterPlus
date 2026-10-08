@@ -188,13 +188,16 @@ describe("useDrawerHint", () => {
         await act(async () => { unmount(); });
     });
 
-    it("is safe for a one-recipe list whose caller only asks for the first row", async () => {
+    it("silences a bounced row without cancelling its sibling", async () => {
         const {settings} = sqliteSettings();
         const {result, unmount} = await renderDrawerHint(settings);
-        const rowsInOneRecipeLibrary = [0];
 
-        expect(rowsInOneRecipeLibrary.map((index) => result.current.trayFor(index)))
-            .toEqual(["action"]);
+        await act(async () => {
+            result.current.noteBounced(0);
+        });
+
+        expect(result.current.trayFor(0)).toBeNull();
+        expect(result.current.trayFor(1)).toBe("management");
 
         await act(async () => { unmount(); });
     });

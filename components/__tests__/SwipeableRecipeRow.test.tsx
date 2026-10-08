@@ -1,4 +1,4 @@
-import React from "react";
+import React, {useState} from "react";
 import {act, fireEvent, screen, within} from "@testing-library/react-native";
 import {renderWithProviders} from "@/test-utils/render";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
@@ -239,6 +239,49 @@ describe("SwipeableRecipeRow", () => {
         expect(mockOpenLeft).toHaveBeenCalledTimes(1);
         expect(mockClose).toHaveBeenCalledTimes(1);
         expect(onManualOpen).not.toHaveBeenCalled();
+    });
+
+    it("closes both staggered hint trays even after the first row reports completion", async () => {
+        jest.useFakeTimers();
+
+        function HintRows() {
+            const [showing, setShowing] = useState(true);
+            return (
+                <>
+                    <SwipeableRecipeRow {...props({
+                        recipe: makeRecipe("First"),
+                        hintTray: showing ? "action" : null,
+                        onBounced: () => setShowing(false),
+                        onBrew: jest.fn(),
+                        onShare: jest.fn(),
+                        onWrite: jest.fn()
+                    })}/>
+                    <SwipeableRecipeRow {...props({
+                        recipe: makeRecipe("Second"),
+                        hintTray: showing ? "management" : null,
+                        hintDelayMs: STAGGER.drawerHint,
+                        onBounced: () => setShowing(false)
+                    })}/>
+                </>
+            );
+        }
+
+        await renderWithProviders(<HintRows/>);
+
+        await act(async () => { jest.advanceTimersByTime(600); });
+        expect(screen.getByTestId("swipeable-open-left")).toBeTruthy();
+        expect(screen.getByTestId("swipeable-open-right")).toBeTruthy();
+
+        await act(async () => {
+            jest.advanceTimersByTime(BOUNCE_CLOSE_DELAY - 600);
+        });
+
+        await act(async () => {
+            jest.advanceTimersByTime(STAGGER.drawerHint + 1);
+        });
+
+        expect(screen.queryByTestId("swipeable-open-left")).toBeNull();
+        expect(screen.queryByTestId("swipeable-open-right")).toBeNull();
     });
 
     it("keeps the tray list and the hint signature in step", async () => {

@@ -197,6 +197,7 @@ export default function SwipeableRecipeRow({
         if (hintTray === null || hintTray === undefined) {
             return;
         }
+        const swipeable = swipeableRef.current;
         // The hint may now teach both trays, but never by wobbling one card
         // both ways. The owner assigns one tray to one row and the other tray
         // to another row, then staggers them, so each card moves in exactly one
@@ -229,6 +230,9 @@ export default function SwipeableRecipeRow({
         return () => {
             clearTimeout(open);
             clearTimeout(close);
+            // If the owner suppresses the hint mid-lesson, cleanup must restore
+            // the row instead of leaving an already opened tray stranded.
+            swipeable?.close();
         };
     }, [hintTray, hintDelayMs]);
 

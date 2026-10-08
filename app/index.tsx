@@ -1477,7 +1477,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                                 hintTray={drawerHint.trayFor(item.recipeIndex)}
                                 hintDelayMs={drawerHint.delayFor(item.recipeIndex)}
                                 onManualOpen={drawerHint.noteManualOpen}
-                                onBounced={drawerHint.dismiss}
+                                onBounced={() => drawerHint.noteBounced(item.recipeIndex)}
                                 // Gated on a machine: a dead BREW in every row's
                                 // tray is worse than none. Share and write need
                                 // no machine, so they are always offered.
