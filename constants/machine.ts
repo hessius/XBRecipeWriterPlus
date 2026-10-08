@@ -88,6 +88,23 @@ export const FRAME_GAP_MS = 2000;
 export const RECIPE_ACK_MS = 8000;
 
 /**
+ * How long to wait for the machine to acknowledge a pause with 40515.
+ *
+ * A guess, and the only number in the pause path that is. Hardware on
+ * 2026-10-08 acknowledged in well under a second, but a single observation on
+ * one firmware is not a budget. Three seconds is long enough that a busy
+ * machine is not accused of ignoring us, and short enough that somebody who
+ * pressed PAUSE and is watching the water finds out quickly that it did not
+ * take.
+ *
+ * It is deliberately generous in the direction of giving up. The failure this
+ * timeout prevents is the UI saying "paused" about a machine that is still
+ * pouring, which is the one failure in this feature that sends somebody out
+ * of the room.
+ */
+export const PAUSE_ACK_MS = 3000;
+
+/**
  * There is deliberately **no** grinding timeout.
  *
  * After commit the machine grinds for around twenty seconds emitting no status

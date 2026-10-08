@@ -1,6 +1,6 @@
 import {
     BREW_INFO_ROUNDS, ECHO_FRAMES, FRAME_GAP_MS, FRAME_HISTORY_LIMIT, HANDSHAKE_FRESH_MS,
-    HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, RECIPE_ACK_MS, SETTLE_CAP_MS,
+    HANDSHAKE_WINDOW_MS, INFO_ATTEMPTS, INFO_WAIT_MS, PAUSE_ACK_MS, RECIPE_ACK_MS, SETTLE_CAP_MS,
     SETTLE_CEILING_MS, STATE_FRESH_MS
 } from "@/constants/machine";
 import {brewProblems} from "@/library/cardLimits";
@@ -17,6 +17,8 @@ import {
     buildType1,
     buildType1Bytes,
     buildType2,
+    COMMAND_PAUSE,
+    COMMAND_RESUME,
     encodeCoffeeBlob,
     encodeTeaBlob,
     EVENT,
@@ -124,6 +126,25 @@ export type BrewPhase =
      * filling — the part that says how much coffee actually landed.
      */
     | {name: "settling"}
+    /**
+     * The user stopped the brew, and the machine confirmed it.
+     *
+     * Nothing on the machine says this. 40518 settles the state on `0x1f`,
+     * which is `ARMED` — the same code a loaded-but-unstarted brew reports —
+     * so the only thing in the world that knows a brew is paused is the thing
+     * that sent the pause. `PAUSED_STATE` in `protocol.ts` carries the same
+     * warning.
+     *
+     * `was` is what resuming restores, kept rather than recomputed because
+     * the machine does not re-announce a stage it is already in: a pause
+     * during `grinding` and a pause during `pouring` resume into different
+     * phases and no later event distinguishes them.
+     *
+     * `pour`/`pours` are duplicated out of `was` so the stage ladder can be
+     * drawn without unwrapping it. They are 0/0 for a pause taken before the
+     * first pour.
+     */
+    | {name: "paused"; pour: number; pours: number; was: BrewPhase}
     | {name: "done"}
     | {name: "cancelled"}
     /** The link dropped mid-brew. The machine is assumed to still be brewing. */
@@ -145,7 +166,11 @@ export type BrewPhase =
  */
 export const ACTIVE_BREW_PHASE_NAMES: ReadonlySet<BrewPhase["name"]> = new Set([
     "waking", "sending", "readyToStart", "armed", "pressPlay",
-    "grinding", "pouring", "bypass", "settling"
+    // `paused` is active. A paused brew is still a brew: the dose is spent,
+    // the water is in the dripper, and anything that treats the run as over
+    // would tear down the recorder, the wake lock and the screen that holds
+    // the only RESUME button in existence.
+    "grinding", "pouring", "bypass", "settling", "paused"
 ]);
 
 export function isActiveBrewPhase(phase: BrewPhase): boolean {
@@ -315,6 +340,16 @@ export default class Machine {
      */
     private pauseSent = false;
     private ackTimer: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * Whether a pause we sent is still waiting to be acknowledged.
+     *
+     * The flag is the whole of what separates a pause from an echo: 40515 is
+     * the machine's only confirmation, and it would otherwise be
+     * indistinguishable from a stray frame or from somebody pressing the
+     * machine's own buttons.
+     */
+    private pauseRequested = false;
+    private pauseTimer: ReturnType<typeof setTimeout> | null = null;
     /**
      * Promotes a stranded `settling` to `done` after `settleCapMs`.
      *
@@ -806,6 +841,13 @@ export default class Machine {
         // phase has already moved the run on, so drop it before it is possibly
         // re-armed below. This is also what stops it firing into a later brew.
         this.clearSettleTimer();
+        // Any phase that is not the pause ends it. The pause is the one piece
+        // of brew state the machine does not hold, so the only thing that can
+        // strand it is us forgetting to put it down.
+        if (phase.name !== "paused") {
+            this.clearPauseTimer();
+            this.pauseRequested = false;
+        }
         this.phase = phase;
         this.brewing = isActiveBrewPhase(phase);
         if (phase.name === "settling") {
@@ -1144,6 +1186,64 @@ export default class Machine {
     }
 
     /**
+     * Ask the machine to stop, keeping the brew where it is.
+     *
+     * Deliberately does **not** set the phase. The machine's only confirmation
+     * that a brew is paused is `40515`; its state settles on `0x1f`, which is
+     * `ARMED` and says nothing. Setting the phase here would be claiming a
+     * pause on the strength of having asked for one, and the next thing
+     * somebody does after pressing PAUSE is walk away from the machine.
+     *
+     * Inert when nothing is running, so there is no state guard.
+     */
+    async pauseBrew(): Promise<void> {
+        this.clearPauseTimer();
+        this.pauseRequested = true;
+        this.pauseTimer = setTimeout(() => {
+            // The machine did not answer. Drop the request rather than the
+            // phase: nothing was ever claimed, so there is nothing to undo.
+            this.pauseRequested = false;
+            this.pauseTimer = null;
+        }, PAUSE_ACK_MS);
+        this.pauseTimer.unref?.();
+        await this.send(buildType1(COMMAND_PAUSE, [1]));
+    }
+
+    /**
+     * Let a paused brew carry on from where it stopped.
+     *
+     * Optimistic, which is the opposite of `pauseBrew` and is the safe
+     * direction for the same reason. A resume that did not take leaves the UI
+     * saying "running" about a stopped machine, which the next stage event
+     * corrects and which costs nothing while it lasts. Waiting for `40516`
+     * instead would leave it saying "paused" about a machine pouring water.
+     */
+    async resumeBrew(): Promise<void> {
+        this.leavePause();
+        await this.send(buildType1(COMMAND_RESUME, [1]));
+    }
+
+    /**
+     * Drop the pause, restoring whatever the brew was doing.
+     *
+     * Called by the resume, and by every event that contradicts a pause. The
+     * contradiction list is deliberately a default rather than an enumeration:
+     * an uncatalogued event should fall through to "not paused", because an
+     * offered RESUME that does nothing (and `40524` is inert) costs far less
+     * than a pause the app has invented.
+     */
+    private leavePause(): void {
+        this.clearPauseTimer();
+        this.pauseRequested = false;
+        if (this.phase.name === "paused") this.setPhase(this.phase.was);
+    }
+
+    private clearPauseTimer(): void {
+        if (this.pauseTimer !== null) clearTimeout(this.pauseTimer);
+        this.pauseTimer = null;
+    }
+
+    /**
      * Whether the machine is likely to be sitting on something it wants
      * acknowledged, rather than on its home screen.
      *
@@ -1162,6 +1262,13 @@ export default class Machine {
         switch (state) {
             case MACHINE_STATE.ARMED:
             case MACHINE_STATE.LOADING:
+                // A pause settles the state on ARMED, which is the whole
+                // ambiguity: the code a paused brew reports is the code a
+                // loaded-but-unstarted brew reports. Reading it as a fresh
+                // load here would throw the pause away a moment after
+                // entering it, and would do so whichever order 40515 and the
+                // state arrive in.
+                if (this.pauseRequested || this.phase.name === "paused") break;
                 // Not while a recipe is waiting to be started: this is the
                 // machine acknowledging the upload, and letting it replace the
                 // phase would take away the only control that can commit it.
@@ -1247,6 +1354,27 @@ export default class Machine {
 
     private onEvent(code: number, value?: number): void {
         if (!this.brewing) return;
+
+        if (code === EVENT.COFFEE_PAUSED) {
+            // The only confirmation a pause ever gets, and it is honoured only
+            // against a request of ours. An unasked-for 40515 is not evidence
+            // the user stopped anything.
+            if (!this.pauseRequested) return;
+            this.clearPauseTimer();
+            this.pauseRequested = false;
+            const was = this.phase;
+            const pour = was.name === "pouring" ? was.pour : 0;
+            const pours = was.name === "pouring" ? was.pours : 0;
+            this.setPhase({name: "paused", pour, pours, was});
+            return;
+        }
+
+        // Anything else is the brew moving, which contradicts a pause whoever
+        // caused it -- us, the machine's own buttons, or a fault. Dropped
+        // before the event is handled, so the handler below sees the phase the
+        // brew was really in.
+        this.leavePause();
+        if (code === EVENT.COFFEE_RESUMED) return;
 
         if (code === EVENT.ERROR_IDLING) {
             // During grinding the machine is almost certainly flashing +BEANS:

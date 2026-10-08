@@ -16,6 +16,7 @@ function Uint8ArrayPourEvent(index: number): number[] {
 function namedPhase(name: BrewPhase["name"]): BrewPhase {
     if (name === "pouring") return {name: "pouring", pour: 1, pours: 2};
     if (name === "failed") return {name: "failed", reason: "blocked"};
+    if (name === "paused") return {name: "paused", pour: 1, pours: 2, was: {name: "pouring", pour: 1, pours: 2}};
     return {name};
 }
 
