@@ -94,6 +94,35 @@ export function effectiveGrind(recipe: Recipe): number {
     return recipe.grinder ? recipe.grindSize : GRINDER_OFF_VALUE;
 }
 
+/** How a grind value reads, including the one that means the grinder is off. */
+export function describeGrind(value: number): string {
+    return value === GRINDER_OFF_VALUE ? "OFF" : String(value);
+}
+
+export type QuickEditKnob = "dose" | "ratio" | "grind";
+
+/**
+ * What the saved recipe says for one knob.
+ *
+ * The same shape as `describeTemperatureBaseline`, and for the same reason: a
+ * panel that changes a value for one brew has to be able to say what it is
+ * changing it from. The leading word goes at a large font scale, where the row
+ * is tight and "recipe" is the least load-bearing part of the phrase.
+ */
+export function describeKnobBaseline(
+    recipe: Recipe,
+    knob: QuickEditKnob,
+    fontScale: number
+): string {
+    const value = knob === "dose"
+        ? `${recipe.dosage} g`
+        : knob === "ratio"
+            ? String(recipe.ratio)
+            : describeGrind(effectiveGrind(recipe));
+
+    return fontScale >= 1.4 ? value : `recipe ${value}`;
+}
+
 export function quickEditBounds(recipe: Recipe): QuickEditBounds {
     const temperatures = recipe.pours.map((pour) => pour.temperature);
     const minTemperature = temperatures.length > 0 ? Math.min(...temperatures) : TEMPERATURE.min;

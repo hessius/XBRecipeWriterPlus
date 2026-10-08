@@ -7,10 +7,13 @@ import Stepper from "@/components/Stepper";
 import {palette} from "@/constants/colors";
 import {
     describeAdjustment,
+    describeGrind,
+    describeKnobBaseline,
     describeTemperatureBaseline,
     effectiveGrind,
     quickEditBounds,
     quickEditProblems,
+    type QuickEditKnob,
     type QuickEditAdjustments
 } from "@/library/quickEdit";
 import Recipe from "@/library/Recipe";
@@ -48,10 +51,6 @@ function signed(value: number): string {
     return value > 0 ? `+${value}` : String(value);
 }
 
-function grindValue(value: number, off: number): string {
-    return value === off ? "OFF" : String(value);
-}
-
 function updateAdjustment(
     adjustments: QuickEditAdjustments,
     key: AdjustmentKey,
@@ -80,6 +79,31 @@ function QuickEditRow({label, children, detail}: QuickEditRowProps) {
             </YStack>
             {children}
         </XStack>
+    );
+}
+
+/**
+ * The saved value for a knob, shown only once that knob has been moved.
+ *
+ * TEMP OFFSET shows its baseline always, because an offset cannot say what it
+ * is offsetting any other way. An absolute knob already reads as its own
+ * value, so its baseline is only worth the row once it has been left behind.
+ */
+function baselineDetail(
+    recipe: Recipe,
+    knob: QuickEditKnob,
+    adjusted: boolean,
+    fontScale: number
+): React.ReactNode {
+    if (!adjusted) {
+        return undefined;
+    }
+
+    return (
+        <Text testID={`quick-edit-${knob}-baseline`} fontSize={12} lineHeight={16}
+              color={palette.dim}>
+            {describeKnobBaseline(recipe, knob, fontScale)}
+        </Text>
     );
 }
 
@@ -129,7 +153,10 @@ export default function QuickEditPanel({
 
             <YStack gap="$1" borderTopWidth={1} borderBottomWidth={1}
                     borderColor={palette.line} paddingVertical="$1">
-                <QuickEditRow label="DOSE">
+                <QuickEditRow label="DOSE"
+                              detail={baselineDetail(
+                                  recipe, "dose", adjustments.dose !== undefined, fontScale
+                              )}>
                     <Stepper label="Quick edit dose" value={dose}
                              min={bounds.dose.min} max={bounds.dose.max} step={1}
                              unit="g" accent={accent}
@@ -139,7 +166,10 @@ export default function QuickEditPanel({
                 </QuickEditRow>
 
                 {bounds.ratio !== null && (
-                    <QuickEditRow label="RATIO">
+                    <QuickEditRow label="RATIO"
+                                  detail={baselineDetail(
+                                      recipe, "ratio", adjustments.ratio !== undefined, fontScale
+                                  )}>
                         <Stepper label="Quick edit ratio" value={ratio}
                                  min={bounds.ratio.min} max={bounds.ratio.max} step={1}
                                  accent={accent}
@@ -150,11 +180,14 @@ export default function QuickEditPanel({
                 )}
 
                 {grindBounds !== null && (
-                    <QuickEditRow label="GRIND">
+                    <QuickEditRow label="GRIND"
+                                  detail={baselineDetail(
+                                      recipe, "grind", adjustments.grind !== undefined, fontScale
+                                  )}>
                         <Stepper label="Quick edit grind" value={grind}
                                  min={grindBounds.min} max={grindBounds.off} step={1}
                                  accent={accent}
-                                 formatValue={(value) => grindValue(value, grindBounds.off)}
+                                 formatValue={(value) => describeGrind(value)}
                                  onChange={(value) => onChange(updateAdjustment(
                                      adjustments, "grind", value, savedGrindValue
                                  ))}/>

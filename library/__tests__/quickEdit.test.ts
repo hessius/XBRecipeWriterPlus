@@ -5,6 +5,7 @@ import {
     applyQuickEdit,
     cloneRecipe,
     describeAdjustment,
+    describeKnobBaseline,
     describeTemperatureBaseline,
     effectiveGrind,
     quickEditBounds,
@@ -12,21 +13,37 @@ import {
     quickEditRecordAdjustments,
 } from "@/library/quickEdit";
 
+type CoffeeRecipeOptions = {
+    volumes?: number[];
+    temperatures?: number[];
+    dosage?: number;
+    ratio?: number;
+    grinder?: boolean;
+    grindSize?: number;
+};
+
 function coffeeRecipe(
-    volumes: number[] = [30, 105, 105],
+    optionsOrVolumes: CoffeeRecipeOptions | number[] = [30, 105, 105],
     temperatures: number[] = [92, 90, 88]
 ): Recipe {
+    const options = Array.isArray(optionsOrVolumes) ? {} : optionsOrVolumes;
+    const volumes = Array.isArray(optionsOrVolumes)
+        ? optionsOrVolumes
+        : options.volumes ?? [30, 105, 105];
+    const stageTemperatures = Array.isArray(optionsOrVolumes)
+        ? temperatures
+        : options.temperatures ?? temperatures;
     const recipe = new Recipe();
     recipe.cupType = CUP_TYPE.XPOD;
-    recipe.dosage = 15;
-    recipe.ratio = 16;
-    recipe.grinder = true;
-    recipe.grindSize = 50;
+    recipe.dosage = options.dosage ?? 15;
+    recipe.ratio = options.ratio ?? 16;
+    recipe.grinder = options.grinder ?? true;
+    recipe.grindSize = options.grindSize ?? 50;
     recipe.pours = volumes.map((volume, index) =>
         new Pour(
             index + 1,
             volume,
-            temperatures[index] ?? temperatures[temperatures.length - 1],
+            stageTemperatures[index] ?? stageTemperatures[stageTemperatures.length - 1],
             30,
             0,
             [POUR_PATTERN.CENTERED, POUR_PATTERN.CIRCULAR, POUR_PATTERN.SPIRAL][index] ??
@@ -210,6 +227,36 @@ describe("quickEditRecordAdjustments", () => {
 
     it("ignores grind metadata for tea", () => {
         expect(quickEditRecordAdjustments(teaRecipe(), {grind: 62})).toBeUndefined();
+    });
+});
+
+describe("describeKnobBaseline", () => {
+    it("says what the recipe's dose is", () => {
+        const recipe = coffeeRecipe({dosage: 18});
+        expect(describeKnobBaseline(recipe, "dose", 1)).toBe("recipe 18 g");
+    });
+
+    it("says what the recipe's ratio is", () => {
+        const recipe = coffeeRecipe({ratio: 16});
+        expect(describeKnobBaseline(recipe, "ratio", 1)).toBe("recipe 16");
+    });
+
+    it("says OFF where the recipe does not grind", () => {
+        const recipe = coffeeRecipe({grinder: false, grindSize: 65});
+        expect(describeKnobBaseline(recipe, "grind", 1)).toBe("recipe OFF");
+    });
+
+    it("keeps the latent grind size out of it", () => {
+        // The grinder toggle does not clear `grindSize`, so a recipe that does
+        // not grind still carries a number. The baseline must report what the
+        // machine would do, not what the field happens to hold.
+        const recipe = coffeeRecipe({grinder: true, grindSize: 65});
+        expect(describeKnobBaseline(recipe, "grind", 1)).toBe("recipe 65");
+    });
+
+    it("drops the word at a large font scale, like the temperature baseline", () => {
+        const recipe = coffeeRecipe({dosage: 18});
+        expect(describeKnobBaseline(recipe, "dose", 1.4)).toBe("18 g");
     });
 });
 
