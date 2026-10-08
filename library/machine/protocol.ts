@@ -170,6 +170,23 @@ export const MACHINE_STATE = {
  */
 export const PAUSED_STATE = MACHINE_STATE.ARMED;
 
+/** The command that pauses a running brew. Hardware 2026-10-08, V12.0D.500. */
+export const PAUSE_COMMAND = 40518;
+
+/** The command that resumes one. */
+export const RESUME_COMMAND = 40524;
+
+/**
+ * The command a built frame carries, or null if it is too short to say.
+ *
+ * Bytes 3 and 4, little-endian, the same two `frame()` writes. Read back off
+ * the bytes rather than threaded alongside them because the console builds
+ * frames by hand and `send` is the only place both paths meet.
+ */
+export function frameCommand(frame: Uint8Array): number | null {
+    return frame.length < 5 ? null : frame[3] | (frame[4] << 8);
+}
+
 /** Notification codes the brew state machine reacts to. */
 export const EVENT = {
     COFFEE_STARTING:  40502,

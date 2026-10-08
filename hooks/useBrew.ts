@@ -4,7 +4,7 @@ import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import type Machine from "@/library/machine/Machine";
 import {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Machine";
-import {RadioUnavailableError} from "@/library/machine/errors";
+import {BluetoothPermissionError, RadioUnavailableError} from "@/library/machine/errors";
 import type {BypassTempEncoding} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
 
@@ -85,15 +85,23 @@ export function useBrew(injected?: Machine): Brewer {
      * being sent is never retried: that would be a second dose.
      */
     function worthRelinking(e: unknown): boolean {
-        // A radio that is off or unauthorised is a fact about the phone. A
-        // second attempt changes nothing and costs a beep.
+        // A radio that is off is a fact about the phone, and a permission the
+        // user declined is a fact about their answer. Neither changes on a
+        // second attempt, and `openLink` deliberately keeps the permission
+        // check outside its own retrying so nobody is asked twice.
         if (e instanceof RadioUnavailableError) return false;
+        if (e instanceof BluetoothPermissionError) return false;
         const phase = machine.phase;
-        if (phase.name === "failed" && phase.reason === "blocked") {
-            return RELINK_BLOCKS.has(phase.block ?? "");
+        // Every other failed phase is left alone, including `rejected`. The
+        // transport writes without response, so a write that threw does not
+        // prove the frame missed the machine -- the recipe may have landed and
+        // be grinding -- and a resend there is a second dose. Only the two
+        // pre-flight blocks above are known to have sent nothing at all.
+        if (phase.name === "failed") {
+            return phase.reason === "blocked" && RELINK_BLOCKS.has(phase.block ?? "");
         }
-        // Nothing was refused, so the attempt died on its way to the machine:
-        // the connect threw, or a write did. That is the link.
+        // Nothing was refused and nothing failed, so the attempt died before
+        // the machine was reached at all: the connect threw. That is the link.
         return !isActiveBrewPhase(phase);
     }
 

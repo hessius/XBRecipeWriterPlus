@@ -20,8 +20,11 @@ import {
     encodeCoffeeBlob,
     encodeTeaBlob,
     EVENT,
+    frameCommand,
     MACHINE_STATE,
     parseNotification,
+    PAUSE_COMMAND,
+    RESUME_COMMAND,
     splitFrames,
     type BypassTempEncoding,
     type MachineInfo,
@@ -301,6 +304,16 @@ export default class Machine {
      */
     private sequence = 0;
     private brewing = false;
+    /**
+     * Whether a pause has been sent and not yet resumed.
+     *
+     * A paused brew reports `ARMED`, which is also what a loaded recipe
+     * reports, so the state alone cannot tell them apart and only the sender
+     * can. Nothing in the app sends a pause yet; the machine console can, and
+     * without this a console pause would be recorded as a stopped brew and a
+     * later resume ignored.
+     */
+    private pauseSent = false;
     private ackTimer: ReturnType<typeof setTimeout> | null = null;
     /**
      * Promotes a stranded `settling` to `done` after `settleCapMs`.
@@ -667,6 +680,13 @@ export default class Machine {
         // written before the radio has accepted the frame says a frame was
         // sent when the write is about to throw.
         await this.transport.write(frame);
+        // A pause reports the same ARMED state a loaded recipe does, so the
+        // only thing that can tell them apart is having sent one. Read off the
+        // bytes here rather than tracked by a caller, because the machine
+        // console builds its frames by hand and this is where both paths meet.
+        const command = frameCommand(frame);
+        if (command === PAUSE_COMMAND) this.pauseSent = true;
+        if (command === RESUME_COMMAND) this.pauseSent = false;
         this.emitFrame("sent", frame, {kind: "unknown", raw: frame});
     }
 
@@ -880,6 +900,7 @@ export default class Machine {
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
         this.retriedInPro = false;
+        this.pauseSent = false;
         // A brew that died on the machine leaves a warning up, and a machine
         // sitting on a warning will not take a recipe: on device, TRY AGAIN
         // after a no-beans stop did nothing until the warning was dismissed by
@@ -1156,6 +1177,11 @@ export default class Machine {
                 //
                 // So the state walking backwards is itself the ending. Why is
                 // not knowable from here and is not guessed at.
+                // A pause lands here too, on the same code (`PAUSED_STATE`),
+                // and a paused brew is still a brew: the machine is holding
+                // it and a resume carries on from where it stopped. Only the
+                // sender knows which this is.
+                if (this.pauseSent) break;
                 if (STARTED.has(this.phase.name)) {
                     this.setPhase({name: "failed", reason: "stopped"});
                     break;
@@ -1178,6 +1204,7 @@ export default class Machine {
                 this.setPhase({name: "pressPlay"});
                 break;
             case MACHINE_STATE.STARTING:
+                this.pauseSent = false;
                 // Grinding begins here, and the machine now goes silent for
                 // about twenty seconds. There is no timeout on this phase.
                 this.setPhase({name: "grinding"});

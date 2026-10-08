@@ -2,7 +2,7 @@ import Machine, {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Mach
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {FRAME_GAP_MS, INFO_ATTEMPTS, RECIPE_ACK_MS, STATE_FRESH_MS} from "@/constants/machine";
-import {buildType1} from "@/library/machine/protocol";
+import {buildType1, PAUSE_COMMAND, RESUME_COMMAND} from "@/library/machine/protocol";
 import {RadioUnavailableError} from "@/library/machine/errors";
 
 import {FakeTransport, machineInfoFrame} from "./FakeTransport";
@@ -626,6 +626,47 @@ describe("brewing", () => {
         const last = phases.at(-1);
         expect(last?.name).toBe("failed");
         expect(last?.name === "failed" && last.reason).toBe("stopped");
+    });
+
+    it("does not call a pause an ending", async () => {
+        // A pause reports the same ARMED code a loaded recipe does, so the
+        // state alone cannot tell them apart. Nothing in the app sends a pause
+        // yet, but the machine console can, and without this a console pause
+        // would record a failed brew and ignore the resume that followed.
+        const {transport, machine} = await readyMachine();
+        const phases: string[] = [];
+        machine.onPhase((phase) => phases.push(phase.name));
+
+        await machine.brew(brewable());
+        transport.emit(status(0x1F));      // armed
+        transport.emit(status(0x22));      // starting
+        transport.emit(event(40507));      // grinder stop
+        transport.emit(event(40510));      // pour 1
+        await machine.send(buildType1(PAUSE_COMMAND));
+        transport.emit(status(0x1F));      // armed, because it is paused
+
+        expect(phases).not.toContain("failed");
+    });
+
+    it("ends a brew stopped after a pause was resumed", async () => {
+        // The flag is not a one-way latch: once the resume has gone out the
+        // machine is running again, and the next walk backwards is an ending
+        // like any other.
+        const {transport, machine} = await readyMachine();
+        const phases: BrewPhase[] = [];
+        machine.onPhase((phase) => phases.push(phase));
+
+        await machine.brew(brewable());
+        transport.emit(status(0x1F));
+        transport.emit(status(0x22));
+        transport.emit(event(40507));
+        transport.emit(event(40510));
+        await machine.send(buildType1(PAUSE_COMMAND));
+        await machine.send(buildType1(RESUME_COMMAND));
+        transport.emit(event(40510));      // pouring again
+        transport.emit(status(0x1F));
+
+        expect(phases.at(-1)?.name).toBe("failed");
     });
 
     it("does not call a repeat of the loaded state an ending", async () => {

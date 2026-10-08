@@ -10,7 +10,7 @@
 import {act, renderHook} from "@testing-library/react-native";
 
 import {useBrew} from "@/hooks/useBrew";
-import {RadioUnavailableError} from "@/library/machine/errors";
+import {BluetoothPermissionError, RadioUnavailableError} from "@/library/machine/errors";
 import type Machine from "@/library/machine/Machine";
 import type {BrewPhase} from "@/library/machine/Machine";
 import Pour from "@/library/Pour";
@@ -158,6 +158,32 @@ describe("a brew the machine actually refused", () => {
         // spent a dose, and a silent retry would spend another.
         const machine = fake({
             phaseAfterFailure: {name: "grinding"}
+        });
+
+        await run(machine);
+
+        expect(machine.attempts).toBe(1);
+    });
+
+    it("never resends a recipe a write threw on", async () => {
+        // The transport writes without response, so a write that threw does
+        // not prove the frame missed the machine. The recipe may have landed
+        // and be grinding; a resend there is a second dose.
+        const machine = fake({
+            phaseAfterFailure: {name: "failed", reason: "rejected"}
+        });
+
+        await run(machine);
+
+        expect(machine.attempts).toBe(1);
+    });
+
+    it("does not ask for Bluetooth permission a second time", async () => {
+        // `openLink` keeps the permission check outside its own retrying on
+        // purpose, so that a declined prompt is not repeated.
+        const machine = fake({
+            phaseAfterFailure: {name: "idle"},
+            thrown: new BluetoothPermissionError("Bluetooth permission is off.", true)
         });
 
         await run(machine);
