@@ -110,6 +110,12 @@ type Props = {
      * ended.
      */
     grind?: GrindFigure | null;
+    /**
+     * The measured width available to the figures, after their container's own
+     * padding. Unlike `textScale`, this is layout width; unlike OS font scale,
+     * it says nothing about accessibility text size.
+     */
+    contentWidth: number;
     /** Story cards shrink figures from the 430 pt reference width. */
     textScale?: number;
 };
@@ -221,7 +227,7 @@ export default function BrewFigures(
     {
         water, cup, seconds, accent, bypass, drawdown = null, flow = null,
         flowTail, pourRate = null, reserveFlow = false, reserveDrawdown = false,
-        drawdownRate = null, delay = null, grind = null, textScale = 1
+        drawdownRate = null, delay = null, grind = null, contentWidth, textScale = 1
     }: Props
 ) {
     const {fontScale = 1} = useWindowDimensions();
@@ -270,8 +276,8 @@ export default function BrewFigures(
     // `fontScale` is the user's OS text size; `textScale` is only the story
     // card's width shrink. The detail row needs both and must not conflate
     // them, because story cards can be shrunken while OS text is enlarged.
-    const fourColumns = brewFigureUsesFourColumns(fontScale);
-    const columnFlex = brewFigureColumnFlex(fontScale);
+    const fourColumns = brewFigureUsesFourColumns(fontScale, contentWidth);
+    const columnFlex = brewFigureColumnFlex(fontScale, contentWidth);
     const grindValue = grind === null
         ? ""
         : grind.kind === "off"

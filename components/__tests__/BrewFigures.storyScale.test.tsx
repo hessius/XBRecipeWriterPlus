@@ -25,6 +25,7 @@ import {renderWithProviders} from "@/test-utils/render";
 
 const MockText = Text;
 type MockTextStyle = TextStyle & {minFontSize?: number};
+const DEFAULT_CONTENT_WIDTH = 333;
 const mockWindow = {fontScale: 1, height: 852, scale: 3, width: 393};
 
 jest.mock("@/components/DotMatrixText", () => ({
@@ -68,7 +69,7 @@ describe("BrewFigures story scaling", () => {
 
     it("passes the story text scale to both value and label text", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196}
                          accent="#8ab4f8" textScale={0.5} />
         );
 
@@ -82,7 +83,7 @@ describe("BrewFigures story scaling", () => {
 
     it("scales the bypass badge text and chrome with the story card", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196}
                          accent="#8ab4f8" bypass={60} textScale={0.5} />
         );
 
@@ -100,7 +101,7 @@ describe("BrewFigures story scaling", () => {
 
     it("scales every second-row value and badge gap with the story card", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196}
                          accent="#8ab4f8" drawdown={32}
                          drawdownRate={2.1} delay={5}
                          grind={{kind: "dial", dial: 53, recipe: 60}}

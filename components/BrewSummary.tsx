@@ -278,6 +278,7 @@ export default function BrewSummary({
                 drawdownRate={drawdownRate}
                 delay={delay}
                 grind={grind}
+                contentWidth={traceWidth}
                 textScale={textScale}
             />
             </View>

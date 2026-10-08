@@ -15,6 +15,7 @@ export const BREW_FIGURE_BADGE_PADDING_Y = 1;
 export const BREW_FIGURE_BADGE_BORDER_WIDTH = 1;
 export const BREW_FIGURE_BADGE_GAP = 6;
 export const BREW_FIGURE_BADGE_RADIUS = 4;
+export const STORY_FIT_MARGIN = 0.75;
 
 export type BrewFigureTextGeometry = {
     labelSize: number;
@@ -75,22 +76,6 @@ export function brewFigureBadgeWidth(
 }
 
 /**
- * The text scale above which the detail row drops to three columns.
- *
- * Four columns hold at the default size and up to here. Past it the only
- * string that cannot follow is the `RECIPE nn` badge, which needs about
- * 97.16 pt at the 1.4 accessibility cap against the 74.32 pt an equal
- * quarter of the corrected narrow row would give it. With the weighted shares
- * below, GRIND gets 92.9 pt, which still cannot hold the badge at the cap.
- * Nothing is truncated and nothing is abbreviated; the row simply spends its
- * width on three columns instead of four.
- *
- * Exact, and here rather than inline at the call site, so the fallback is a
- * documented threshold both the layout and its test read from one place.
- */
-export const BREW_FIGURE_FOUR_COLUMN_MAX_SCALE = 1.2;
-
-/**
  * DRAWDOWN is the only eight-character label in the row, so its column is
  * wider than the others rather than the row being sized for its longest word.
  */
@@ -104,21 +89,36 @@ export const BREW_FIGURE_DRAWDOWN_FLEX = 1.4;
 export const BREW_FIGURE_GRIND_FLEX = 1.25;
 export const BREW_FIGURE_DELAY_FLEX = 0.75;
 
-/** Whether the detail row can afford four columns at this text scale. */
-export function brewFigureUsesFourColumns(fontScale: number): boolean {
-    return fontScale <= BREW_FIGURE_FOUR_COLUMN_MAX_SCALE;
+const FOUR_COLUMN_FLEX = [
+    BREW_FIGURE_GRIND_FLEX,
+    BREW_FIGURE_DELAY_FLEX,
+    BREW_FIGURE_DRAWDOWN_FLEX,
+    1
+];
+const THREE_COLUMN_FLEX = [1, 1, 1];
+
+function columnWidthsForFlex(contentWidth: number, flex: number[], scale = 1): number[] {
+    const geometry = brewFigureTextGeometry(scale);
+    const free = Math.max(0, contentWidth - geometry.columnGap * (flex.length - 1));
+    const total = flex.reduce((sum, share) => sum + share, 0);
+    return flex.map((share) => (free * share) / total);
+}
+
+/** Whether the detail row can afford four columns at this width and text scale. */
+export function brewFigureUsesFourColumns(fontScale: number, contentWidth: number): boolean {
+    // Before the first layout pass there is no measured width. Assume the
+    // intended row, otherwise mount can blink through the fallback and back.
+    if (contentWidth <= 0) return true;
+
+    const [grind] = columnWidthsForFlex(contentWidth, FOUR_COLUMN_FLEX);
+    return brewFigureBadgeWidth("RECIPE 58", fontScale) + STORY_FIT_MARGIN <= grind;
 }
 
 /** The flex shares the detail row's columns take, left to right. */
-export function brewFigureColumnFlex(fontScale: number): number[] {
-    return brewFigureUsesFourColumns(fontScale)
-        ? [
-            BREW_FIGURE_GRIND_FLEX,
-            BREW_FIGURE_DELAY_FLEX,
-            BREW_FIGURE_DRAWDOWN_FLEX,
-            1
-        ]
-        : [1, 1, 1];
+export function brewFigureColumnFlex(fontScale: number, contentWidth: number): number[] {
+    return brewFigureUsesFourColumns(fontScale, contentWidth)
+        ? FOUR_COLUMN_FLEX
+        : THREE_COLUMN_FLEX;
 }
 
 /**
@@ -134,9 +134,9 @@ export function brewFigureColumnWidths(
     fontScale: number,
     scale = 1
 ): number[] {
-    const flex = brewFigureColumnFlex(fontScale);
-    const geometry = brewFigureTextGeometry(scale);
-    const free = Math.max(0, contentWidth - geometry.columnGap * (flex.length - 1));
-    const total = flex.reduce((sum, share) => sum + share, 0);
-    return flex.map((share) => (free * share) / total);
+    return columnWidthsForFlex(
+        contentWidth,
+        brewFigureColumnFlex(fontScale, contentWidth),
+        scale
+    );
 }

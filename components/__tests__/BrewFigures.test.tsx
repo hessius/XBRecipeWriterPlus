@@ -30,6 +30,7 @@ jest.mock("@/components/FlowSparkline", () => {
 });
 
 const TEST_ACCENT = accents.coffee[1];
+const DEFAULT_CONTENT_WIDTH = 333;
 const DEFAULT_WINDOW = {fontScale: 1, height: 852, scale: 3, width: 393};
 
 function mockWindowFontScale(fontScale: number): void {
@@ -44,7 +45,7 @@ describe("BrewFigures", () => {
 
     it("shows water, cup and time", async () => {
         const {getByText} = await renderWithProviders(
-            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={182} cup={174} seconds={126} accent={TEST_ACCENT} />
         );
         expect(getByText("182")).toBeTruthy();
         expect(getByText("174")).toBeTruthy();
@@ -53,14 +54,14 @@ describe("BrewFigures", () => {
 
     it("labels each figure", async () => {
         const {getByText} = await renderWithProviders(
-            <BrewFigures water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
         );
         ["WATER", "CUP", "TIME"].forEach((label) => expect(getByText(label)).toBeTruthy());
     });
 
     it("renders the figure gaps the story budget uses", async () => {
         await renderWithProviders(
-            <BrewFigures water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
         );
 
         expect(screen.getByTestId("brew-figures")).toHaveStyle({gap: BREW_FIGURE_ROW_GAP});
@@ -73,7 +74,7 @@ describe("BrewFigures", () => {
         // The scale reports tenths and they flicker. A readout that changes
         // every 100 ms is unreadable at this size.
         const {getByText} = await renderWithProviders(
-            <BrewFigures water={182.4} cup={173.6} seconds={5.9} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={182.4} cup={173.6} seconds={5.9} accent={TEST_ACCENT} />
         );
         expect(getByText("182")).toBeTruthy();
         expect(getByText("174")).toBeTruthy();
@@ -82,14 +83,14 @@ describe("BrewFigures", () => {
 
     it("pads the seconds", async () => {
         const {getByText} = await renderWithProviders(
-            <BrewFigures water={0} cup={0} seconds={65} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={0} cup={0} seconds={65} accent={TEST_ACCENT} />
         );
         expect(getByText("1:05")).toBeTruthy();
     });
 
     it("breaks the bypass out beside the water, rather than folding it in", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8" bypass={5} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196} accent="#8ab4f8" bypass={5} />
         );
         expect(screen.getByText("240")).toBeTruthy();
         expect(screen.getByText("+5")).toBeTruthy();
@@ -97,7 +98,7 @@ describe("BrewFigures", () => {
 
     it("gives the drawdown its own smaller figure", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8"
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196} accent="#8ab4f8"
                          drawdown={22} />
         );
         expect(screen.getByText("DRAWDOWN")).toBeTruthy();
@@ -110,7 +111,7 @@ describe("BrewFigures", () => {
         // is floored. The figure arrives unrounded so that the floor here is
         // the only rounding it meets.
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8"
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196} accent="#8ab4f8"
                          drawdown={22.6} />
         );
         expect(screen.getByText("0:22")).toBeTruthy();
@@ -120,7 +121,7 @@ describe("BrewFigures", () => {
         // A cancelled brew never drew down and an old record cannot say. 0:00
         // for either would invent a figure somebody might dial a grind by.
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8" />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196} accent="#8ab4f8" />
         );
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
         expect(screen.queryByTestId("figures-detail-slot")).toBeNull();
@@ -128,14 +129,14 @@ describe("BrewFigures", () => {
 
     it("shows no badge without a bypass", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196} accent="#8ab4f8" />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196} accent="#8ab4f8" />
         );
         expect(screen.queryByTestId("figures-bypass")).toBeNull();
     });
 
     it("shows the live rate with its sparkline", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
                 flow={2.4} flowTail={[1, 2, 2.4, 2.2]}
             />
@@ -150,7 +151,7 @@ describe("BrewFigures", () => {
 
     it("draws no flow row at all when there is no rate to report", async () => {
         await renderWithProviders(
-            <BrewFigures water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={0} cup={0} seconds={0} accent={TEST_ACCENT} />
         );
         expect(screen.queryByTestId("figures-flow")).toBeNull();
         expect(screen.queryByTestId("figures-flow-slot")).toBeNull();
@@ -158,7 +159,7 @@ describe("BrewFigures", () => {
 
     it("draws the row without a sparkline when the tail is too short", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
                 flow={2.4} flowTail={[2.4]}
             />
@@ -170,7 +171,7 @@ describe("BrewFigures", () => {
 
     it("shows the pour rate as the second flow figure", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
                 flow={2.4} pourRate={3.1}
             />
@@ -185,7 +186,7 @@ describe("BrewFigures", () => {
 
     it("leaves the pour rate out when only the cup rate is known", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
                 flow={2.4}
             />
@@ -197,7 +198,7 @@ describe("BrewFigures", () => {
 
     it("does not print negative-zero flow rates", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
                 flow={-0.04} pourRate={-0.04}
             />
@@ -208,7 +209,7 @@ describe("BrewFigures", () => {
 
     it("reserves the flow row height when asked", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
                 reserveFlow
             />
@@ -222,7 +223,7 @@ describe("BrewFigures", () => {
         const scaleSpy = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1.4);
 
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
                 reserveFlow
             />
@@ -237,14 +238,14 @@ describe("BrewFigures", () => {
 
     it("does not reserve the flow row height by default", async () => {
         await renderWithProviders(
-            <BrewFigures water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
         );
         expect(screen.queryByTestId("figures-flow-slot")).toBeNull();
     });
 
     it("reserves the live drawdown row height when asked", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={120} cup={90} seconds={60} accent={TEST_ACCENT}
                 reserveDrawdown
             />
@@ -256,7 +257,7 @@ describe("BrewFigures", () => {
 
     it("puts the average rate in its own figure", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={240} cup={200} seconds={140} accent={TEST_ACCENT}
                 drawdown={40} drawdownRate={2}
             />
@@ -275,7 +276,7 @@ describe("BrewFigures", () => {
 
     it("leaves the drawdown badge out when there is no rate", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={240} cup={200} seconds={140} accent={TEST_ACCENT}
                 drawdown={40}
             />
@@ -285,7 +286,7 @@ describe("BrewFigures", () => {
 
     it("orders the second-row figures by related columns", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={240} cup={200} seconds={140} accent={TEST_ACCENT}
                 drawdown={40}
                 delay={5}
@@ -300,7 +301,7 @@ describe("BrewFigures", () => {
 
     it("shows the delay as the middle second-row figure", async () => {
         await renderWithProviders(
-            <BrewFigures
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                 water={240} cup={200} seconds={140} accent={TEST_ACCENT}
                 delay={5}
             />
@@ -314,7 +315,7 @@ describe("BrewFigures", () => {
 
     it("draws no second-row slot when every second-row figure is absent", async () => {
         await renderWithProviders(
-            <BrewFigures water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
         );
         expect(screen.queryByTestId("figures-detail-slot")).toBeNull();
     });
@@ -323,7 +324,7 @@ describe("BrewFigures", () => {
         /** The three figures above are required props and say nothing here. */
         const detail = (props: Partial<React.ComponentProps<typeof BrewFigures>>) =>
             renderWithProviders(
-                <BrewFigures water={182} cup={174} seconds={126}
+                <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={182} cup={174} seconds={126}
                              accent={TEST_ACCENT} drawdown={30} {...props} />
             );
 
@@ -401,7 +402,7 @@ describe("BrewFigures", () => {
 describe("the grind dial", () => {
     it("shows the confirmed dial as the grind figure", async () => {
         await renderWithProviders(
-            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={182} cup={174} seconds={126} accent={TEST_ACCENT}
                          grind={{kind: "dial", dial: 47, recipe: null}} />
         );
         expect(screen.getByText("GRIND")).toBeTruthy();
@@ -412,7 +413,7 @@ describe("the grind dial", () => {
 
     it("badges the recipe grind when it differed from the dial", async () => {
         await renderWithProviders(
-            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={182} cup={174} seconds={126} accent={TEST_ACCENT}
                          grind={{kind: "dial", dial: 53, recipe: 60}} />
         );
         expect(screen.getByText("53")).toBeTruthy();
@@ -422,7 +423,7 @@ describe("the grind dial", () => {
 
     it("shows off without a recipe badge when the grinder was off", async () => {
         await renderWithProviders(
-            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={182} cup={174} seconds={126} accent={TEST_ACCENT}
                          grind={{kind: "off"}} />
         );
         expect(screen.getByText("GRIND")).toBeTruthy();
@@ -435,7 +436,7 @@ describe("the grind dial", () => {
         // Absent, never zero. A dial of 0 is not a setting, and printing one
         // would be an invented fact next to three measured ones.
         await renderWithProviders(
-            <BrewFigures water={182} cup={174} seconds={126} accent={TEST_ACCENT} />
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={182} cup={174} seconds={126} accent={TEST_ACCENT} />
         );
         expect(screen.queryByTestId("figures-grind")).toBeNull();
     });
