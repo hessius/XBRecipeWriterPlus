@@ -14,6 +14,7 @@ import {
     BREW_FIGURE_DETAIL_VALUE_SIZE,
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
+    BREW_FIGURE_ADJUSTMENT_ROW_GAP,
     BREW_FIGURE_ROW_GAP,
     BREW_FIGURE_VALUE_SIZE,
     brewFigureBadgeGeometry,
@@ -920,7 +921,7 @@ export function storySummaryBudget(
                 )
             ) : 0)
             + (showDetails ? adjustmentRows * (
-                BREW_FIGURE_ROW_GAP
+                BREW_FIGURE_ADJUSTMENT_ROW_GAP
                 + figureRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale, width, true)
             ) : 0)
             + (showNote ? dotoRowHeight(scaledSize(11, width), fontScale) + 8 : 0);

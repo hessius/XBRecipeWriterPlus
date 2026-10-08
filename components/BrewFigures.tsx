@@ -582,7 +582,9 @@ export default function BrewFigures(
                 </YStack>
             )}
             {adjusted.length > 0 && (
-                <XStack testID="figures-adjustments-row" gap={figureText.columnGap}
+                <XStack testID="figures-adjustments-row"
+                        columnGap={figureText.columnGap}
+                        rowGap={figureText.adjustmentRowGap}
                         flexWrap="wrap">
                     {adjusted.map((figure) => (
                         <Figure

@@ -5,6 +5,7 @@ export const BREW_FIGURE_VALUE_SIZE = 28;
 export const BREW_FIGURE_DETAIL_VALUE_SIZE = 20;
 export const BREW_FIGURE_INTERNAL_GAP = 2;
 export const BREW_FIGURE_ROW_GAP = 4;
+export const BREW_FIGURE_ADJUSTMENT_ROW_GAP = BREW_FIGURE_ROW_GAP;
 export const BREW_FIGURE_COLUMN_GAP = 13;
 export const BREW_FIGURE_VALUE_TRACKING = 0.5;
 export const BREW_FIGURE_LABEL_TRACKING = 1.6;
@@ -25,6 +26,7 @@ export type BrewFigureTextGeometry = {
     labelTracking: number;
     valueTracking: number;
     columnGap: number;
+    adjustmentRowGap: number;
 };
 
 export type BrewFigureBadgeGeometry = {
@@ -44,7 +46,8 @@ export function brewFigureTextGeometry(scale = 1): BrewFigureTextGeometry {
         detailValueSize: BREW_FIGURE_DETAIL_VALUE_SIZE * scale,
         labelTracking:   BREW_FIGURE_LABEL_TRACKING * scale,
         valueTracking:   BREW_FIGURE_VALUE_TRACKING * scale,
-        columnGap:       BREW_FIGURE_COLUMN_GAP * scale
+        columnGap:       BREW_FIGURE_COLUMN_GAP * scale,
+        adjustmentRowGap: BREW_FIGURE_ADJUSTMENT_ROW_GAP * scale
     };
 }
 
