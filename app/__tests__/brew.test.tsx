@@ -558,8 +558,58 @@ describe("brew route", () => {
             .toBeTruthy();
     });
 
-    it("gives the summary the height its scroller measured", async () => {
+    /**
+     * The summary ends at a hard border, and a long stage list carries on
+     * below it with nothing saying so. These three pin the fade that says so.
+     *
+     * The first is the one that matters: it is the wiring, and without it the
+     * fade renders, never moves, and every other test still passes.
+     */
+    it("tells the fade where the summary has been scrolled to", async () => {
         const {getByTestId} = await drawDone();
+        expect(typeof getByTestId("done-scroll").props.onScroll).toBe("function");
+        expect(getByTestId("done-scroll").props.scrollEventThrottle).toBe(16);
+    });
+
+    /**
+     * And how big it is, from both ends. A scroll event is the only thing
+     * that carries every number the fade needs, so a fade fed by scrolling
+     * alone stays invisible until the reader has already scrolled, which is
+     * exactly the reader who did not need telling.
+     */
+    it("tells the fade how big the summary and its scroller are", async () => {
+        const {getByTestId} = await drawDone();
+        expect(typeof getByTestId("done-scroll").props.onContentSizeChange)
+            .toBe("function");
+
+        // The scroller's own height is measured for the summary as well, so
+        // this one has to stay hooked up to both.
+        await act(async () => {
+            fireEvent(getByTestId("done-scroll"), "layout", {
+                nativeEvent: {layout: {height: 640, width: 354, x: 0, y: 0}}
+            });
+        });
+        expect(summaryProps.availableHeight).toBe(640);
+    });
+
+    it("draws the fade over the summary", async () => {
+        const {getByTestId} = await drawDone();
+        expect(getByTestId("done-fade", {includeHiddenElements: true})).toBeTruthy();
+    });
+
+    /**
+     * The fade is a sibling of the scroller, not a child of it, and so it is
+     * outside the ViewShot. A fade inside the capture would bake a hint about
+     * scrolling into a picture nobody can scroll, across the last stage of
+     * the brew somebody chose to share.
+     */
+    it("keeps the fade out of the exported card", async () => {
+        const {getByTestId} = await drawDone();
+        expect(within(getByTestId("done-scroll"))
+            .queryByTestId("done-fade", {includeHiddenElements: true})).toBeNull();
+    });
+
+    it("gives the summary the height its scroller measured", async () => {        const {getByTestId} = await drawDone();
 
         await act(async () => {
             fireEvent(getByTestId("done-scroll"), "layout", {
