@@ -22,6 +22,7 @@ import RenameSheet from "@/components/RenameSheet";
 import RevertSheet from "@/components/RevertSheet";
 import QuickEditPanel from "@/components/QuickEditPanel";
 import SegmentedRow from "@/components/SegmentedRow";
+import SplitBrewButton from "@/components/SplitBrewButton";
 import StageProfile from "@/components/StageProfile";
 import StageTile, {type StageField} from "@/components/StageTile";
 import Stepper from "@/components/Stepper";
@@ -603,6 +604,7 @@ type ActionBarProps = {
     /** Only true once a machine has been remembered. */
     canBrewAtAll: boolean;
     canBrew: boolean;
+    quickEditOpen: boolean;
     onBrew: () => void;
     onQuickEdit: () => void;
     canWrite: boolean;
@@ -635,14 +637,6 @@ type BarButtonProps = {
     accent?: string;
     flex: number;
     onPress: () => void;
-};
-
-type SplitBrewButtonProps = {
-    enabled: boolean;
-    accent: string;
-    flex: number;
-    onBrew: () => void;
-    onQuickEdit: () => void;
 };
 
 /**
@@ -690,48 +684,12 @@ function BarButton({label, accessibilityLabel, enabled, accent, flex, onPress}: 
     );
 }
 
-function SplitBrewButton({enabled, accent, flex, onBrew, onQuickEdit}: SplitBrewButtonProps) {
-    const fill = palette.none;
-    const brewFill = enabled ? accent : fill;
-    const quickFill = accent;
-
-    return (
-        <XStack flex={flex} borderRadius="$4" overflow="hidden"
-                borderWidth={1} borderColor={accent} backgroundColor={palette.none}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Brew"
-                       accessibilityState={{disabled: !enabled}}
-                       onPress={() => enabled && onBrew()}
-                       style={{flex: 1.55}}>
-                <YStack alignItems="center" paddingVertical="$3.5"
-                        backgroundColor={brewFill}>
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                   color={enabled ? palette.base : palette.muted}>
-                        BREW
-                    </DotMatrixText>
-                </YStack>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Quick edit brew"
-                       onPress={onQuickEdit}
-                       style={{flex: 0.45}}>
-                <YStack alignItems="center" paddingVertical="$3.5"
-                        borderLeftWidth={1} borderLeftColor={accent}
-                        backgroundColor={quickFill}>
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.6}
-                                   color={palette.base}>
-                        ▲
-                    </DotMatrixText>
-                </YStack>
-            </Pressable>
-        </XStack>
-    );
-}
-
 function readKnownTags(database: RecipeDatabase): string[] {
     return database.countRecipesByTag().map(({tag}) => tag);
 }
 
 function ActionBar({
-    accent, canBrewAtAll, canBrew, onBrew, onQuickEdit, canWrite, canSave,
+    accent, canBrewAtAll, canBrew, quickEditOpen, onBrew, onQuickEdit, canWrite, canSave,
     onWrite, onSave, onHeight
 }: ActionBarProps) {
     const insets = useSafeAreaInsets();
@@ -755,8 +713,9 @@ function ActionBar({
                 putting a recipe on a card is then the primary act. */}
             {canBrewAtAll && (
                 <SplitBrewButton enabled={canBrew} accent={accent} flex={2}
+                                 quickEditOpen={quickEditOpen}
                                  onBrew={onBrew}
-                                 onQuickEdit={onQuickEdit}/>
+                                 onToggleQuickEdit={onQuickEdit}/>
             )}
             <BarButton label="WRITE" accessibilityLabel="Write card"
                        enabled={canWrite}
@@ -1413,6 +1372,7 @@ export default function EditRecipe(
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
                        canBrewAtAll={rememberedMachine !== ""}
                        canBrew={canBrew}
+                       quickEditOpen={quickEditOpen}
                        onBrew={onBrewPress}
                        onQuickEdit={onQuickEditOpen}
                        onWrite={onWritePress}
