@@ -19,8 +19,16 @@ type Props = {
     onPress: () => void;
     onDelete: () => void;
     onDuplicate: () => void;
-    /** Nudges the row open briefly on mount so the swipe actions are discoverable. */
-    bounceOnMount?: boolean;
+    /**
+     * Which tray to demonstrate on mount, or null for the usual silence.
+     *
+     * A scalar rather than an options object on purpose: an object literal
+     * would be a new value on every render of the list and would restart the
+     * effect below, so the card would never come back.
+     */
+    hintTray?: "action" | "management" | null;
+    /** Offset for this row, so two rows can be staggered. */
+    hintDelayMs?: number;
     /**
      * Called once the nudge has actually run, so the owner can retire it.
      *
@@ -31,6 +39,14 @@ type Props = {
      * on every change to the query.
      */
     onBounced?: () => void;
+    /**
+     * The user opened a tray by dragging it.
+     *
+     * Reported from `onSwipeableOpenStartDrag`, which fires only for a real
+     * drag, so the hint's own programmatic open is not miscounted as the user
+     * having learned the gesture.
+     */
+    onManualOpen?: () => void;
     /** When true, the card shows its destructive actions instead of hiding them behind a swipe. */
     editing?: boolean;
     /** Forwarded to the card. Owned by the settings screen. */
@@ -146,8 +162,10 @@ export default function SwipeableRecipeRow({
                                                onPress,
                                                onDelete,
                                                onDuplicate,
-                                               bounceOnMount = false,
+                                               hintTray = null,
+                                               hintDelayMs = 0,
                                                onBounced,
+                                               onManualOpen,
                                                editing = false,
                                                showCoffeeMarker = true,
                                                dottedProfile = false,
@@ -165,39 +183,54 @@ export default function SwipeableRecipeRow({
     // volumes summed marked a recipe with a 3100 ml stage as writable.
     const writable = canWriteToCard(recipe);
 
+    // The owner rebuilds its callbacks every render, so depending on
+    // `onBounced` below would tear down and restart the timers on every render
+    // and the card would never come back. The ref keeps the latest callback
+    // without making it an input to the effect.
+    const bouncedRef = useRef(onBounced);
+
     useEffect(() => {
-        if (!bounceOnMount) {
+        bouncedRef.current = onBounced;
+    });
+
+    useEffect(() => {
+        if (hintTray === null || hintTray === undefined) {
             return;
         }
-        // Hint the *action* tray, not the management one.
+        // The hint may now teach both trays, but never by wobbling one card
+        // both ways. The owner assigns one tray to one row and the other tray
+        // to another row, then staggers them, so each card moves in exactly one
+        // direction. That keeps the old warning intact without spending the
+        // lesson on only half the surface: a single card that slides left and
+        // then right still reads as a glitch, while two different cards each
+        // revealing one side read as two discoverable affordances.
         //
-        // There are two trays now, and bouncing both on launch — a wobble left
-        // then right on the top card of every cold start — would be exactly the
-        // intolerable thing this nudge is gated so tightly to avoid (only the
-        // first row, only while the caller keeps `bounceOnMount` true). So it
-        // hints one direction. The management tray is revealed by swiping left,
-        // the iOS swipe-to-delete convention every user already carries; the
-        // genuinely new and unconventional direction is swiping *right* to reach
-        // BREW/SHARE/WRITE, and `openLeft` opens exactly that tray. Teach the
-        // thing that is not already known.
-        const open = setTimeout(() => swipeableRef.current?.openLeft(), BOUNCE_OPEN_DELAY);
+        // `openLeft` reveals the left-rendered action tray (BREW/SHARE/WRITE),
+        // while `openRight` reveals the right-rendered management tray.
+        const open = setTimeout(() => {
+            if (hintTray === "action") {
+                swipeableRef.current?.openLeft();
+            } else {
+                swipeableRef.current?.openRight();
+            }
+        }, BOUNCE_OPEN_DELAY + hintDelayMs);
         const close = setTimeout(() => {
             swipeableRef.current?.close();
             // Reported from the *closing* timer, and this is load-bearing.
             // Reporting from the opening one retired the lesson while it was
-            // still running: the owner set state, `bounceOnMount` went false,
+            // still running: the owner set state, `hintTray` went null,
             // this effect's cleanup ran, and it cleared the very timer that
             // brings the card back. The tray stayed open. Reported from a timer
             // either way rather than from the effect body, because this fires
             // when the lesson has actually been given, and it is an event, not
             // a render, so the owner may set state on it.
-            onBounced?.();
-        }, BOUNCE_CLOSE_DELAY);
+            bouncedRef.current?.();
+        }, BOUNCE_CLOSE_DELAY + hintDelayMs);
         return () => {
             clearTimeout(open);
             clearTimeout(close);
         };
-    }, [bounceOnMount, onBounced]);
+    }, [hintTray, hintDelayMs]);
 
     /**
      * The management tray, revealed by swiping the card left.
@@ -214,14 +247,14 @@ export default function SwipeableRecipeRow({
             <XStack testID="row-actions" paddingLeft="$2" paddingRight="$2"
                     paddingVertical="$3" alignItems="stretch" gap="$2">
                 <Tile icon="duplicate" caption="COPY" tone={palette.success}
-                      testID="row-action-duplicate"
+                      testID="recipe-row-copy"
                       label={`Duplicate ${recipe.displayName()}`}
                       onPress={() => {
                           swipeableRef.current?.close();
                           onDuplicate();
                       }}/>
                 <Tile icon="delete" caption="DELETE" tone={palette.danger}
-                      testID="row-action-delete"
+                      testID="recipe-row-delete"
                       label={`Delete ${recipe.displayName()}`}
                       onPress={() => {
                           swipeableRef.current?.close();
@@ -280,7 +313,7 @@ export default function SwipeableRecipeRow({
                     // act on this specific recipe. Same helper the card uses, so
                     // the tile and the card it slid off cannot disagree.
                     <Tile icon="brew" caption="BREW" tone={resolveAccent(recipe)}
-                          testID="row-action-brew"
+                          testID="recipe-row-brew"
                           label={`Brew ${recipe.displayName()}`}
                           onPress={() => {
                               swipeableRef.current?.close();
@@ -291,7 +324,7 @@ export default function SwipeableRecipeRow({
                     // Recipe-agnostic verbs, so a neutral ink rather than the
                     // accent BREW earns.
                     <Tile icon="share" caption="SHARE" tone={palette.info}
-                          testID="row-action-share"
+                          testID="recipe-row-share"
                           label={`Share ${recipe.displayName()}`}
                           onPress={() => {
                               swipeableRef.current?.close();
@@ -306,7 +339,7 @@ export default function SwipeableRecipeRow({
                     // wrong. The refusal belongs on the control it refuses:
                     // WRITE is dimmed, and a screen reader hears why.
                     <Tile icon="write" caption="WRITE" tone={palette.text}
-                          testID="row-action-write"
+                          testID="recipe-row-write"
                           disabled={!writable}
                           label={writable
                               ? `Write ${recipe.displayName()} to a card`
@@ -339,6 +372,7 @@ export default function SwipeableRecipeRow({
                 // on a fling.
                 overshootLeft={false}
                 overshootRight={false}
+                onSwipeableOpenStartDrag={() => onManualOpen?.()}
                 renderLeftActions={hasLeftActions ? renderLeftActions : undefined}
                 renderRightActions={renderRightActions}>
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
