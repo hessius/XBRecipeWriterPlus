@@ -12,6 +12,7 @@ import BrewNowCard from "@/components/BrewNowCard";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewSummary from "@/components/BrewSummary";
 import BrewWakeLock from "@/components/BrewWakeLock";
+import ScrollFade from "@/components/ScrollFade";
 import ExportButton from "@/components/ExportButton";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
@@ -27,6 +28,7 @@ import {sharedBrewDatabase, useBrewJudgement, type HistoryStore, type JudgementS
     from "@/hooks/useBrewHistory";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
+import useScrollFade from "@/hooks/useScrollFade";
 import {useBrewHandoff, type HandoffStore} from "@/hooks/useBrewHandoff";
 import BeanNameSheet from "@/components/BeanNameSheet";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
@@ -248,6 +250,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const usableBandHeight = Math.max(0, flexHeight - BREW_BAND_GAP);
     const bands = allocateBands(usableBandHeight, recipe.pours.length);
     const [doneHeight, setDoneHeight] = useState(0);
+    const doneFade = useScrollFade();
     const [firstBrewDone, setFirstBrewDone] = useSetting("firstBrewDone");
 
     useEffect(() => {
@@ -457,8 +460,18 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 //
                 // The record screen has done exactly this from the start; only
                 // the live modal was missing it.
+                //
+                // The fade is a sibling of the scroller rather than a child of
+                // it, for two reasons. A child would scroll away with the
+                // content it is meant to be covering, and it would be inside
+                // the ViewShot, so the exported card would carry a gradient
+                // across its last stage: a hint about scrolling, baked into a
+                // picture nobody can scroll.
+                <View style={{flex: 1}}>
                 <ScrollView testID="done-scroll" style={{flex: 1}}
                             onLayout={(e) => setDoneHeight(e.nativeEvent.layout.height)}
+                            onScroll={doneFade.onScroll}
+                            scrollEventThrottle={16}
                             contentContainerStyle={{flexGrow: 1}}>
                 <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
                     <BrewSummary
@@ -495,6 +508,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                     />
                 </ViewShot>
                 </ScrollView>
+                <ScrollFade progress={doneFade.progress} testID="done-fade" />
+                </View>
             ) : (
                 <>
                     <YStack testID="brew-band-region" flex={1} gap={BREW_BAND_GAP}
