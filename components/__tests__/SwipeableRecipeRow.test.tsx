@@ -16,7 +16,8 @@ const mockClose = jest.fn();
 
 jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
     const ReactActual = jest.requireActual<typeof import("react")>("react");
-    const {View: MockView} = jest.requireActual<typeof import("react-native")>("react-native");
+    const {Pressable: MockPressable, View: MockView} =
+        jest.requireActual<typeof import("react-native")>("react-native");
 
     return {
         __esModule: true,
@@ -24,6 +25,7 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
             children?: React.ReactNode;
             renderLeftActions?: () => React.ReactNode;
             renderRightActions?: () => React.ReactNode;
+            onSwipeableOpenStartDrag?: (direction: "left" | "right") => void;
         }, ref: React.Ref<unknown>) => {
             const [openTray, setOpenTray] = ReactActual.useState<"left" | "right" | null>(null);
             ReactActual.useImperativeHandle(ref, () => ({
@@ -44,6 +46,8 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
 
             return (
                 <MockView>
+                    <MockPressable testID="simulate-drag"
+                                   onPress={() => props.onSwipeableOpenStartDrag?.("left")}/>
                     {openTray === "left" && <MockView testID="swipeable-open-left"/>}
                     {openTray === "right" && <MockView testID="swipeable-open-right"/>}
                     {props.renderLeftActions?.()}
@@ -239,6 +243,15 @@ describe("SwipeableRecipeRow", () => {
         expect(mockOpenLeft).toHaveBeenCalledTimes(1);
         expect(mockClose).toHaveBeenCalledTimes(1);
         expect(onManualOpen).not.toHaveBeenCalled();
+    });
+
+    it("reports a manual open when the user starts dragging a tray", async () => {
+        const onManualOpen = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({onManualOpen})}/>);
+
+        await fireEvent.press(screen.getByTestId("simulate-drag"));
+
+        expect(onManualOpen).toHaveBeenCalledTimes(1);
     });
 
     it("closes both staggered hint trays even after the first row reports completion", async () => {

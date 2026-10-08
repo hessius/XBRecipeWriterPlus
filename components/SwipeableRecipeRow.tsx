@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {View} from "react-native";
 import Swipeable, {type SwipeableMethods} from "react-native-gesture-handler/ReanimatedSwipeable";
 import {XStack, YStack} from "tamagui";
@@ -32,11 +32,11 @@ type Props = {
     /**
      * Called once the nudge has actually run, so the owner can retire it.
      *
-     * The nudge is a once-per-launch lesson, but "the first row" is not a fixed
-     * recipe: sorting, filtering or searching puts a different recipe at the top,
-     * which re-satisfies the gate and teaches the same lesson again. Reporting
-     * back is what lets the owner turn it off after the first time rather than
-     * on every change to the query.
+     * The nudge is cadenced, capped and re-armable, but "the first row" is not a
+     * fixed recipe: sorting, filtering or searching puts a different recipe at
+     * the top, which re-satisfies the gate and teaches the same lesson again.
+     * Reporting back is what lets the owner silence this row after its own
+     * lesson rather than on every change to the query.
      */
     onBounced?: () => void;
     /** Called once the tray opens, so the owner records only delivered lessons. */
@@ -44,9 +44,10 @@ type Props = {
     /**
      * The user opened a tray by dragging it.
      *
-     * Reported from `onSwipeableOpenStartDrag`, which fires only for a real
-     * drag, so the hint's own programmatic open is not miscounted as the user
-     * having learned the gesture.
+     * Reported from `onSwipeableOpenStartDrag`, so the hint's own programmatic
+     * open is not miscounted. It starts on drag movement rather than a committed
+     * open, so small aborted flicks still count; that is the price of learning
+     * from intent without waiting for a threshold.
      */
     onManualOpen?: () => void;
     /** When true, the card shows its destructive actions instead of hiding them behind a swipe. */
@@ -192,10 +193,15 @@ export default function SwipeableRecipeRow({
     // without making it an input to the effect.
     const bouncedRef = useRef(onBounced);
     const shownRef = useRef(onShown);
+    const manualOpenRef = useRef(onManualOpen);
+    const [handleManualOpenStartDrag] = useState(() => () => {
+        manualOpenRef.current?.();
+    });
 
     useEffect(() => {
         bouncedRef.current = onBounced;
         shownRef.current = onShown;
+        manualOpenRef.current = onManualOpen;
     });
 
     useEffect(() => {
@@ -382,7 +388,7 @@ export default function SwipeableRecipeRow({
                 // on a fling.
                 overshootLeft={false}
                 overshootRight={false}
-                onSwipeableOpenStartDrag={() => onManualOpen?.()}
+                onSwipeableOpenStartDrag={handleManualOpenStartDrag}
                 renderLeftActions={hasLeftActions ? renderLeftActions : undefined}
                 renderRightActions={renderRightActions}>
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
