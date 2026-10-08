@@ -3,6 +3,7 @@ import React from "react";
 import {
     Dimensions,
     Linking,
+    PixelRatio,
     StyleSheet,
     type StyleProp,
     type TextStyle,
@@ -30,6 +31,7 @@ import {planFromPours} from "@/library/brew/BrewRecord";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import type {HandoffEnvelope} from "@/library/brew/handoff/envelope";
 import {BREW_FIGURE_VALUE_SIZE} from "@/library/brew/figureGeometry";
+import {DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
 import {storyTextScale} from "@/library/brew/storyCard";
 
 const mockWindow = {fontScale: 1, height: 852, scale: 3, width: 393};
@@ -416,11 +418,11 @@ describe("brew record", () => {
             dose:        {value: 20, from: 18},
             ratio:       {value: 18, from: 16},
             grind:       {value: 61, from: 50},
-            temperature: {offset: 2}
+            temperature: {offset: 2, temperatures: [90, 92]}
         });
     });
 
-    it("hands a saturating temperature quick edit to the summary as an offset only", async () => {
+    it("hands a saturating temperature quick edit to the summary as used temperatures", async () => {
         mockOpened = {
             record: {
                 ...record,
@@ -439,8 +441,11 @@ describe("brew record", () => {
 
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-        expect(summaryProps.adjustments).toEqual({temperature: {offset: 3}});
-        expect(screen.getByText("OFFSET")).toBeTruthy();
+        expect(summaryProps.adjustments).toEqual({
+            temperature: {offset: 3, temperatures: [99, 98, 93]}
+        });
+        expect(screen.getByText("99, 98, 93")).toBeTruthy();
+        expect(screen.getByText("OFFSET +3")).toBeTruthy();
         expect(screen.queryByText("RECIPE 96, 95, 90")).toBeNull();
         expect(screen.queryByText("RECIPE 94")).toBeNull();
     });
@@ -1533,6 +1538,49 @@ describe("brew record's story card", () => {
             showRateChart: expect.any(Boolean),
             showStages: expect.any(Boolean)
         }));
+    });
+
+    it("renders wrapped story adjustment figures from the measured one-column layout", async () => {
+        const fontScale = jest.spyOn(PixelRatio, "getFontScale")
+            .mockReturnValue(DOTO_MAX_FONT_SCALE);
+        mockOpened = {
+            record:  makeBrewRecordFixture({
+                rating: 0,
+                tags:   [],
+                dose:   31,
+                ratio:  100,
+                grindSize: 81,
+                adjustedFromDose: 31,
+                adjustedFromRatio: 100,
+                adjustedFromGrind: 81,
+                adjustedTempOffset: 60,
+                hasStream: false,
+                plan: [
+                    {pourNumber: 1, volume: 40, temperature: 39, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 20},
+                    {pourNumber: 2, volume: 40, temperature: 60, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 20},
+                    {pourNumber: 3, volume: 40, temperature: 80, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 20},
+                    {pourNumber: 4, volume: 40, temperature: 99, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 0}
+                ]
+            }),
+            samples: []
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(375);
+
+        expect(summaryProps.adjustments).toEqual({
+            dose:        {value: 31, from: 31},
+            ratio:       {value: 100, from: 100},
+            grind:       {value: 81, from: 81},
+            temperature: {offset: 60, temperatures: [39, 60, 80, 99]}
+        });
+        expect(screen.getAllByText("39 to 99").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("OFFSET +60").length).toBeGreaterThan(0);
+        fontScale.mockRestore();
     });
 
     it("renders story figures at the card's text scale", async () => {

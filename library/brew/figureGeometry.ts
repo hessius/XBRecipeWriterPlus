@@ -76,6 +76,14 @@ export function brewFigureBadgeWidth(
         + (badge.paddingHorizontal + badge.borderWidth) * 2;
 }
 
+export type BrewFigureAdjustmentMeasure = {
+    label: string;
+    value: string;
+    badge: string;
+};
+
+type AdjustmentMeasureInput = string | BrewFigureAdjustmentMeasure;
+
 /**
  * DRAWDOWN is the only eight-character label in the row, so its column is
  * wider than the others rather than the row being sized for its longest word.
@@ -145,7 +153,7 @@ export function brewFigureColumnWidths(
 export function brewFigureAdjustmentColumns(
     contentWidth: number,
     fontScale: number,
-    badges: string[],
+    figures: AdjustmentMeasureInput[],
     scale = 1
 ): 1 | 2 {
     if (contentWidth <= 0) return 2;
@@ -157,10 +165,39 @@ export function brewFigureAdjustmentColumns(
             - geometry.columnGap * (BREW_FIGURE_ADJUSTMENT_COLUMNS - 1)
         ) / BREW_FIGURE_ADJUSTMENT_COLUMNS
     );
-    return badges.every((badge) =>
-        brewFigureBadgeWidth(badge, fontScale, scale) + STORY_FIT_MARGIN <= twoColumnWidth)
+    return figures.every((figure) =>
+        brewFigureAdjustmentWidth(figure, fontScale, scale) + STORY_FIT_MARGIN <= twoColumnWidth)
         ? 2
         : 1;
+}
+
+export function brewFigureAdjustmentWidth(
+    figure: AdjustmentMeasureInput,
+    fontScale: number,
+    scale = 1
+): number {
+    if (typeof figure === "string") return brewFigureBadgeWidth(figure, fontScale, scale);
+
+    const text = brewFigureTextGeometry(scale);
+    const badge = brewFigureBadgeGeometry(scale);
+    const labelWidth = dotoTextWidth(
+        figure.label,
+        text.labelSize,
+        fontScale,
+        text.labelTracking,
+        DOTO_MIN_FONT_SIZE * scale
+    );
+    const valueWidth = dotoTextWidth(
+        figure.value,
+        text.detailValueSize,
+        fontScale,
+        text.valueTracking,
+        DOTO_MIN_FONT_SIZE * scale
+    );
+    const valueRowWidth = valueWidth
+        + badge.gap
+        + brewFigureBadgeWidth(figure.badge, fontScale, scale);
+    return Math.max(labelWidth, valueRowWidth);
 }
 
 export type BrewFigureAdjustmentLayout = {
@@ -173,15 +210,15 @@ export type BrewFigureAdjustmentLayout = {
 export function brewFigureAdjustmentLayout(
     contentWidth: number,
     fontScale: number,
-    badges: string[],
+    figures: AdjustmentMeasureInput[],
     scale = 1
 ): BrewFigureAdjustmentLayout {
-    const columns = brewFigureAdjustmentColumns(contentWidth, fontScale, badges, scale);
+    const columns = brewFigureAdjustmentColumns(contentWidth, fontScale, figures, scale);
     if (columns === 1) {
         return {
             columns,
             columnWidth: Math.max(0, contentWidth),
-            rows:        badges.length
+            rows:        figures.length
         };
     }
     const geometry = brewFigureTextGeometry(scale);
@@ -194,7 +231,7 @@ export function brewFigureAdjustmentLayout(
                 - geometry.columnGap * (columns - 1)
             ) / columns
         ),
-        rows: Math.ceil(badges.length / columns)
+        rows: Math.ceil(figures.length / columns)
     };
 }
 
@@ -202,8 +239,8 @@ export function brewFigureAdjustmentLayout(
 export function brewFigureAdjustmentColumnWidth(
     contentWidth: number,
     fontScale: number,
-    badges: string[],
+    figures: AdjustmentMeasureInput[],
     scale = 1
 ): number {
-    return brewFigureAdjustmentLayout(contentWidth, fontScale, badges, scale).columnWidth;
+    return brewFigureAdjustmentLayout(contentWidth, fontScale, figures, scale).columnWidth;
 }

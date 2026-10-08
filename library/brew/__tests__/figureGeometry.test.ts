@@ -6,6 +6,7 @@ import {
     brewFigureAdjustmentColumns,
     brewFigureAdjustmentColumnWidth,
     brewFigureAdjustmentLayout,
+    brewFigureAdjustmentWidth,
     brewFigureBadgeWidth,
     brewFigureColumnWidths,
     brewFigureTextGeometry,
@@ -20,7 +21,12 @@ import {
 } from "@/library/dotoMetrics";
 
 const CAPTURE_PADDING = SCREEN_PADDING + 12;
-const ADJUSTMENT_BADGES = ["RECIPE 31", "RECIPE 100", "RECIPE OFF", "OFFSET"];
+const ADJUSTMENT_FIGURES = [
+    {label: "DOSE", value: "31", badge: "RECIPE 31"},
+    {label: "RATIO", value: "1:100", badge: "RECIPE 100"},
+    {label: "TEMP", value: "39 to 99", badge: "OFFSET +60"},
+    {label: "GRIND", value: "OFF", badge: "RECIPE OFF"}
+];
 
 function labelWidth(text: string, fontScale: number): number {
     const geometry = brewFigureTextGeometry();
@@ -106,27 +112,32 @@ describe("detail row columns", () => {
         expect(brewFigureColumnWidths(0, 1)).toEqual([0, 0, 0, 0]);
     });
 
-    it("fits four quick-edit recipe badges at common capture widths and the font cap", () => {
+    it("fits four quick-edit figures at common capture widths and the font cap", () => {
         for (const width of [375, 393, 402, 430]) {
             const column = brewFigureAdjustmentColumnWidth(
                 contentWidth(width),
                 DOTO_MAX_FONT_SCALE,
-                ADJUSTMENT_BADGES
+                ADJUSTMENT_FIGURES
             );
-            for (const badge of ADJUSTMENT_BADGES) {
-                expectFit(brewFigureBadgeWidth(badge, DOTO_MAX_FONT_SCALE), column);
+            for (const figure of ADJUSTMENT_FIGURES) {
+                expectFit(
+                    brewFigureAdjustmentWidth(figure, DOTO_MAX_FONT_SCALE),
+                    column
+                );
             }
         }
     });
 
-    it("keeps two quick-edit columns at common capture widths and the font cap", () => {
-        for (const width of [375, 393, 402, 430]) {
-            expect(brewFigureAdjustmentColumns(
-                contentWidth(width), DOTO_MAX_FONT_SCALE, ADJUSTMENT_BADGES
-            )).toBe(2);
-            expect(brewFigureAdjustmentLayout(
-                contentWidth(width), DOTO_MAX_FONT_SCALE, ADJUSTMENT_BADGES
-            )).toMatchObject({columns: 2, rows: 2});
-        }
+    it("uses the one-column fallback for the widest quick-edit values", () => {
+        expect(brewFigureAdjustmentColumns(
+            contentWidth(375), DOTO_MAX_FONT_SCALE, ADJUSTMENT_FIGURES
+        )).toBe(1);
+        expect(brewFigureAdjustmentLayout(
+            contentWidth(375), DOTO_MAX_FONT_SCALE, ADJUSTMENT_FIGURES
+        )).toMatchObject({columns: 1, rows: 4});
+
+        expect(brewFigureAdjustmentColumns(
+            contentWidth(430), DOTO_MAX_FONT_SCALE, ADJUSTMENT_FIGURES
+        )).toBe(1);
     });
 });

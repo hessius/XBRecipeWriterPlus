@@ -19,10 +19,12 @@ import {
     brewFigureBadgeGeometry,
     brewFigureColumnFlex,
     brewFigureUsesFourColumns,
-    brewFigureTextGeometry
+    brewFigureTextGeometry,
+    type BrewFigureAdjustmentMeasure
 } from "@/library/brew/figureGeometry";
 import {formatFlowRate} from "@/library/brew/flowRate";
 import {DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
+import {describeTemperatureList} from "@/library/quickEdit";
 import {GRINDER_OFF_VALUE} from "@/library/Recipe";
 
 const DOTO_LINE_HEIGHT = 1.35;
@@ -128,7 +130,7 @@ export type BrewFigureAdjustments = {
     dose?: {value: number; from: number};
     ratio?: {value: number; from: number};
     grind?: {value: number; from: number; confirmed?: boolean};
-    temperature?: {offset: number};
+    temperature?: {offset: number; temperatures: number[]};
 };
 
 function FigureBadge({children, testID, textScale = 1}: {
@@ -277,13 +279,16 @@ function adjustmentFigures(
     }
     if (adjustments.temperature !== undefined) {
         const offset = signed(adjustments.temperature.offset);
-        figures.push({
-            key:                "temperature",
-            label:              "TEMP",
-            value:              offset,
-            badge:              "OFFSET",
-            accessibilityLabel: `Temperature offset, ${offset} degrees`
-        });
+        const value = describeTemperatureList(adjustments.temperature.temperatures);
+        if (value !== "") {
+            figures.push({
+                key:                "temperature",
+                label:              "TEMP",
+                value,
+                badge:              `OFFSET ${offset}`,
+                accessibilityLabel: `Temperature, ${value} degrees, offset ${offset} degrees`
+            });
+        }
     }
     if (adjustments.grind !== undefined) {
         figures.push({
@@ -305,6 +310,16 @@ export function brewFigureAdjustmentBadges(
     adjustments: BrewFigureAdjustments | undefined
 ): string[] {
     return adjustmentFigures(adjustments).map((figure) => figure.badge);
+}
+
+export function brewFigureAdjustmentMeasures(
+    adjustments: BrewFigureAdjustments | undefined
+): BrewFigureAdjustmentMeasure[] {
+    return adjustmentFigures(adjustments).map(({label, value, badge}) => ({
+        label,
+        value,
+        badge
+    }));
 }
 
 /**
@@ -388,7 +403,7 @@ export default function BrewFigures(
     const adjustmentLayout = brewFigureAdjustmentLayout(
         contentWidth,
         fontScale,
-        brewFigureAdjustmentBadges(adjustments),
+        brewFigureAdjustmentMeasures(adjustments),
         textScale
     );
 

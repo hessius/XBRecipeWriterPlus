@@ -5,7 +5,7 @@ import {PixelRatio, Pressable, ScrollView, useWindowDimensions} from "react-nati
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
-import {brewFigureAdjustmentBadges, type BrewFigureAdjustments} from "@/components/BrewFigures";
+import {brewFigureAdjustmentMeasures, type BrewFigureAdjustments} from "@/components/BrewFigures";
 import BrewStoryCard from "@/components/BrewStoryCard";
 import BrewStorySheet from "@/components/BrewStorySheet";
 import BrewSummary from "@/components/BrewSummary";
@@ -83,7 +83,10 @@ function quickEditFigures(
     }
     const tempOffset = record.adjustedTempOffset;
     if (tempOffset !== undefined) {
-        adjustments.temperature = {offset: tempOffset};
+        const temperatures = record.plan?.map((stage) => stage.temperature) ?? [];
+        if (temperatures.length > 0) {
+            adjustments.temperature = {offset: tempOffset, temperatures};
+        }
     }
 
     return Object.keys(adjustments).length === 0 ? undefined : adjustments;
@@ -654,7 +657,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                                     : brewFigureAdjustmentLayout(
                                         storyTextContentWidth(cardWidth),
                                         storyFontScale,
-                                        brewFigureAdjustmentBadges(summary.adjustments),
+                                        brewFigureAdjustmentMeasures(summary.adjustments),
                                         storyTextScale(cardWidth)
                                     ).rows;
                                 const budget = storySummaryBudget({

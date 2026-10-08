@@ -2,7 +2,11 @@ import React from "react";
 import {screen} from "@testing-library/react-native";
 import {Dimensions, PixelRatio} from "react-native";
 
-import BrewFigures, {detailRowMinHeight, flowRowMinHeight} from "@/components/BrewFigures";
+import BrewFigures, {
+    brewFigureAdjustmentMeasures,
+    detailRowMinHeight,
+    flowRowMinHeight
+} from "@/components/BrewFigures";
 import {FLOW_SPARKLINE_HEIGHT} from "@/components/FlowSparkline";
 import {accents} from "@/constants/colors";
 import {
@@ -341,7 +345,7 @@ describe("BrewFigures", () => {
                              dose:        {value: 20, from: 18},
                              ratio:       {value: 18, from: 16},
                              grind:       {value: 61, from: 50},
-                             temperature: {offset: 2}
+                             temperature: {offset: 2, temperatures: [90, 92]}
                          }} />
         );
 
@@ -355,53 +359,58 @@ describe("BrewFigures", () => {
         expect(screen.getByText("1:18")).toBeTruthy();
         expect(screen.getByText("RECIPE 16")).toBeTruthy();
         expect(screen.getByText("TEMP")).toBeTruthy();
-        expect(screen.getByText("+2")).toBeTruthy();
-        expect(screen.getByText("OFFSET")).toBeTruthy();
+        expect(screen.getByText("90, 92")).toBeTruthy();
+        expect(screen.getByText("OFFSET +2")).toBeTruthy();
         expect(screen.getByText("GRIND")).toBeTruthy();
         expect(screen.getByText("61")).toBeTruthy();
         expect(screen.getByText("RECIPE 50")).toBeTruthy();
         expect(screen.getByLabelText("Dose, 20 grams, recipe 18 grams")).toBeTruthy();
         expect(screen.getByLabelText("Ratio, 1:18, recipe 1:16")).toBeTruthy();
         expect(screen.getByLabelText(
-            "Temperature offset, +2 degrees"
+            "Temperature, 90, 92 degrees, offset +2 degrees"
         )).toBeTruthy();
         expect(screen.getByLabelText("Grind, 61, recipe 50")).toBeTruthy();
     });
 
-    it("shows a saturating temperature edit as the offset, not a reconstructed recipe", async () => {
+    it("shows a saturating temperature edit as used temperatures, not a reconstructed recipe", async () => {
         await renderWithProviders(
             <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                          water={240} cup={200} seconds={140} accent={TEST_ACCENT}
-                         adjustments={{temperature: {offset: 3}}} />
+                         adjustments={{temperature: {
+                             offset:       3,
+                             temperatures: [99, 98, 93]
+                         }}} />
         );
 
         expect(screen.getByText("TEMP")).toBeTruthy();
-        expect(screen.getByText("+3")).toBeTruthy();
-        expect(screen.getByText("OFFSET")).toBeTruthy();
+        expect(screen.getByText("99, 98, 93")).toBeTruthy();
+        expect(screen.getByText("OFFSET +3")).toBeTruthy();
         expect(screen.queryByText("RECIPE 96, 95, 90")).toBeNull();
         expect(screen.queryByText("RECIPE 94")).toBeNull();
-        expect(screen.getByLabelText("Temperature offset, +3 degrees")).toBeTruthy();
+        expect(screen.getByLabelText(
+            "Temperature, 99, 98, 93 degrees, offset +3 degrees"
+        )).toBeTruthy();
     });
 
     it("applies the measured adjustment width at the font cap on a 375 pt story card", async () => {
         mockWindowFontScale(DOTO_MAX_FONT_SCALE);
         const contentWidth = 375 - 56;
-        const badges = ["RECIPE 18", "RECIPE 16", "OFFSET", "RECIPE 50"];
+        const adjustments = {
+            dose:        {value: 20, from: 18},
+            ratio:       {value: 18, from: 16},
+            grind:       {value: 61, from: 50},
+            temperature: {offset: -2, temperatures: [88, 86, 84]}
+        };
         const expectedWidth = brewFigureAdjustmentColumnWidth(
             contentWidth,
             DOTO_MAX_FONT_SCALE,
-            badges
+            brewFigureAdjustmentMeasures(adjustments)
         );
 
         await renderWithProviders(
             <BrewFigures contentWidth={contentWidth}
                          water={240} cup={200} seconds={140} accent={TEST_ACCENT}
-                         adjustments={{
-                             dose:        {value: 20, from: 18},
-                             ratio:       {value: 18, from: 16},
-                             grind:       {value: 61, from: 50},
-                             temperature: {offset: -2}
-                         }} />
+                         adjustments={adjustments} />
         );
 
         expect(screen.getByTestId("figures-adjusted-dose"))

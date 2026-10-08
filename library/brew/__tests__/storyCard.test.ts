@@ -770,7 +770,7 @@ describe("the frame", () => {
                 + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, 1));
     });
 
-    it("counts wrapped adjustment rows before keeping story details", () => {
+    it("counts every wrapped adjustment row before keeping story details", () => {
         const base = {
             width:               240,
             stages:              1,
@@ -791,7 +791,7 @@ describe("the frame", () => {
         const measuredRows = storySummaryBudget({
             ...base,
             figureExtraRows:     1,
-            figureAdjustmentRows: 2
+            figureAdjustmentRows: 4
         });
 
         expect(oldOneBlockCount.showFigureDetails).toBe(true);

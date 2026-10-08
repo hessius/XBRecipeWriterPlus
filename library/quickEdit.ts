@@ -146,6 +146,25 @@ export function describeAdjustment(
 
 type TemperatureBaseline = {pours: {temperature: number}[]};
 
+export function describeTemperatureList(temperatures: number[]): string {
+    if (temperatures.length === 0) {
+        return "";
+    }
+
+    const minTemperature = Math.min(...temperatures);
+    const maxTemperature = Math.max(...temperatures);
+
+    if (temperatures.length >= 4 && minTemperature !== maxTemperature) {
+        return `${minTemperature} to ${maxTemperature}`;
+    }
+
+    // A fully identical list reads as one value; a partially repeated list
+    // keeps every stage visible because the repetition is part of the shape.
+    return minTemperature === maxTemperature
+        ? `${minTemperature}`
+        : temperatures.join(", ");
+}
+
 export function describeTemperatureBaseline(
     recipe: Recipe | TemperatureBaseline,
     fontScale: number
@@ -155,17 +174,9 @@ export function describeTemperatureBaseline(
         return "recipe";
     }
 
+    const values = describeTemperatureList(temperatures);
     const minTemperature = Math.min(...temperatures);
     const maxTemperature = Math.max(...temperatures);
-
-    if (temperatures.length >= 4 && minTemperature !== maxTemperature) {
-        return `recipe ${minTemperature} to ${maxTemperature}`;
-    }
-
-    // A fully identical list reads as one baseline; a partially repeated list
-    // keeps every stage visible because the repetition is part of the recipe.
-    const values = minTemperature === maxTemperature
-        ? `${minTemperature}`
-        : temperatures.join(", ");
-    return fontScale >= 1.4 ? values : `recipe ${values}`;
+    const rangeSummary = temperatures.length >= 4 && minTemperature !== maxTemperature;
+    return fontScale >= 1.4 && !rangeSummary ? values : `recipe ${values}`;
 }
