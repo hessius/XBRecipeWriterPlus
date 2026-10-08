@@ -186,15 +186,17 @@ describe("the machine console", () => {
     });
 
     it("shows the actual disagreement before sending an unresolved command", async () => {
-        // A generic warning teaches nothing. Somebody about to fire 40518 has
-        // to be reading what the sources actually observed.
+        // A generic warning teaches nothing. Somebody about to fire 8019 has to
+        // be reading what the machine actually did, which is not what the
+        // command's own name says.
         sharedSettings().set("machineConsoleAcknowledged", true);
         await renderWithProviders(<Console/>);
 
-        await fireEvent.press(screen.getByLabelText("Send Start / confirm / pause"));
+        await fireEvent.press(
+            screen.getByLabelText("Send FreeSolo pour (named Brewer pause)"));
 
-        expect(screen.getByText(/bounce the state backwards|backwards/i)).toBeTruthy();
-        expect(screen.getByText(/aborts that brew|aborts a running brew/i)).toBeTruthy();
+        expect(screen.getByText(/This is not a pause/i)).toBeTruthy();
+        expect(screen.getByText(/abandoned the recipe/i)).toBeTruthy();
         expect(send).not.toHaveBeenCalled();
     });
 
@@ -203,10 +205,56 @@ describe("the machine console", () => {
         sharedSettings().set("machineConsoleConfirmations", false);
         await renderWithProviders(<Console/>);
 
-        await fireEvent.press(screen.getByLabelText("Send Start / confirm / pause"));
+        await fireEvent.press(
+            screen.getByLabelText("Send FreeSolo pour (named Brewer pause)"));
 
-        expect(screen.getByText(/Nobody agrees what this does/i)).toBeTruthy();
+        expect(screen.getByText(/costs something, or nobody agrees/i)).toBeTruthy();
         expect(send).not.toHaveBeenCalled();
+    });
+
+    /*
+     * The spike buttons reach the same machine as the catalogue rows, so they
+     * ask the same question. They were added sending straight out, which put
+     * the one frame that abandons a running brew behind a single tap.
+     */
+    it("confirms a spike frame rather than sending it straight out", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Send Pause this brew (40518)"));
+
+        expect(send).not.toHaveBeenCalled();
+        expect(screen.getByLabelText("Confirm send Pause this brew (40518)")).toBeTruthy();
+    });
+
+    it("still confirms a hazardous spike frame when confirmations are off", async () => {
+        // The toggle silences the routine nagging. It is not a way to switch
+        // off the warning on the frame that overwrites all three Easy slots.
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        sharedSettings().set("machineConsoleConfirmations", false);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Send Easy slot A only (15 g / 225 ml)"));
+
+        expect(send).not.toHaveBeenCalled();
+        expect(screen.getByLabelText("Confirm send Easy slot A only (15 g / 225 ml)"))
+            .toBeTruthy();
+        // Twice: once on the row, and again in the sheet, which is the half
+        // somebody who already decided to tap is actually going to read.
+        expect(screen.getAllByText(/overwrites all three/i)).toHaveLength(2);
+    });
+
+    it("lets an ordinary spike frame through when confirmations are off", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        sharedSettings().set("machineConsoleConfirmations", false);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.press(screen.getByLabelText("Send Resume this brew (40524)"));
+
+        expect(send).toHaveBeenCalledWith(
+            Uint8Array.from([0x58, 0x01, 0x01, 0x4C, 0x9E, 0x10, 0x00, 0x00, 0x00, 0x01,
+                0x01, 0x00, 0x00, 0x00, 0xED, 0xCC])
+        );
     });
 
     it("sends the confirmed PRO and EASY mode strings as fixed payloads", async () => {
@@ -250,6 +298,20 @@ describe("the machine console", () => {
         expect(send).toHaveBeenCalledWith(
             Uint8Array.from([0x58, 0x01, 0x01, 0x42, 0x1F, 0x0C, 0x00, 0x00, 0x00, 0x01, 0x7F, 0xCF])
         );
+    });
+
+    it("announces a refused raw frame to a screen reader", async () => {
+        // Without the alert role an iOS VoiceOver user meets a button that
+        // does nothing, which is the defect the message was added to fix.
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.changeText(screen.getByLabelText("Raw frame"), "zz");
+        await fireEvent.press(screen.getByLabelText("Send raw frame"));
+
+        const problem = screen.getByTestId("raw-frame-problem");
+        expect(problem.props.accessibilityRole).toBe("alert");
+        expect(problem.props.accessibilityLiveRegion).toBe("polite");
     });
 
     it("refuses a raw frame that is not hex", async () => {

@@ -6,7 +6,7 @@ import {palette} from "@/constants/colors";
 import {SPIKE_FRAMES, type SpikeFrame} from "@/library/machine/spikeFrames";
 
 type Props = {
-    onSend: (frame: Uint8Array) => void;
+    onSend: (spike: SpikeFrame) => void;
 };
 
 /**
@@ -52,7 +52,7 @@ function SpikeRow({spike, onSend}: {spike: SpikeFrame; onSend: Props["onSend"]})
                     borderColor={spike.hazard === undefined ? palette.line : palette.warn}
                     borderWidth={1}
                     backgroundColor={palette.raised} color={palette.text}
-                    onPress={() => onSend(spike.build())}>
+                    onPress={() => onSend(spike)}>
                 Send
             </Button>
         </YStack>

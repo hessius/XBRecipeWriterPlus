@@ -548,21 +548,24 @@ Command 11510, Type 2 packet:
 
 Janczykkkko's implementation uses `SLOT_FLAG_SCALE_ON = 0x12`, `SLOT_FLAG_SCALE_OFF = 0x02` — note these both have grinder-ON in the lower nibble (0x02). `inferred` — appeared to conflict with brAzzi64's `SLOT_GRINDER_OFF = 0x04`.
 
-> **Observed on hardware 2026-10-08 (V12.0D.500): the lower nibble does not
-> carry the grinder, and the disagreement was never about anything.** The same
-> grinder-off recipe was written to slot C twice, once with flags `0x04` and
-> once with `0x02`, and the machine displayed the slot's grinder as **off both
-> times**. What carries it is the `0xFE` grind byte inside the recipe blob,
-> which is the field C5 already settled. Janczykkkko and brAzzi64 can both be
-> right about their constants because neither constant was doing anything.
+> **Observed on hardware 2026-10-08 (V12.0D.500): `0x02` defers to the blob.**
+> Slot C went up grinder-**off** under `0x02` and displays the grinder off;
+> slots A and B went up grinder-**on** under the same `0x02` and both display
+> a grind size. So under `0x02` the `0xFE` grind byte inside the blob decides,
+> which is the field C5 already settled, and Janczykkkko's constants are safe.
 >
-> It holds in both directions. Slots A and B went up grinder **on**, also with
-> flags `0x02`, and both display a grind size. So the blob decides and the
-> nibble is inert, rather than `0x02` happening to mean whatever the blob said.
+> **`0x04` is not settled.** It was tried once, with a grinder-off blob, and
+> the slot showed the grinder off — which is equally consistent with `0x04`
+> forcing it off and with `0x04` deferring like `0x02` does. brAzzi64's
+> `SLOT_GRINDER_OFF = 0x04` therefore survives. Settling it needs one more
+> trial: a grinder-**on** blob under `0x04`. If the slot then shows a grind
+> size the nibble is inert outright; if it shows off, `0x04` is a real
+> override and the two constants genuinely disagree.
 >
-> This is why a slot write should be built from the same encoder as a brew:
-> the blob is the single place the grinder is expressed, and the flags byte is
-> at most the scale bit.
+> **The working rule until then: send `0x02` (or `0x12` with the scale) and
+> let the blob carry the grinder.** That is the one combination proven in both
+> directions, and it is what a slot write built from the brew encoder produces
+> anyway, which is the argument for building it that way.
 
 ### Batch-Write Requirement `corroborated`
 All three slots (A, B, C) MUST be written in a single batch. Writing only one or two leaves the machine hung at state `0x43` (saving_slots) and it displays RETRY. There is no "commit" frame — the machine saves atomically once all three 11510 frames have been received. Sequence:

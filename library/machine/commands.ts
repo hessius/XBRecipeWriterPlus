@@ -90,7 +90,10 @@ export const COMMANDS: Command[] = [
      note: "Starts the brew. On hardware it goes straight to grinding rather than waiting for the button. Only useful once a recipe has been uploaded from a recipe screen."},
     {code: 40519, name: "Cancel", packet: "type1", args: [int("1")], tier: "moves"},
     {code: 40524, name: "Coffee resume", packet: "type1", args: [int("1")], tier: "moves",
-     note: "Resume after a pause. Single-source from HomoLand."},
+     note:
+        "Settled on hardware 2026-10-08 (V12.0D.500): it resumes a 40518 pause. 40516 acknowledges, " +
+        "the state returns to 0x23 and the brew carries on from where it stopped rather than " +
+        "restarting. Inert when no pause is outstanding."},
     {code: 4512, name: "Tea recipe execute", packet: "type1", args: [], tier: "moves",
      note: "Only useful once a tea recipe has been uploaded from a recipe screen."},
 
@@ -108,8 +111,19 @@ export const COMMANDS: Command[] = [
      args: [float32("flow x10"), float32("volume x10"), float32("temp x10"), int("water feed"), int("pattern")],
      tier: "moves", note: "FreeSolo water dispense."},
     {code: 4507, name: "Brewer stop", packet: "type1", args: [], tier: "moves"},
-    {code: 8019, name: "Brewer pause", packet: "type1", args: [], tier: "moves"},
-    {code: 8021, name: "Brewer resume", packet: "type1", args: [], tier: "moves"},
+    // Named Brewer pause and Brewer resume by every source there is, and
+    // neither one is. Hardware 2026-10-08, V12.0D.500. The names are kept
+    // beside the truth because a reader matching this console against another
+    // project's constants needs to find them.
+    {code: 8019, name: "FreeSolo pour (named Brewer pause)", packet: "type1", args: [],
+     tier: "unresolved",
+     contradiction:
+        "This is not a pause. Sent into a running recipe on 2026-10-08 (V12.0D.500) it abandoned " +
+        "the recipe and started a standalone water pour: state 0x03, then 9006 and 0x41 about " +
+        "thirteen seconds later. The dose is spent and the brew is gone. To pause a recipe, use 40518."},
+    {code: 8021, name: "FreeSolo stop (named Brewer resume)", packet: "type1", args: [],
+     tier: "moves",
+     note: "Ends an 8019 pour. It reports 0x23, which looks like brewing, but no recipe survives."},
     {code: 8013, name: "Brewer quit", packet: "type1", args: [], tier: "moves"},
     {code: 8017, name: "Recipe start quit", packet: "type1", args: [], tier: "inert",
      note: "Exit the pre-start recipe screen."},
@@ -139,11 +153,12 @@ export const COMMANDS: Command[] = [
      note: "Return from grinder to normal state."},
 
     // — Unresolved —————————————————————————————————————————————————
-    {code: 40518, name: "Start / confirm / pause", packet: "type1", args: [int("1")], tier: "unresolved",
-     contradiction:
-        "saya6k tried this live on 2026-07-19 and watched it bounce the state backwards to recipe_loaded " +
-        "rather than start the brew. Janczykkkko verified that sending it into a running brew aborts that brew. " +
-        "HomoLand names the same code COFFEE_PAUSE. XBRW++ never sends this during a brew."},
+    {code: 40518, name: "Coffee pause", packet: "type1", args: [int("1")], tier: "moves",
+     note:
+        "Settled on hardware 2026-10-08 (V12.0D.500): it pauses a running recipe. 40515 reports the " +
+        "volume so far and the state goes to 0x1f, which is also what a loaded brew reports, so the " +
+        "state alone cannot tell you it is paused. Resume with 40524. Inert if already paused. The " +
+        "old reports of it bouncing to recipe_loaded or aborting to armed were describing this pause."},
     {code: 8104, name: "Set cup", packet: "type1", args: [float32("max"), float32("min")], tier: "unresolved",
      contradiction:
         "Three implementations send three materially different value sets — (200, 80), (110, 90), (80-90, 40) — " +

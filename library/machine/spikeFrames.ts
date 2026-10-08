@@ -113,8 +113,10 @@ export const SPIKE_FRAMES: SpikeFrame[] = [
         watch: "The machine goes unresponsive with a looping animation. That is "
             + "the documented 0x43 hang, and it is not a brick: sending B and C "
             + "releases it.",
-        hazard: "Leaves the machine stuck until the batch is finished. Only send "
-            + "this if you intend to send B and C after it.",
+        hazard: "Leaves the machine stuck until the batch is finished, and "
+            + "finishing it overwrites all three of the machine's saved Easy "
+            + "slots and leaves it in EASY mode. Only send this if losing "
+            + "those three slots is acceptable.",
         build: () => slotFrame(0, 0x02)
     },
     {
@@ -136,12 +138,11 @@ export const SPIKE_FRAMES: SpikeFrame[] = [
         id: "slot-c-02",
         question: "Q6, settled 2026-10-08",
         label: "Easy slot C, grinder nibble 0x02",
-        watch: "Releases the hang too, and shows the grinder off as well. So the "
-            + "nibble is not what carries the grinder; the blob's own FE byte "
-            + "is, and the two constants in the catalogue were never in "
-            + "disagreement about anything. Slots A and B went up grinder on "
-            + "with the same nibble and display a grind size, which is the "
-            + "other direction.",
+        watch: "Releases the hang too, and shows the grinder off as well. So "
+            + "0x02 defers to the blob: slots A and B went up grinder on under "
+            + "the same nibble and display a grind size. 0x04 has only ever "
+            + "been tried with a grinder-off blob, so whether it forces off is "
+            + "still open. Use 0x02 and let the blob decide.",
         build: () => slotFrame(2, 0x02)
     }
 ];
