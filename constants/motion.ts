@@ -38,6 +38,19 @@ export const DURATION = {
 export const TYPING_DEBOUNCE_MS = 600;
 
 /**
+ * How long the drawer hint waits before opening a tray, and before closing it
+ * again.
+ *
+ * The close delay is measured from the same instant as the open delay, not from
+ * the open, so the tray is visible for the difference between them: 500 ms.
+ *
+ * These were local constants in `SwipeableRecipeRow.tsx` and were exempt from
+ * the "all timing lives here" rule by accident rather than by argument.
+ */
+export const BOUNCE_OPEN_DELAY = 300;
+export const BOUNCE_CLOSE_DELAY = 800;
+
+/**
  * How long the connection dot goes on flashing amber about a low tank.
  *
  * It was two flashes, which is the right length for something the user is
@@ -82,7 +95,15 @@ export const LOW_WATER_FLASH_MS = 30_000;
  */
 export const STAGGER = {
     /** Between consecutive dots of a `DotIcon` lighting up. */
-    dot: 12
+    dot: 12,
+    /**
+     * Between the two rows of the drawer hint.
+     *
+     * Applied to opening *and* closing, so each row is revealed for the same
+     * span. Revealing both at once reads as the list coming apart rather than
+     * as two trays.
+     */
+    drawerHint: 180
 } as const;
 
 /**

@@ -12,6 +12,7 @@ import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
 import {canWriteToCard} from "@/library/cardLimits";
 import {resolveAccent} from "@/library/accent";
+import {BOUNCE_CLOSE_DELAY, BOUNCE_OPEN_DELAY} from "@/constants/motion";
 
 type Props = {
     recipe: Recipe;
@@ -59,9 +60,6 @@ type Props = {
      */
     onHistory?: () => void;
 };
-
-const BOUNCE_OPEN_DELAY = 300;
-const BOUNCE_CLOSE_DELAY = 1000;
 
 /**
  * The width of one action tile.
