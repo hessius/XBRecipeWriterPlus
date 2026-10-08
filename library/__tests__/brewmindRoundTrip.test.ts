@@ -74,25 +74,41 @@ describe("a BrewMind coffee, end to end", () => {
             samples
         );
 
+        // This expectation used to be the stored `PodCoffee` verbatim, which
+        // is what the envelope carried and is why the chain was thought whole.
+        // It was not: the names here are Beanconqueror's, and `processing`,
+        // `country`, `roast`, `fermentation`, `cupping_points` and `url` are
+        // not among them, so everything this test claimed to prove arrived was
+        // discarded on receipt. The test asserted the bug.
         expect(envelope.bean).toEqual({
             name:         "Finca La Esperanza",
             roaster:      "Some Roastery",
             roastingDate: "2026-09-01",
-            roast:        "Medium",
-            country:      "Colombia",
+            // `country` is what BC calls the contract's `origin`.
+            origin:       "Colombia",
             region:       "Huila",
             farm:         "La Esperanza",
             farmer:       "Ana Ruiz",
-            elevation:    1750,
-            processing:   "Washed",
-            fermentation: "Anaerobic",
+            // Text, because BC stores elevation as a string.
+            elevation:    "1750",
+            process:      "Washed",
             variety:      "Pink Bourbon",
             beanMix:      "Single Origin",
             aromatics:    "Peach, jasmine",
-            cupping_points: 86.5,
-            decaffeinated:  false,
-            url:          "https://example.com/coffee"
+            decaffeinated:  false
         });
+    });
+
+    it("keeps what Beanconqueror cannot take in the recipe instead", () => {
+        // The four fields the contract has no home for are not silently lost
+        // to the user: the roast level, process and fermentation become tags
+        // on the recipe, which is where this app shows them.
+        const {recipe} = imported();
+        const reloaded = stored(recipe);
+
+        expect(reloaded.tags).toEqual(["Medium", "Washed", "Anaerobic"]);
+        expect(reloaded.coffee?.cupping_points).toBe(86.5);
+        expect(reloaded.coffee?.url).toBe("https://example.com/coffee");
     });
 
     it("names the producer's page in the note Beanconqueror files", () => {

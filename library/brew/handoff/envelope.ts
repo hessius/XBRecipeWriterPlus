@@ -18,7 +18,7 @@ import {
 import {DEVICE_NAME, PREPARATION_TYPE} from "@/library/brew/handoff/device";
 import type {BackfilledField} from "@/library/brew/handoff/backfill";
 import type {StoredBrew} from "@/library/BrewDatabase";
-import type {PodCoffee} from "@/library/podCoffee";
+import {handoffBean, type HandoffBean} from "./handoffBean";
 import {beanNameFromRecipe} from "./beanName";
 
 const REPOSITORY_URL = "https://github.com/hessius/XBRecipeWriterPlus";
@@ -37,7 +37,7 @@ export type HandoffEnvelope = {
         version: string;
     };
     brew: HandoffBrew;
-    bean?: PodCoffee;
+    bean?: HandoffBean;
     flow?: HandoffFlow;
     metrics?: HandoffMetric[];
     imported: HandoffImported;
@@ -152,11 +152,12 @@ export function buildEnvelope(
  *
  * A hint is a bare name and nothing else, on purpose. Beanconqueror offers to
  * create a bean only when an unmatched one arrives carrying real detail
- * (origin, process, note), so a name alone can be matched against the user's
- * list without ever proposing to add a row they did not ask for.
+ * (a roaster, an origin, a process, a note), so a name alone can be matched
+ * against the user's list without ever proposing to add a row they did not
+ * ask for.
  */
-function beanFor(brew: StoredBrew, hint?: string): PodCoffee | undefined {
-    if (brew.coffee !== undefined) return brew.coffee;
+function beanFor(brew: StoredBrew, hint?: string): HandoffBean | undefined {
+    if (brew.coffee !== undefined) return handoffBean(brew.coffee);
     const typed = hint?.trim();
     const name = typed !== undefined && typed !== ""
         ? typed
