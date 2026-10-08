@@ -606,6 +606,45 @@ describe("brewing", () => {
         expect(phases.at(-1)).toBe("done");
     });
 
+    it("ends a brew that walks back to the loaded state", async () => {
+        // #199: a tank two grams short of the last stage. The machine sent no
+        // fault, it simply went back to its loaded screen, and the app read
+        // that literally and showed "Recipe loaded." over a brew 423 ml in,
+        // with CANCEL the only control. Nothing terminal was ever reached, so
+        // no record was written and the brew vanished.
+        const {transport, machine} = await readyMachine();
+        const phases: BrewPhase[] = [];
+        machine.onPhase((phase) => phases.push(phase));
+
+        await machine.brew(brewable());
+        transport.emit(status(0x1F));      // armed
+        transport.emit(status(0x22));      // starting
+        transport.emit(event(40507));      // grinder stop
+        transport.emit(event(40510));      // pour 1
+        transport.emit(status(0x1F));      // armed again, mid-pour
+
+        const last = phases.at(-1);
+        expect(last?.name).toBe("failed");
+        expect(last?.name === "failed" && last.reason).toBe("stopped");
+    });
+
+    it("does not call a repeat of the loaded state an ending", async () => {
+        // The guard is about the brew having *started*. Before it does, the
+        // machine reports its loaded state more than once, and reading the
+        // second one as a stop would kill every brew on the pad.
+        const {transport, machine} = await readyMachine();
+        const phases: string[] = [];
+        machine.onPhase((phase) => phases.push(phase.name));
+
+        await machine.brew(brewable());
+        transport.emit(status(0x1D));      // loading
+        transport.emit(status(0x1F));      // armed
+        transport.emit(status(0x1F));      // armed again
+
+        expect(phases).not.toContain("failed");
+        expect(phases.at(-1)).toBe("armed");
+    });
+
     it("enters settling on BREWER_STOP, not done", async () => {
         // The core of the settling change (and the descendant of the step-1
         // gate). BREWER_STOP is the earliest of the three end events; ending

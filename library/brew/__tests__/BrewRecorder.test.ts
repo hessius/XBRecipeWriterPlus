@@ -624,6 +624,20 @@ describe("BrewRecorder", () => {
         expect(records[0].record).toMatchObject({outcome: "failed", failure: "noWater"});
     });
 
+    it("keeps a brew the machine stopped part way through", () => {
+        // #199: the machine walked back to its loaded state two grams short of
+        // the last stage. Whatever stopped it, the dose was ground and the
+        // water was poured, so the brew happened and belongs in the history.
+        const {fake, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(423);
+        fake.phase({name: "failed", reason: "stopped"});
+
+        expect(records[0].record).toMatchObject({
+            outcome: "failed", failure: "stopped", waterTotal: 423
+        });
+    });
+
     it("writes no record when the brew was refused before it began", () => {
         // Nothing was sent and no dose was spent. A row saying a brew happened
         // would be a lie, and it would sit at the top of the history.

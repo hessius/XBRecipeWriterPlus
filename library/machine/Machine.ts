@@ -64,6 +64,14 @@ export type FrameLogEntry = {
 export type BrewFailure =
     | "noWater" | "noBeans" | "gearPosition" | "doseMismatch" | "idling" | "rejected"
     /**
+     * The machine went back to its loaded screen with the brew unfinished.
+     *
+     * It says nothing about why. Reported from the field as a tank two grams
+     * short of the last stage, but the machine sent no fault for it -- only
+     * the state, walking backwards.
+     */
+    | "stopped"
+    /**
      * Refused before a single frame went out — a low tank, a busy machine, a
      * recipe the card format will not carry. The reason is in `detail`, because
      * it is already a sentence and there is no fixed set of them.
@@ -163,6 +171,17 @@ const FAILURE_EVENTS: Record<number, BrewFailure> = {
     // tank. A line during a brew that will finish anyway, about something
     // nobody can do anything about until it ends, is noise.
 };
+
+/**
+ * The phases a brew has already begun from.
+ *
+ * `armed` and `pressPlay` are deliberately out: those are the states the
+ * machine is *in* while it waits, and a repeat of the state it is already
+ * reporting is not an ending.
+ */
+const STARTED: ReadonlySet<string> = new Set([
+    "grinding", "pouring", "bypass", "settling"
+]);
 
 /** States from which a brew may be started at all. */
 const STARTABLE = new Set<number>([
@@ -1126,6 +1145,21 @@ export default class Machine {
                 // machine acknowledging the upload, and letting it replace the
                 // phase would take away the only control that can commit it.
                 if (this.pendingCommit !== null) break;
+                // A brew that has started cannot become a loaded recipe again.
+                // Read literally, it did: #199 carries a screenshot of a brew
+                // stopped two grams short of its last stage, 423 ml in, with
+                // the headline reading "Recipe loaded." and CANCEL the only
+                // control on the screen. The machine sent no fault for it, so
+                // nothing else said the brew was over, nothing terminal was
+                // reached, and the record was never written -- the user's
+                // whole complaint was that the brew vanished.
+                //
+                // So the state walking backwards is itself the ending. Why is
+                // not knowable from here and is not guessed at.
+                if (STARTED.has(this.phase.name)) {
+                    this.setPhase({name: "failed", reason: "stopped"});
+                    break;
+                }
                 this.setPhase({name: "armed"});
                 break;
             case MACHINE_STATE.AWAITING_CONFIRM:
