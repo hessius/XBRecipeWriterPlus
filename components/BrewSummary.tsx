@@ -2,7 +2,7 @@ import React, {useState} from "react";
 import {StyleSheet, View} from "react-native";
 import {Text, YStack} from "tamagui";
 
-import BrewFigures from "@/components/BrewFigures";
+import BrewFigures, {type BrewFigureAdjustments} from "@/components/BrewFigures";
 import BrewRateChart from "@/components/BrewRateChart";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
@@ -105,6 +105,8 @@ type Props = {
     delay?: number | null;
     /** The confirmed machine grind dial, and recipe grind when it differed. */
     grind?: GrindFigure | null;
+    /** One-brew quick edits, shown as confirmed values with saved-recipe badges. */
+    adjustments?: BrewFigureAdjustments;
     /**
      * The capture target's id.
      *
@@ -158,6 +160,7 @@ export default function BrewSummary({
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
     drawdown = null, rateSeries, drawdownRate = null, delay = null, grind = null,
+    adjustments,
     availableHeight = 0,
     traceHeight = TRACE_HEIGHT, rateHeight = RATE_HEIGHT, rateTopGap = RATE_TOP_GAP,
     rateBottomGap = RATE_BOTTOM_GAP,
@@ -278,6 +281,7 @@ export default function BrewSummary({
                 drawdownRate={drawdownRate}
                 delay={delay}
                 grind={grind}
+                adjustments={adjustments}
                 contentWidth={traceWidth}
                 textScale={textScale}
             />

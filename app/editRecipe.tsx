@@ -2,6 +2,7 @@ import {useLocalSearchParams, useNavigation} from "expo-router";
 import router from "@/hooks/steadyRouter";
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, Share, View, useWindowDimensions} from "react-native";
+import Animated, {FadeIn, FadeOut, SlideInDown, SlideOutDown} from "react-native-reanimated";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Text, XStack, YStack} from "tamagui";
 
@@ -19,6 +20,7 @@ import RecipeHero from "@/components/RecipeHero";
 import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
 import RenameSheet from "@/components/RenameSheet";
 import RevertSheet from "@/components/RevertSheet";
+import QuickEditPanel from "@/components/QuickEditPanel";
 import SegmentedRow from "@/components/SegmentedRow";
 import StageProfile from "@/components/StageProfile";
 import StageTile, {type StageField} from "@/components/StageTile";
@@ -27,6 +29,7 @@ import TeaBanner from "@/components/TeaBanner";
 import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {grindTooFine} from "@/constants/copy";
+import {DURATION, EASING, useReducedMotionState} from "@/constants/motion";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useCollapsibleHeader} from "@/hooks/useCollapsibleHeader";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
@@ -45,6 +48,11 @@ import {CARD_GRIND_MIN, grindBand} from "@/library/grindBands";
 import {parseCapture} from "@/library/cardDiagnostics";
 import {maxStagesForBytes, SIGNATURE_BYTES} from "@/library/cardWriteErrors";
 import type Pour from "@/library/Pour";
+import {
+    applyQuickEdit,
+    quickEditProblems,
+    type QuickEditAdjustments
+} from "@/library/quickEdit";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {shareBlockReason} from "@/library/shareLink";
@@ -596,6 +604,7 @@ type ActionBarProps = {
     canBrewAtAll: boolean;
     canBrew: boolean;
     onBrew: () => void;
+    onQuickEdit: () => void;
     canWrite: boolean;
     canSave: boolean;
     onWrite: () => void;
@@ -626,6 +635,14 @@ type BarButtonProps = {
     accent?: string;
     flex: number;
     onPress: () => void;
+};
+
+type SplitBrewButtonProps = {
+    enabled: boolean;
+    accent: string;
+    flex: number;
+    onBrew: () => void;
+    onQuickEdit: () => void;
 };
 
 /**
@@ -673,11 +690,50 @@ function BarButton({label, accessibilityLabel, enabled, accent, flex, onPress}: 
     );
 }
 
+function SplitBrewButton({enabled, accent, flex, onBrew, onQuickEdit}: SplitBrewButtonProps) {
+    const fill = palette.none;
+    const brewFill = enabled ? accent : fill;
+    const quickFill = accent;
+
+    return (
+        <XStack flex={flex} borderRadius="$4" overflow="hidden"
+                borderWidth={1} borderColor={accent} backgroundColor={palette.none}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Brew"
+                       accessibilityState={{disabled: !enabled}}
+                       onPress={() => enabled && onBrew()}
+                       style={{flex: 1.55}}>
+                <YStack alignItems="center" paddingVertical="$3.5"
+                        backgroundColor={brewFill}>
+                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
+                                   color={enabled ? palette.base : palette.muted}>
+                        BREW
+                    </DotMatrixText>
+                </YStack>
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Quick edit brew"
+                       onPress={onQuickEdit}
+                       style={{flex: 0.45}}>
+                <YStack alignItems="center" paddingVertical="$3.5"
+                        borderLeftWidth={1} borderLeftColor={accent}
+                        backgroundColor={quickFill}>
+                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.6}
+                                   color={palette.base}>
+                        ▲
+                    </DotMatrixText>
+                </YStack>
+            </Pressable>
+        </XStack>
+    );
+}
+
 function readKnownTags(database: RecipeDatabase): string[] {
     return database.countRecipesByTag().map(({tag}) => tag);
 }
 
-function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, onWrite, onSave, onHeight}: ActionBarProps) {
+function ActionBar({
+    accent, canBrewAtAll, canBrew, onBrew, onQuickEdit, canWrite, canSave,
+    onWrite, onSave, onHeight
+}: ActionBarProps) {
     const insets = useSafeAreaInsets();
 
     return (
@@ -698,9 +754,9 @@ function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, on
                 machine there is nothing to run it on, so WRITE inherits it:
                 putting a recipe on a card is then the primary act. */}
             {canBrewAtAll && (
-                <BarButton label="BREW" accessibilityLabel="Brew"
-                           enabled={canBrew} accent={accent} flex={2}
-                           onPress={onBrew}/>
+                <SplitBrewButton enabled={canBrew} accent={accent} flex={2}
+                                 onBrew={onBrew}
+                                 onQuickEdit={onQuickEdit}/>
             )}
             <BarButton label="WRITE" accessibilityLabel="Write card"
                        enabled={canWrite}
@@ -710,6 +766,82 @@ function ActionBar({accent, canBrewAtAll, canBrew, onBrew, canWrite, canSave, on
             <BarButton label="SAVE" accessibilityLabel="Save"
                        enabled={canSave} flex={1} onPress={onSave}/>
         </XStack>
+    );
+}
+
+type QuickEditLayerProps = {
+    open: boolean;
+    recipe: Recipe;
+    adjustments: QuickEditAdjustments;
+    accent: string;
+    temperatureUnit: TemperatureUnit;
+    actionBarHeight: number;
+    onChange: (adjustments: QuickEditAdjustments) => void;
+    onClose: () => void;
+    onBrew: () => void;
+};
+
+const QUICK_EDIT_HORIZONTAL_PADDING = 16;
+
+function QuickEditLayer({
+    open, recipe, adjustments, accent, temperatureUnit, actionBarHeight, onChange, onClose, onBrew
+}: QuickEditLayerProps) {
+    const {reduced, resolved} = useReducedMotionState();
+    if (!open) return null;
+
+    const reducedOrUnknown = reduced || !resolved;
+    const duration = reducedOrUnknown ? DURATION.fast : DURATION.base;
+    const entering = reducedOrUnknown
+        ? FadeIn.duration(duration).easing(EASING.out)
+        : SlideInDown.duration(duration).easing(EASING.out);
+    const exiting = reducedOrUnknown
+        ? FadeOut.duration(duration).easing(EASING.in)
+        : SlideOutDown.duration(duration).easing(EASING.in);
+
+    return (
+        <View pointerEvents="box-none" accessibilityViewIsModal aria-label="Quick edit"
+              style={{
+            position: "absolute",
+            top:      0,
+            right:    0,
+            bottom:   actionBarHeight,
+            left:     0,
+            zIndex:   1000
+        }}>
+            <Animated.View entering={FadeIn.duration(duration).easing(EASING.out)}
+                           exiting={FadeOut.duration(duration).easing(EASING.in)}
+                           style={{position: "absolute", top: 0, right: 0, bottom: 0, left: 0}}>
+                <Pressable testID="quick-edit-backdrop"
+                           accessibilityRole="button"
+                           accessibilityLabel="Close quick edit"
+                           onPress={onClose}
+                           style={{
+                               flex:            1,
+                               backgroundColor: palette.scrim
+                           }}/>
+            </Animated.View>
+            <Animated.View entering={entering} exiting={exiting}
+                           style={{
+                               position: "absolute",
+                               left:     QUICK_EDIT_HORIZONTAL_PADDING,
+                               right:    QUICK_EDIT_HORIZONTAL_PADDING,
+                               bottom:   0
+                           }}>
+                <QuickEditPanel recipe={recipe}
+                                adjustments={adjustments}
+                                accent={accent}
+                                temperatureUnit={temperatureUnit}
+                                onChange={onChange}
+                                renderBrewAction={(brewability) => (
+                                    <BarButton label="BREW"
+                                               accessibilityLabel="Brew quick edit"
+                                               enabled={brewability.brewable}
+                                               accent={accent}
+                                               flex={1}
+                                               onPress={onBrew}/>
+                                )}/>
+            </Animated.View>
+        </View>
     );
 }
 
@@ -802,6 +934,9 @@ export default function EditRecipe(
     const [renameOpen, setRenameOpen] = useState(false);
     const [beanProfileOpen, setBeanProfileOpen] = useState(false);
     const [bypassWriteOpen, setBypassWriteOpen] = useState(false);
+    const [quickEditOpen, setQuickEditOpen] = useState(false);
+    const [quickEditAdjustments, setQuickEditAdjustments] =
+        useState<QuickEditAdjustments>({});
     const [leavePrompt, setLeavePrompt] =
         useState<{intent: LeaveIntent; inLibrary: boolean} | null>(null);
     const {ratingNoteOpen} = useLiveBrew();
@@ -1023,7 +1158,32 @@ export default function EditRecipe(
         brewWith(currentRecipe);
     }
 
-    function brewWith(brewing: Recipe) {
+    async function onQuickEditOpen() {
+        await flushDrafts();
+        setQuickEditAdjustments({});
+        setQuickEditOpen(true);
+    }
+
+    async function onQuickEditBrewPress() {
+        const currentRecipe = recipe;
+        if (!currentRecipe) return;
+        const adjustments = quickEditAdjustments;
+        await flushDrafts();
+        if (quickEditProblems(currentRecipe, adjustments, temperatureUnit).length > 0) return;
+        const edited = applyQuickEdit(currentRecipe, adjustments);
+        if (hasPendingEdits() && recipeDatabase.getRecipe(currentRecipe.uuid)) {
+            heldExit.current = () => brewWith(edited, adjustments);
+            setQuickEditOpen(false);
+            setQuickEditAdjustments({});
+            setLeavePrompt({intent: "brew", inLibrary: true});
+            return;
+        }
+        setQuickEditOpen(false);
+        setQuickEditAdjustments({});
+        brewWith(edited, adjustments);
+    }
+
+    function brewWith(brewing: Recipe, adjustments?: QuickEditAdjustments) {
         // A brew record points back at its recipe by uuid, and the record
         // screen draws its stage ladder from that row. So a recipe with no row
         // is saved on the way to the machine -- a first save overwrites
@@ -1031,9 +1191,15 @@ export default function EditRecipe(
         // recipe which *does* have a row is no longer saved over without being
         // asked.
         if (!recipeDatabase.getRecipe(brewing.uuid)) persistRecipe();
+        const params = adjustments === undefined
+            ? {recipeJSON: JSON.stringify(brewing)}
+            : {
+                recipeJSON:            JSON.stringify(brewing),
+                quickEditAdjustments: JSON.stringify(adjustments)
+            };
         router.push({
             pathname: "/brew",
-            params:   {recipeJSON: JSON.stringify(brewing)}
+            params
         });
     }
 
@@ -1110,7 +1276,7 @@ export default function EditRecipe(
     // `accessibilityViewIsModal` does on iOS.
     const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
         || bypassWriteOpen || renameOpen || beanProfileOpen || leavePrompt !== null
-        || ratingNoteOpen;
+        || ratingNoteOpen || quickEditOpen;
 
     return (
         <>
@@ -1248,6 +1414,7 @@ export default function EditRecipe(
                        canBrewAtAll={rememberedMachine !== ""}
                        canBrew={canBrew}
                        onBrew={onBrewPress}
+                       onQuickEdit={onQuickEditOpen}
                        onWrite={onWritePress}
                        onSave={async () => {
                            await flushDrafts();
@@ -1263,6 +1430,16 @@ export default function EditRecipe(
                        onHeight={setActionBarHeight}/>
 
             </YStack>
+
+            <QuickEditLayer open={quickEditOpen}
+                            recipe={recipe}
+                            adjustments={quickEditAdjustments}
+                            accent={accent}
+                            temperatureUnit={temperatureUnit}
+                            actionBarHeight={actionBarHeight}
+                            onChange={setQuickEditAdjustments}
+                            onClose={() => setQuickEditOpen(false)}
+                            onBrew={onQuickEditBrewPress}/>
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
                                  recipeUuid={recipe.uuid}

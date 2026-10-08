@@ -22,6 +22,10 @@ const RATIO_HINT = String(RECIPE_HELP.ratio.hint);
 // `let` from inside a hoisted `jest.mock` factory: Babel rejects any name that
 // does not start with `mock`.
 jest.mock("expo-router", () => ({
+    router:                {
+        push: (...args: unknown[]) => mockPush(...args),
+        back: jest.fn()
+    },
     useLocalSearchParams: () =>
         mockParams ?? {recipeJSON: mockRecipeJSON, saveEnabled: "false"},
     useNavigation:        () => ({
@@ -145,6 +149,7 @@ const mockSetOptions = jest.fn();
 const mockGoBack = jest.fn();
 const mockDispatch = jest.fn();
 const mockAddListener = jest.fn(() => jest.fn());
+const mockPush = jest.fn();
 
 /** 18 g at 1:16 over three pours of 96: 288 ml, in balance. */
 function fixture(): Recipe {
@@ -172,6 +177,7 @@ beforeEach(() => {
     mockGoBack.mockClear();
     mockDispatch.mockClear();
     mockAddListener.mockClear();
+    mockPush.mockClear();
     mockNotify.mockClear();
     mockRefreshBeanProfile.mockClear();
     mockBeanProfile = {
@@ -521,6 +527,65 @@ describe("the editor", () => {
         expect(screen.getByLabelText("Write card")).toBeTruthy();
         expect(screen.getByLabelText("Save")).toBeTruthy();
         expect(screen.queryByLabelText("Restore")).toBeNull();
+    });
+
+    it("splits brew into saved brew and quick edit segments", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor();
+
+        expect(screen.getByLabelText("Brew")).toBeTruthy();
+        expect(screen.getByLabelText("Quick edit brew")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+
+        expect(screen.getByTestId("quick-edit-panel")).toBeTruthy();
+        expect(mockPush).not.toHaveBeenCalled();
+
+        await fireEvent.press(screen.getByLabelText("Close quick edit"));
+        await fireEvent.press(screen.getByLabelText("Brew"));
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockPush.mock.calls[0][0].params.quickEditAdjustments).toBeUndefined();
+    });
+
+    it("opens the quick edit panel and closes it from the backdrop", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor();
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+
+        expect(screen.getByTestId("quick-edit-panel")).toBeTruthy();
+        expect(screen.getByTestId("quick-edit-backdrop")).toBeTruthy();
+
+        await fireEvent.press(screen.getByTestId("quick-edit-backdrop"));
+
+        expect(screen.queryByTestId("quick-edit-panel")).toBeNull();
+    });
+
+    it("takes the editor away from TalkBack while quick edit covers it", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor();
+        const content = () =>
+            screen.getByTestId("editor-content", {includeHiddenElements: true});
+
+        expect(content().props.accessibilityElementsHidden).toBe(false);
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+
+        expect(content().props.accessibilityElementsHidden).toBe(true);
+        expect(content().props.importantForAccessibility).toBe("no-hide-descendants");
+    });
+
+    it("disables the quick edit brew action when the adjusted recipe is refused", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor({dosage: 31, ratio: 100});
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+
+        const action = screen.getByLabelText("Brew quick edit");
+        expect(action.props.accessibilityState.disabled).toBe(true);
+        await fireEvent.press(action);
+        expect(mockPush).not.toHaveBeenCalled();
     });
 
     it("stops writing a recipe the machine would reject, but still saves it", async () => {

@@ -1,5 +1,6 @@
 import type {BrewFailure} from "@/library/machine/Machine";
 import type {PodCoffee} from "@/library/podCoffee";
+import type {QuickEditRecordAdjustments} from "@/library/quickEdit";
 import Pour from "@/library/Pour";
 import {grindBand} from "@/library/grindBands";
 
@@ -240,6 +241,20 @@ export type BrewRecord = {
      * watched it closely enough to know why it stopped.
      */
     watched?: boolean;
+    /**
+     * The saved recipe's dose, when this brew changed dose for one run.
+     *
+     * The brewed dose itself is the `dose` snapshot below. This is the
+     * comparison value a later surface needs after the recipe has been edited
+     * or deleted.
+     */
+    adjustedFromDose?: number;
+    /** The saved recipe's ratio, when this brew changed ratio for one run. */
+    adjustedFromRatio?: number;
+    /** The saved recipe's grind size, when this brew changed grind for one run. */
+    adjustedFromGrind?: number;
+    /** The signed temperature offset applied to every stage for this brew. */
+    adjustedTempOffset?: number;
     // What the recipe asked for, copied at brew time.
     //
     // All optional, so every row written before this reads exactly as it did
@@ -572,6 +587,7 @@ export function unobservedBrew(input: {
     /** Injected by tests; the wall clock otherwise. */
     at?: number;
     id?: string;
+    quickEdit?: QuickEditRecordAdjustments;
 }): BrewRecord {
     const at = input.at ?? Date.now();
     return {
@@ -592,6 +608,7 @@ export function unobservedBrew(input: {
         heldSeconds: 0,
         rating: input.rating,
         pinned: true,
-        watched: false
+        watched: false,
+        ...(input.quickEdit ?? {})
     };
 }

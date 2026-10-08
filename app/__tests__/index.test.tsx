@@ -7,7 +7,7 @@ import HomeScreen, {EDITOR_PUSH_GUARD_MS} from "@/app/index";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {XBloomRecipe} from "@/library/XBloomRecipe";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, SHEET_PRESS_TIMEOUT} from "@/test-utils/render";
 import {resolveLibraryFilter, tagFilterId, tagFromFilterId} from "@/library/libraryFilters";
 import {parseHidden, serialiseHidden} from "@/library/hiddenShelves";
 import type {LibraryQuery} from "@/library/libraryQuery";
@@ -1357,15 +1357,15 @@ describe("HomeScreen, opening one editor at a time", () => {
         expect(mockPush).toHaveBeenCalledTimes(1);
     });
 
-    it("offers share and write in every row's action tray, brew only with a machine", async () => {
-        // Share and write need no machine, so the action tray carries them
+    it("offers quick edit and write in every row's action tray, brew only with a machine", async () => {
+        // Tune and write need no machine, so the action tray carries them
         // whatever is paired. Brew is the one act that needs hardware, and it
         // follows the no-dead-button rule.
         mockRemembered = "";
         await renderHome({recipes: [writable("Ethiopia")]});
         await screen.findByText("Ethiopia");
 
-        expect(screen.getByLabelText("Share Ethiopia", {includeHiddenElements: true}))
+        expect(screen.getByLabelText("Quick edit Ethiopia", {includeHiddenElements: true}))
             .toBeTruthy();
         expect(screen.getByLabelText("Write Ethiopia to a card", {includeHiddenElements: true}))
             .toBeTruthy();
@@ -1373,18 +1373,50 @@ describe("HomeScreen, opening one editor at a time", () => {
             .toBeNull();
     });
 
-    it("reports a failed share from the action tray as a toast", async () => {
-        // The tray shares recipes just as the editor does, so it owes the user
-        // the same words when it cannot. Pinned as a literal: asserting against
-        // the map the screen just read would pass however the copy was mangled.
-        mockShareState = {status: "failed", reason: "limited"};
+    it("opens quick edit from the action tray", async () => {
         await renderHome({recipes: [named("Ethiopia")]});
         await screen.findByText("Ethiopia");
 
-        expect(mockNotify).toHaveBeenCalledWith({
-            tone:    "error",
-            message: "Sharing is busy right now. Try again in a few minutes."
-        });
+        await fireEvent.press(screen.getByLabelText("Quick edit Ethiopia", {
+            includeHiddenElements: true
+        }));
+        await settleSheet();
+
+        expect(screen.getByTestId("quick-edit-panel")).toBeTruthy();
+        expect(screen.getByTestId("home-content", {includeHiddenElements: true})
+            .props.accessibilityElementsHidden).toBe(true);
+        expect(screen.getByTestId("home-content", {includeHiddenElements: true})
+            .props.importantForAccessibility).toBe("no-hide-descendants");
+    });
+
+    it("brews a quick edited clone from the action tray without saving it", async () => {
+        mockRemembered = "machine-device-id";
+        const original = writable("Ethiopia");
+        const db = store([original]);
+        await renderWithProviders(<HomeScreen db={db} settings={new Settings(memoryStorage())}/>);
+        await screen.findByText("Ethiopia");
+
+        await fireEvent.press(screen.getByLabelText("Quick edit Ethiopia", {
+            includeHiddenElements: true
+        }));
+        await settleSheet();
+        await fireEvent.press(screen.getByLabelText("Increase Quick edit dose"));
+        await waitFor(
+            async () => {
+                await fireEvent.press(screen.getByTestId("home-quick-edit-brew"));
+                expect(mockPush).toHaveBeenCalledTimes(1);
+            },
+            {timeout: SHEET_PRESS_TIMEOUT}
+        );
+
+        const call = mockPush.mock.calls[0][0];
+        const pushed = JSON.parse(call.params.recipeJSON);
+        expect(call).toEqual(expect.objectContaining({pathname: "/brew"}));
+        expect(JSON.parse(call.params.quickEditAdjustments)).toEqual({dose: 16});
+        expect(pushed.uuid).toBe(original.uuid);
+        expect(pushed.dosage).toBe(16);
+        expect(original.dosage).toBe(15);
+        expect(db.updateRecipe).not.toHaveBeenCalled();
     });
 
     it("adds the brew tile to the action tray once a machine is paired", async () => {

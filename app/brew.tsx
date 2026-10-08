@@ -46,7 +46,14 @@ import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {liveDrawdown} from "@/library/brew/liveDrawdown";
 import {pauseSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
+import {
+    quickEditBounds,
+    quickEditRecordAdjustments,
+    type QuickEditAdjustments,
+    type QuickEditRecordAdjustments
+} from "@/library/quickEdit";
 import Recipe from "@/library/Recipe";
+import RecipeDatabase from "@/library/RecipeDatabase";
 import {SCREEN_PADDING} from "@/constants/layout";
 
 const WORKING = new Set(["idle", "waking", "sending"]);
@@ -54,6 +61,7 @@ export const BREW_BAND_GAP = 13;
 /** Half a minute of rate in two dozen buckets. See FlowSparkline. */
 const FLOW_TAIL_SECONDS = 30;
 const FLOW_TAIL_BUCKETS = 24;
+const QUICK_EDIT_KEYS = ["dose", "ratio", "grind", "tempOffset"] as const;
 
 /** Where an export sources its record: the freshest brew in the store. */
 type ExportStore = Pick<HistoryStore, "all" | "samples">
@@ -65,6 +73,105 @@ function latestExport(store: ExportStore): BrewExportSource | null {
     const latest = store.all()[0];
     if (latest === undefined) return null;
     return {record: latest, samples: store.samples(latest.id)};
+}
+
+function parseQuickEditParam(value: string | undefined): QuickEditAdjustments | undefined {
+    if (value === undefined) return undefined;
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(value);
+    } catch {
+        return undefined;
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        return undefined;
+    }
+    if (Object.keys(parsed).some((key) => !QUICK_EDIT_KEYS.includes(
+        key as (typeof QUICK_EDIT_KEYS)[number]
+    ))) {
+        return undefined;
+    }
+    const source = parsed as Record<keyof QuickEditAdjustments, unknown>;
+    const adjustments: QuickEditAdjustments = {};
+    for (const key of QUICK_EDIT_KEYS) {
+        const entry = source[key];
+        if (entry === undefined) continue;
+        if (typeof entry !== "number" || !Number.isFinite(entry) || !Number.isInteger(entry)) {
+            return undefined;
+        }
+        adjustments[key] = entry;
+    }
+    return Object.values(adjustments).some((entry) => entry !== undefined)
+        ? adjustments
+        : undefined;
+}
+
+function quickEditAdjustmentsInBounds(
+    saved: Recipe,
+    adjustments: QuickEditAdjustments
+): boolean {
+    const bounds = quickEditBounds(saved);
+    if (
+        adjustments.dose !== undefined
+        && (adjustments.dose < bounds.dose.min || adjustments.dose > bounds.dose.max)
+    ) {
+        return false;
+    }
+    if (
+        adjustments.ratio !== undefined
+        && (
+            bounds.ratio === null
+            || adjustments.ratio < bounds.ratio.min
+            || adjustments.ratio > bounds.ratio.max
+        )
+    ) {
+        return false;
+    }
+    if (
+        adjustments.grind !== undefined
+        && (
+            bounds.grind === null
+            || adjustments.grind < bounds.grind.min
+            || adjustments.grind > bounds.grind.off
+        )
+    ) {
+        return false;
+    }
+    if (
+        adjustments.tempOffset !== undefined
+        && (
+            adjustments.tempOffset < bounds.tempOffset.min
+            || adjustments.tempOffset > bounds.tempOffset.max
+        )
+    ) {
+        return false;
+    }
+    return true;
+}
+
+function quickEditRecordFromRoute(
+    recipe: Recipe,
+    value: string | undefined
+): QuickEditRecordAdjustments | undefined {
+    // The brew itself is the route's recipeJSON. These adjustments only
+    // decorate the history record, so losing the badge must never cost a brew.
+    const adjustments = parseQuickEditParam(value);
+    if (adjustments === undefined) return undefined;
+    let saved: Recipe | null;
+    try {
+        saved = new RecipeDatabase().getRecipe(recipe.uuid);
+    } catch (error) {
+        console.warn("Brew: could not derive quick edit record metadata", error);
+        return undefined;
+    }
+    if (saved === null) {
+        return undefined;
+    }
+    if (!quickEditAdjustmentsInBounds(saved, adjustments)) {
+        console.warn("Brew: ignored malformed quick edit record metadata");
+        return undefined;
+    }
+    return quickEditRecordAdjustments(saved, adjustments);
 }
 
 /** A bordered press. The screen has four of them and they differ only in colour. */
@@ -82,7 +189,8 @@ function Action({label, color, onPress}: {label: string; color: string; onPress:
 }
 
 export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) {
-    const {recipeJSON, view} = useLocalSearchParams<{recipeJSON: string; view: string}>();
+    const {recipeJSON, view, quickEditAdjustments} =
+        useLocalSearchParams<{recipeJSON: string; view: string; quickEditAdjustments?: string}>();
     // Opened to look at a run that already exists, from the mini bar, rather
     // than to start one. Without this, coming back to watch the brew you just
     // made would make it again: `start` replaces a finished run, and this
@@ -93,6 +201,9 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // A local recipe from the route params. Used for the first render (before
     // RunOwner in the provider has its first tick) and for `total` below.
     const [localRecipe] = useState(() => new Recipe(undefined, recipeJSON));
+    const [quickEditRecord] = useState(() =>
+        quickEditRecordFromRoute(localRecipe, quickEditAdjustments)
+    );
 
     const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
            error, watch, ratingNoteOpen} = useLiveBrew();
@@ -102,7 +213,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // re-mounting this screen while a brew is in flight never commands a second
     // brew (Finding 2).
     useEffect(() => {
-        if (!viewing) start(localRecipe);
+        if (!viewing) start(localRecipe, quickEditRecord);
         // localRecipe and viewing are stable for the life of this screen.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -498,7 +609,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // on the spent one brewed a coffee that no history row
                         // ever mentioned.
                         <Action label="Try again" color={palette.text}
-                                onPress={() => start(recipe)} />
+                                onPress={() => start(recipe, quickEditRecord)} />
                     )}
                     {offerPro && (
                         <Action label="Switch to Pro" color={palette.warn}

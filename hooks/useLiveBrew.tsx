@@ -7,6 +7,7 @@ import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {Stall} from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {BypassView} from "@/library/brew/bypassState";
+import type {QuickEditRecordAdjustments} from "@/library/quickEdit";
 import type Recipe from "@/library/Recipe";
 
 /** The brew-state snapshot the bar and the screen both read from. */
@@ -43,7 +44,7 @@ type LiveBrew = {
      * mounted this becomes a no-op so re-mounting the brew screen cannot start
      * a second brew.
      */
-    start: (recipe: Recipe) => void;
+    start: (recipe: Recipe, quickEdit?: QuickEditRecordAdjustments) => void;
     /**
      * Start this recipe again, switching the machine to PRO mode first.
      *
@@ -52,7 +53,7 @@ type LiveBrew = {
      * would collect no samples and write no history row: the run must be a new
      * run, and only `start`/`startInPro` make one.
      */
-    startInPro: (recipe: Recipe) => void;
+    startInPro: (recipe: Recipe, quickEdit?: QuickEditRecordAdjustments) => void;
     /** Dismiss a finished or stopped bar. Has no effect while actively brewing. */
     dismiss: () => void;
     /**
@@ -127,12 +128,16 @@ export function LiveBrewProvider({children, store}: {
     // `runId` is bumped for every run so a second brew starts from nothing
     // rather than inheriting the last one's samples and spent recorder.
     const [current, setCurrent] = useState<
-        {recipe: Recipe | null; runId: number; pro: boolean}
+        {recipe: Recipe | null; runId: number; pro: boolean; quickEdit?: QuickEditRecordAdjustments}
     >({recipe: null, runId: 0, pro: false});
     const [ratingNoteOpen, setRatingNoteOpen] = useState(false);
 
-    function begin(recipe: Recipe, pro: boolean = false): void {
-        setCurrent((was) => ({recipe, runId: was.runId + 1, pro}));
+    function begin(
+        recipe: Recipe,
+        pro: boolean = false,
+        quickEdit?: QuickEditRecordAdjustments
+    ): void {
+        setCurrent((was) => ({recipe, runId: was.runId + 1, pro, quickEdit}));
     }
 
     // One element, always, wrapping `children`. `children` here is the whole
@@ -145,6 +150,7 @@ export function LiveBrewProvider({children, store}: {
             recipe={current.recipe}
             runId={current.runId}
             pro={current.pro}
+            quickEdit={current.quickEdit}
             store={store}
             onStart={begin}
             onDismiss={() => setCurrent((was) => ({...was, recipe: null}))}
@@ -163,20 +169,21 @@ export function LiveBrewProvider({children, store}: {
  * shape of the tree never depends on whether a brew is running.
  */
 function RunOwner({
-    recipe, runId, pro, store, onStart, onDismiss, ratingNoteOpen,
+    recipe, runId, pro, quickEdit, store, onStart, onDismiss, ratingNoteOpen,
     setRatingNoteOpen, children
 }: {
     recipe: Recipe | null;
     runId: number;
     pro: boolean;
+    quickEdit?: QuickEditRecordAdjustments;
     store?: BrewStore;
-    onStart: (recipe: Recipe, pro?: boolean) => void;
+    onStart: (recipe: Recipe, pro?: boolean, quickEdit?: QuickEditRecordAdjustments) => void;
     onDismiss: () => void;
     ratingNoteOpen: boolean;
     setRatingNoteOpen: (open: boolean) => void;
     children: React.ReactNode;
 }) {
-    const result = useBrewRun(recipe, store, runId);
+    const result = useBrewRun(recipe, store, runId, quickEdit);
     const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
            heldSeconds, stalls, stageWater, pauseElapsed, brew, startBrew,
            cancelBrew, canOfferProMode, switchToProAndRetry, bypass, record} = result;
@@ -217,6 +224,13 @@ function RunOwner({
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
         holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
     };
+    const quickEditFor = (
+        next: Recipe,
+        nextQuickEdit?: QuickEditRecordAdjustments
+    ): QuickEditRecordAdjustments | undefined => {
+        if (nextQuickEdit !== undefined) return nextQuickEdit;
+        return next === recipe ? quickEdit : undefined;
+    };
 
     return (
         <Context.Provider value={{
@@ -230,11 +244,15 @@ function RunOwner({
             // Opening a finished brew to look at it must not come through
             // here — `app/brew.tsx` skips `start` in view mode — or tapping
             // the bar to see the brew you just made would make it again.
-            start: (next: Recipe) => {
-                if (recipe === null || OVER.has(phase.name)) onStart(next);
+            start: (next: Recipe, nextQuickEdit?: QuickEditRecordAdjustments) => {
+                if (recipe === null || OVER.has(phase.name)) {
+                    onStart(next, false, quickEditFor(next, nextQuickEdit));
+                }
             },
-            startInPro: (next: Recipe) => {
-                if (recipe === null || OVER.has(phase.name)) onStart(next, true);
+            startInPro: (next: Recipe, nextQuickEdit?: QuickEditRecordAdjustments) => {
+                if (recipe === null || OVER.has(phase.name)) {
+                    onStart(next, true, quickEditFor(next, nextQuickEdit));
+                }
             },
             dismiss: onDismiss,
             watch: () => {

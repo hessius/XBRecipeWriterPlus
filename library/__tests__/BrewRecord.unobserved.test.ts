@@ -60,6 +60,31 @@ describe("unobservedBrew", () => {
         expect(brew.recipeUuid).toBe("uuid-1");
     });
 
+    it("carries no quick-edit metadata when nobody supplied it", () => {
+        const brew = unobservedBrew(input);
+        expect(brew).not.toHaveProperty("adjustedFromDose");
+        expect(brew).not.toHaveProperty("adjustedFromRatio");
+        expect(brew).not.toHaveProperty("adjustedFromGrind");
+        expect(brew).not.toHaveProperty("adjustedTempOffset");
+    });
+
+    it("can carry quick-edit metadata when the caller has it", () => {
+        expect(unobservedBrew({
+            ...input,
+            quickEdit: {
+                adjustedFromDose: 18,
+                adjustedFromRatio: 16,
+                adjustedFromGrind: 62,
+                adjustedTempOffset: 2
+            }
+        })).toMatchObject({
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: 2
+        });
+    });
+
     it("mints its own id when none is handed to it", () => {
         const first = unobservedBrew({...input, id: undefined});
         const second = unobservedBrew({...input, id: undefined});

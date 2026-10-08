@@ -8,8 +8,8 @@ import {
     MAX_ORIGIN_LENGTH,
     normaliseBeanTags
 } from "./brew/beanTags";
-import {DOSE} from "./cardLimits";
-import Recipe, {MAX_DESCRIPTION} from "./Recipe";
+import {DOSE, TEMPERATURE} from "./cardLimits";
+import Recipe, {GRINDER_OFF_VALUE, MAX_DESCRIPTION} from "./Recipe";
 import {XBLOOM_SHARE_HOST} from "./shareLink";
 
 /**
@@ -229,12 +229,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /** A number the model can do arithmetic with. Rejects NaN, Infinity and null. */
-function isNumber(value: unknown): boolean {
+function isNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
 }
 
 function isNumberArray(value: unknown): boolean {
     return Array.isArray(value) && value.every(isNumber);
+}
+
+function isIntegerIn(value: unknown, min: number, max: number): boolean {
+    return isNumber(value)
+        && Number.isInteger(value)
+        && value >= min
+        && value <= max;
 }
 
 /**
@@ -376,6 +383,14 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     backup:         isNumberArray,
     offline_backup: isNumberArray,
     uid:            isNumberArray
+};
+
+const BREW_BASELINE_DOSE = {min: 1, max: 999};
+const BREW_BASELINE_RATIO = {min: 1, max: 999};
+const BREW_BASELINE_GRIND = {min: 1, max: GRINDER_OFF_VALUE};
+const BREW_TEMP_OFFSET = {
+    min: TEMPERATURE.min - TEMPERATURE.max,
+    max: TEMPERATURE.max - TEMPERATURE.min
 };
 
 /**
@@ -616,6 +631,18 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     // transit would turn a typed verdict into a brew the app claims to have
     // watched, with no water and no time to show for it.
     watched:    (v) => typeof v === "boolean",
+    // Historical baselines draw badges only. They are not written back to a
+    // card, so imported but real recipe values outside the card-writing band
+    // must survive restore while hostile storage-scale numbers are still
+    // refused at the boundary.
+    adjustedFromDose:  (v) =>
+        isIntegerIn(v, BREW_BASELINE_DOSE.min, BREW_BASELINE_DOSE.max),
+    adjustedFromRatio: (v) =>
+        isIntegerIn(v, BREW_BASELINE_RATIO.min, BREW_BASELINE_RATIO.max),
+    adjustedFromGrind: (v) =>
+        isIntegerIn(v, BREW_BASELINE_GRIND.min, BREW_BASELINE_GRIND.max),
+    adjustedTempOffset: (v) =>
+        isIntegerIn(v, BREW_TEMP_OFFSET.min, BREW_TEMP_OFFSET.max),
     // The recipe snapshot, taken at brew time. Absent from every backup made
     // before the export existed, so optional, and checked only to shape: a
     // stored dose is read back through the same guards a live row is, and
@@ -717,6 +744,10 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         // writing `true` here would put a field on every record in the file to
         // say what its absence already says.
         watched: record.watched,
+        adjustedFromDose: record.adjustedFromDose,
+        adjustedFromRatio: record.adjustedFromRatio,
+        adjustedFromGrind: record.adjustedFromGrind,
+        adjustedTempOffset: record.adjustedTempOffset,
         // Carried through because the record is rebuilt field by field: a
         // field this list forgets is a field the restore drops, and these are
         // what an export hands to another app. Undefined stays undefined so an

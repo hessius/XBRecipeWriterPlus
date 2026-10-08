@@ -5,6 +5,7 @@ export const BREW_FIGURE_VALUE_SIZE = 28;
 export const BREW_FIGURE_DETAIL_VALUE_SIZE = 20;
 export const BREW_FIGURE_INTERNAL_GAP = 2;
 export const BREW_FIGURE_ROW_GAP = 4;
+export const BREW_FIGURE_ADJUSTMENT_ROW_GAP = BREW_FIGURE_ROW_GAP;
 export const BREW_FIGURE_COLUMN_GAP = 13;
 export const BREW_FIGURE_VALUE_TRACKING = 0.5;
 export const BREW_FIGURE_LABEL_TRACKING = 1.6;
@@ -16,6 +17,7 @@ export const BREW_FIGURE_BADGE_BORDER_WIDTH = 1;
 export const BREW_FIGURE_BADGE_GAP = 6;
 export const BREW_FIGURE_BADGE_RADIUS = 4;
 export const STORY_FIT_MARGIN = 0.75;
+export const BREW_FIGURE_ADJUSTMENT_COLUMNS = 2;
 
 export type BrewFigureTextGeometry = {
     labelSize: number;
@@ -24,6 +26,7 @@ export type BrewFigureTextGeometry = {
     labelTracking: number;
     valueTracking: number;
     columnGap: number;
+    adjustmentRowGap: number;
 };
 
 export type BrewFigureBadgeGeometry = {
@@ -43,7 +46,8 @@ export function brewFigureTextGeometry(scale = 1): BrewFigureTextGeometry {
         detailValueSize: BREW_FIGURE_DETAIL_VALUE_SIZE * scale,
         labelTracking:   BREW_FIGURE_LABEL_TRACKING * scale,
         valueTracking:   BREW_FIGURE_VALUE_TRACKING * scale,
-        columnGap:       BREW_FIGURE_COLUMN_GAP * scale
+        columnGap:       BREW_FIGURE_COLUMN_GAP * scale,
+        adjustmentRowGap: BREW_FIGURE_ADJUSTMENT_ROW_GAP * scale
     };
 }
 
@@ -74,6 +78,14 @@ export function brewFigureBadgeWidth(
     )
         + (badge.paddingHorizontal + badge.borderWidth) * 2;
 }
+
+export type BrewFigureAdjustmentMeasure = {
+    label: string;
+    value: string;
+    badge: string;
+};
+
+type AdjustmentMeasureInput = string | BrewFigureAdjustmentMeasure;
 
 /**
  * DRAWDOWN is the only eight-character label in the row, so its column is
@@ -139,4 +151,99 @@ export function brewFigureColumnWidths(
         brewFigureColumnFlex(fontScale, contentWidth),
         scale
     );
+}
+
+export function brewFigureAdjustmentColumns(
+    contentWidth: number,
+    fontScale: number,
+    figures: AdjustmentMeasureInput[],
+    scale = 1
+): 1 | 2 {
+    if (contentWidth <= 0) return 2;
+    const geometry = brewFigureTextGeometry(scale);
+    const twoColumnWidth = Math.max(
+        0,
+        (
+            contentWidth
+            - geometry.columnGap * (BREW_FIGURE_ADJUSTMENT_COLUMNS - 1)
+        ) / BREW_FIGURE_ADJUSTMENT_COLUMNS
+    );
+    return figures.every((figure) =>
+        brewFigureAdjustmentWidth(figure, fontScale, scale) + STORY_FIT_MARGIN <= twoColumnWidth)
+        ? 2
+        : 1;
+}
+
+export function brewFigureAdjustmentWidth(
+    figure: AdjustmentMeasureInput,
+    fontScale: number,
+    scale = 1
+): number {
+    if (typeof figure === "string") return brewFigureBadgeWidth(figure, fontScale, scale);
+
+    const text = brewFigureTextGeometry(scale);
+    const badge = brewFigureBadgeGeometry(scale);
+    const labelWidth = dotoTextWidth(
+        figure.label,
+        text.labelSize,
+        fontScale,
+        text.labelTracking,
+        DOTO_MIN_FONT_SIZE * scale
+    );
+    const valueWidth = dotoTextWidth(
+        figure.value,
+        text.detailValueSize,
+        fontScale,
+        text.valueTracking,
+        DOTO_MIN_FONT_SIZE * scale
+    );
+    const valueRowWidth = valueWidth
+        + badge.gap
+        + brewFigureBadgeWidth(figure.badge, fontScale, scale);
+    return Math.max(labelWidth, valueRowWidth);
+}
+
+export type BrewFigureAdjustmentLayout = {
+    columns: 1 | 2;
+    columnWidth: number;
+    rows: number;
+};
+
+/** The adjustment row wraps to one column when a badge needs it. */
+export function brewFigureAdjustmentLayout(
+    contentWidth: number,
+    fontScale: number,
+    figures: AdjustmentMeasureInput[],
+    scale = 1
+): BrewFigureAdjustmentLayout {
+    const columns = brewFigureAdjustmentColumns(contentWidth, fontScale, figures, scale);
+    if (columns === 1) {
+        return {
+            columns,
+            columnWidth: Math.max(0, contentWidth),
+            rows:        figures.length
+        };
+    }
+    const geometry = brewFigureTextGeometry(scale);
+    return {
+        columns,
+        columnWidth: Math.max(
+            0,
+            (
+                contentWidth
+                - geometry.columnGap * (columns - 1)
+            ) / columns
+        ),
+        rows: Math.ceil(figures.length / columns)
+    };
+}
+
+/** The adjustment row wraps to one column when a badge needs it. */
+export function brewFigureAdjustmentColumnWidth(
+    contentWidth: number,
+    fontScale: number,
+    figures: AdjustmentMeasureInput[],
+    scale = 1
+): number {
+    return brewFigureAdjustmentLayout(contentWidth, fontScale, figures, scale).columnWidth;
 }

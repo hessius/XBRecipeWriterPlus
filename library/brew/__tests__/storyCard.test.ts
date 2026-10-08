@@ -24,12 +24,14 @@ import type {BrewRecord} from "../BrewRecord";
 import {RATE_BOTTOM_GAP, RATE_HEIGHT, RATE_TOP_GAP, TRACE_HEIGHT} from "../rateChartGeometry";
 import {
     BREW_FIGURE_DETAIL_VALUE_SIZE,
+    BREW_FIGURE_ADJUSTMENT_ROW_GAP,
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
     BREW_FIGURE_VALUE_SIZE,
     brewFigureBadgeGeometry,
     brewFigureBadgeWidth,
+    brewFigureTextGeometry,
     brewFigureUsesFourColumns
 } from "../figureGeometry";
 import {formatBrewDate, formatBrewTime} from "../brewFormat";
@@ -97,6 +99,20 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
             + quietLineHeight
         )
         : 0;
+    const adjustmentFigures = budget.showFigureDetails !== false
+        ? Math.max(0, input.figureAdjustmentRows ?? 0) * (
+            BREW_FIGURE_ADJUSTMENT_ROW_GAP
+            + dotoRowHeight(BREW_FIGURE_LABEL_SIZE * textScale, fontScale)
+            + BREW_FIGURE_INTERNAL_GAP
+            + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE * textScale, fontScale)
+            + BREW_FIGURE_INTERNAL_GAP
+            + Math.max(
+                dotoRowHeight(11 * textScale, fontScale, 11 * textScale)
+                    + (1 * textScale + 1 * textScale) * 2,
+                dotoRowHeight(11 * textScale, fontScale)
+            )
+        )
+        : 0;
     const noteHeight = budget.showSummaryNote !== false && input.hasSummaryNote === true
         ? dotoRowHeight(11 * textScale, fontScale) + 8
         : 0;
@@ -120,6 +136,7 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
         + rateHeight
         + baseFigures
         + detailFigures
+        + adjustmentFigures
         + noteHeight
         + ladderHeight;
 }
@@ -753,6 +770,63 @@ describe("the frame", () => {
                 + dotoRowHeight(BREW_FIGURE_LABEL_SIZE, 1)
                 + BREW_FIGURE_INTERNAL_GAP
                 + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, 1));
+    });
+
+    it("counts every wrapped adjustment row before keeping story details", () => {
+        const base = {
+            width:               240,
+            stages:              1,
+            fontScale:           1.2,
+            hasRateChart:        true,
+            hasCoffee:           false,
+            hasRating:           false,
+            tags:                [],
+            hasSummaryNote:      false,
+            hasBypass:           true,
+            hasGrindRecipeBadge: true,
+            drawdownRate:        2.1
+        };
+        const oldOneBlockCount = storySummaryBudget({
+            ...base,
+            figureExtraRows: 2
+        });
+        const measuredRows = storySummaryBudget({
+            ...base,
+            figureExtraRows:     1,
+            figureAdjustmentRows: 4
+        });
+
+        expect(oldOneBlockCount.showFigureDetails).toBe(true);
+        expect(oldOneBlockCount.declinedContent.details).toBe(false);
+        expect(measuredRows.showFigureDetails).toBe(false);
+        expect(measuredRows.declinedContent.details).toBe(true);
+        expect(measuredRows.requiredHeight).toBeLessThanOrEqual(measuredRows.contentHeight);
+    });
+
+    it("budgets adjustment rows with the same vertical gap the wrapped row renders", () => {
+        const input = {
+            width:               600,
+            stages:              0,
+            hasRateChart:        false,
+            hasCoffee:           false,
+            hasRating:           false,
+            figureAdjustmentRows: 1
+        };
+        const withoutAdjustment = storySummaryBudget({...input, figureAdjustmentRows: 0});
+        const withAdjustment = storySummaryBudget(input);
+        const renderedRowGap = brewFigureTextGeometry(storyTextScale(input.width))
+            .adjustmentRowGap;
+
+        expect(withAdjustment.requiredHeight - withoutAdjustment.requiredHeight)
+            .toBe(renderedRowGap
+                + dotoRowHeight(BREW_FIGURE_LABEL_SIZE, 1)
+                + BREW_FIGURE_INTERNAL_GAP
+                + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, 1)
+                + BREW_FIGURE_INTERNAL_GAP
+                + Math.max(
+                    dotoRowHeight(11, 1, 11) + 4,
+                    dotoRowHeight(11, 1)
+                ));
     });
 });
 

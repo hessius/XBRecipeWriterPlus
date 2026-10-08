@@ -3,6 +3,10 @@ import {
     BREW_FIGURE_DELAY_FLEX,
     BREW_FIGURE_DRAWDOWN_FLEX,
     BREW_FIGURE_GRIND_FLEX,
+    brewFigureAdjustmentColumns,
+    brewFigureAdjustmentColumnWidth,
+    brewFigureAdjustmentLayout,
+    brewFigureAdjustmentWidth,
     brewFigureBadgeWidth,
     brewFigureColumnWidths,
     brewFigureTextGeometry,
@@ -17,6 +21,12 @@ import {
 } from "@/library/dotoMetrics";
 
 const CAPTURE_PADDING = SCREEN_PADDING + 12;
+const ADJUSTMENT_FIGURES = [
+    {label: "DOSE", value: "31", badge: "RECIPE 31"},
+    {label: "RATIO", value: "1:100", badge: "RECIPE 100"},
+    {label: "TEMP", value: "39 to 99", badge: "OFFSET +60"},
+    {label: "GRIND", value: "OFF", badge: "RECIPE OFF"}
+];
 
 function labelWidth(text: string, fontScale: number): number {
     const geometry = brewFigureTextGeometry();
@@ -100,5 +110,34 @@ describe("detail row columns", () => {
     it("assumes four columns before the first layout pass", () => {
         expect(brewFigureUsesFourColumns(1, 0)).toBe(true);
         expect(brewFigureColumnWidths(0, 1)).toEqual([0, 0, 0, 0]);
+    });
+
+    it("fits four quick-edit figures at common capture widths and the font cap", () => {
+        for (const width of [375, 393, 402, 430]) {
+            const column = brewFigureAdjustmentColumnWidth(
+                contentWidth(width),
+                DOTO_MAX_FONT_SCALE,
+                ADJUSTMENT_FIGURES
+            );
+            for (const figure of ADJUSTMENT_FIGURES) {
+                expectFit(
+                    brewFigureAdjustmentWidth(figure, DOTO_MAX_FONT_SCALE),
+                    column
+                );
+            }
+        }
+    });
+
+    it("uses the one-column fallback for the widest quick-edit values", () => {
+        expect(brewFigureAdjustmentColumns(
+            contentWidth(375), DOTO_MAX_FONT_SCALE, ADJUSTMENT_FIGURES
+        )).toBe(1);
+        expect(brewFigureAdjustmentLayout(
+            contentWidth(375), DOTO_MAX_FONT_SCALE, ADJUSTMENT_FIGURES
+        )).toMatchObject({columns: 1, rows: 4});
+
+        expect(brewFigureAdjustmentColumns(
+            contentWidth(430), DOTO_MAX_FONT_SCALE, ADJUSTMENT_FIGURES
+        )).toBe(1);
     });
 });

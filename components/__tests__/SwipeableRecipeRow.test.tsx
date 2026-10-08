@@ -159,7 +159,7 @@ describe("SwipeableRecipeRow", () => {
             hintTray: "action",
             onBounced,
             onBrew: jest.fn(),
-            onShare: jest.fn(),
+            onQuickEdit: jest.fn(),
             onWrite: jest.fn()
         })}/>);
 
@@ -188,7 +188,7 @@ describe("SwipeableRecipeRow", () => {
             hintTray: "action",
             onShown,
             onBrew: jest.fn(),
-            onShare: jest.fn(),
+            onQuickEdit: jest.fn(),
             onWrite: jest.fn()
         })}/>);
 
@@ -206,7 +206,7 @@ describe("SwipeableRecipeRow", () => {
             hintTray: "action",
             onShown,
             onBrew: jest.fn(),
-            onShare: jest.fn(),
+            onQuickEdit: jest.fn(),
             onWrite: jest.fn()
         })}/>);
 
@@ -229,7 +229,7 @@ describe("SwipeableRecipeRow", () => {
             hintTray: "action",
             onShown,
             onBrew: jest.fn(),
-            onShare: jest.fn(),
+            onQuickEdit: jest.fn(),
             onWrite: jest.fn()
         })}/>);
 
@@ -377,7 +377,7 @@ describe("SwipeableRecipeRow", () => {
                         hintTray: showing ? "action" : null,
                         onBounced: () => setShowing(false),
                         onBrew: jest.fn(),
-                        onShare: jest.fn(),
+                        onQuickEdit: jest.fn(),
                         onWrite: jest.fn()
                     })}/>
                     <SwipeableRecipeRow {...props({
@@ -411,7 +411,7 @@ describe("SwipeableRecipeRow", () => {
     it("keeps the tray list and the hint signature in step", async () => {
         await renderWithProviders(<SwipeableRecipeRow {...props({
             onBrew: jest.fn(),
-            onShare: jest.fn(),
+            onQuickEdit: jest.fn(),
             onWrite: jest.fn(),
             onToggleFavourite: jest.fn()
         })}/>);
@@ -507,7 +507,7 @@ describe("SwipeableRecipeRow", () => {
 
     it("gives the action tray glyphs and tones, as the management tray has", async () => {
         // The two trays were asymmetric: COPY and DELETE each carried a mark and
-        // a colour, while BREW, SHARE and WRITE were three near-identical white
+        // a colour, while BREW, TUNE and WRITE were three near-identical white
         // words. A tray that reads as unfinished beside its twin invites the
         // guess that it is.
         // A pinned accent, not the hashed default: the hash is over `uuid`,
@@ -518,13 +518,13 @@ describe("SwipeableRecipeRow", () => {
         const subject = recipe();
         subject.accentIndex = 4;
         await renderWithProviders(<SwipeableRecipeRow {...props({
-            recipe: subject, onBrew: jest.fn(), onShare: jest.fn(), onWrite: jest.fn()
+            recipe: subject, onBrew: jest.fn(), onQuickEdit: jest.fn(), onWrite: jest.fn()
         })}/>);
 
         // BREW wears the recipe's own accent: it is the act on this one recipe,
         // and the tile should not disagree with the card it slid off.
         expect(dotColourOf("recipe-row-brew")).toBe("#97D8C4");
-        expect(dotColourOf("recipe-row-share")).toBe(palette.info);
+        expect(dotColourOf("recipe-row-quick-edit")).toBe(palette.info);
         // WRITE keeps the plain ink. Three coloured tiles in a row would leave
         // the accent nothing to stand out against.
         expect(dotColourOf("recipe-row-write")).toBe(palette.text);
@@ -585,17 +585,17 @@ describe("SwipeableRecipeRow", () => {
         // tile that overwrites a card would have worn the mark of the one that
         // only looks at it.
         await renderWithProviders(<SwipeableRecipeRow {...props({
-            onBrew: jest.fn(), onShare: jest.fn(), onWrite: jest.fn()
+            onBrew: jest.fn(), onQuickEdit: jest.fn(), onWrite: jest.fn()
         })}/>);
 
         // Each tile must draw its *own* mark. Lit-dot counts are pinned as
         // literals: a tile handed the wrong bitmap still renders a valid glyph,
         // so only the shape actually drawn can tell them apart.
         expect(dotCountOf("recipe-row-brew")).toBe(25);
-        expect(dotCountOf("recipe-row-share")).toBe(17);
+        expect(dotCountOf("recipe-row-quick-edit")).toBe(22);
         expect(dotCountOf("recipe-row-write")).toBe(33);
 
-        const marks = ["brew", "share", "write", "duplicate", "delete"].map(
+        const marks = ["brew", "settings", "write", "duplicate", "delete"].map(
             (name) => DOT_ICONS[name as keyof typeof DOT_ICONS].join("/")
         );
         expect(new Set(marks).size).toBe(5);
@@ -603,7 +603,7 @@ describe("SwipeableRecipeRow", () => {
         expect(DOT_ICONS.write.join("/")).not.toBe(DOT_ICONS.scan.join("/"));
         // Each mark must actually be drawn, not an empty grid that trivially differs.
         marks.forEach((_, i) => expect(litCells(
-            DOT_ICONS[["brew", "share", "write", "duplicate", "delete"][i] as
+            DOT_ICONS[["brew", "settings", "write", "duplicate", "delete"][i] as
                 keyof typeof DOT_ICONS]
         ).length).toBeGreaterThan(4));
     });
@@ -703,47 +703,47 @@ describe("SwipeableRecipeRow", () => {
         expect(management.getByLabelText("Duplicate Ethiopia Guji")).toBeTruthy();
     });
 
-    it("offers BREW, SHARE and WRITE in the action tray", async () => {
+    it("offers BREW, TUNE and WRITE in the action tray", async () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                onBrew={() => undefined} onShare={() => undefined}
+                                onBrew={() => undefined} onQuickEdit={() => undefined}
                                 onWrite={() => undefined}/>
         );
         const action = within(
             screen.getByTestId("row-actions-brew", {includeHiddenElements: true})
         );
         expect(action.getByLabelText("Brew Ethiopia Guji")).toBeTruthy();
-        expect(action.getByLabelText("Share Ethiopia Guji")).toBeTruthy();
+        expect(action.getByLabelText("Quick edit Ethiopia Guji")).toBeTruthy();
         expect(action.getByLabelText("Write Ethiopia Guji to a card")).toBeTruthy();
     });
 
     it("drops the BREW tile when there is no machine to brew on", async () => {
-        // A dead BREW is worse than no BREW. Share and write do not need a
+        // A dead BREW is worse than no BREW. Tune and write do not need a
         // machine, so they stay.
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                onShare={() => undefined} onWrite={() => undefined}/>
+                                onQuickEdit={() => undefined} onWrite={() => undefined}/>
         );
         expect(screen.queryByLabelText("Brew Ethiopia Guji")).toBeNull();
-        expect(screen.getByLabelText("Share Ethiopia Guji")).toBeTruthy();
+        expect(screen.getByLabelText("Quick edit Ethiopia Guji")).toBeTruthy();
         expect(screen.getByLabelText("Write Ethiopia Guji to a card")).toBeTruthy();
     });
 
-    it("fires brew, share and write from the action tiles", async () => {
+    it("fires brew, quick edit and write from the action tiles", async () => {
         const onBrew = jest.fn();
-        const onShare = jest.fn();
+        const onQuickEdit = jest.fn();
         const onWrite = jest.fn();
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                onBrew={onBrew} onShare={onShare} onWrite={onWrite}/>
+                                onBrew={onBrew} onQuickEdit={onQuickEdit} onWrite={onWrite}/>
         );
         await fireEvent.press(screen.getByLabelText("Brew Ethiopia Guji"));
         expect(onBrew).toHaveBeenCalled();
-        await fireEvent.press(screen.getByLabelText("Share Ethiopia Guji"));
-        expect(onShare).toHaveBeenCalled();
+        await fireEvent.press(screen.getByLabelText("Quick edit Ethiopia Guji"));
+        expect(onQuickEdit).toHaveBeenCalled();
         await fireEvent.press(screen.getByLabelText("Write Ethiopia Guji to a card"));
         expect(onWrite).toHaveBeenCalled();
     });
@@ -753,7 +753,7 @@ describe("SwipeableRecipeRow", () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={brewedRecipe} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                onBrew={() => undefined} onShare={() => undefined}
+                                onBrew={() => undefined} onQuickEdit={() => undefined}
                                 onWrite={() => undefined}/>
         );
         // The one tile carrying an accent among neutral verbs. Same helper the
@@ -772,7 +772,7 @@ describe("SwipeableRecipeRow", () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                onBrew={() => undefined} onShare={() => undefined}
+                                onBrew={() => undefined} onQuickEdit={() => undefined}
                                 onWrite={() => undefined}/>
         );
         // Every tile now hangs its testID on its DotIcon. If a tile ever loses
@@ -786,7 +786,7 @@ describe("SwipeableRecipeRow", () => {
     });
 
     it("draws no action tray when it has nothing to put in it", async () => {
-        // With no brew, share or write handler the tray would open onto a blank
+        // With no brew, quick edit or write handler the tray would open onto a blank
         // strip. The card still swipes the other way to the management tray.
         await renderWithProviders(<SwipeableRecipeRow {...props()}/>);
         expect(screen.queryByTestId("row-actions-brew", {includeHiddenElements: true}))

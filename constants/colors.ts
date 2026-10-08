@@ -24,6 +24,8 @@ export const palette = {
     /** Screen background. `base` rather than `void`: `void` is a reserved word
      *  and cannot be shorthand-destructured. */
     base:    "#000000",
+    /** Modal scrim over screen content. */
+    scrim:   "rgba(0,0,0,0.62)",
     /** Sheets and elevated panels. */
     surface: "#101010",
     /** CTA tiles, inputs, and cards that are not accent-filled. */

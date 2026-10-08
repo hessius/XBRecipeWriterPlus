@@ -22,7 +22,7 @@ import {grindTooFine} from "@/constants/copy";
 /** Inclusive bounds for one field, in the units the model stores. */
 export type Range = {min: number; max: number};
 
-const RATIO: Range = {min: 5, max: 100};
+export const RATIO: Range = {min: 5, max: 100};
 /**
  * The card's dose range, in grams. Exported for `library/backup.ts`, whose job
  * is to be the trust boundary: a stored dose outside this is a corrupt or

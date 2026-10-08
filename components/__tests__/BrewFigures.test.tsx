@@ -2,10 +2,15 @@ import React from "react";
 import {screen} from "@testing-library/react-native";
 import {Dimensions, PixelRatio} from "react-native";
 
-import BrewFigures, {detailRowMinHeight, flowRowMinHeight} from "@/components/BrewFigures";
+import BrewFigures, {
+    brewFigureAdjustmentMeasures,
+    detailRowMinHeight,
+    flowRowMinHeight
+} from "@/components/BrewFigures";
 import {FLOW_SPARKLINE_HEIGHT} from "@/components/FlowSparkline";
 import {accents} from "@/constants/colors";
 import {
+    brewFigureAdjustmentColumnWidth,
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_ROW_GAP
 } from "@/library/brew/figureGeometry";
@@ -318,6 +323,116 @@ describe("BrewFigures", () => {
             <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
         );
         expect(screen.queryByTestId("figures-detail-slot")).toBeNull();
+    });
+
+    it("keeps an unchanged record to the original single-row structure", async () => {
+        await renderWithProviders(
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
+        );
+
+        expect(screen.getByTestId("brew-figures").children).toHaveLength(1);
+        expect(screen.getByTestId("figures-main-row").children).toHaveLength(3);
+        expect(screen.getByTestId("figures-water")).toBeTruthy();
+        expect(screen.getByTestId("figures-cup")).toBeTruthy();
+        expect(screen.getByTestId("figures-time")).toBeTruthy();
+    });
+
+    it("shows confirmed quick edits with saved recipe badges", async () => {
+        await renderWithProviders(
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
+                         water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                         adjustments={{
+                             dose:        {value: 20, from: 18},
+                             ratio:       {value: 18, from: 16},
+                             grind:       {value: 61, from: 50},
+                             temperature: {offset: 2, temperatures: [90, 92]}
+                         }} />
+        );
+
+        expect(screen.getByTestId("figures-adjustments-row")).toBeTruthy();
+        expect(screen.getByTestId("figures-adjusted-dose-recipe"))
+            .toHaveStyle({borderStyle: "dashed"});
+        expect(screen.getByText("DOSE")).toBeTruthy();
+        expect(screen.getByText("20")).toBeTruthy();
+        expect(screen.getByText("RECIPE 18")).toBeTruthy();
+        expect(screen.getByText("RATIO")).toBeTruthy();
+        expect(screen.getByText("1:18")).toBeTruthy();
+        expect(screen.getByText("RECIPE 16")).toBeTruthy();
+        expect(screen.getByText("TEMP")).toBeTruthy();
+        expect(screen.getByText("90, 92")).toBeTruthy();
+        expect(screen.getByText("OFFSET +2")).toBeTruthy();
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByText("61")).toBeTruthy();
+        expect(screen.getByText("RECIPE 50")).toBeTruthy();
+        expect(screen.getByLabelText("Dose, 20 grams, recipe 18 grams")).toBeTruthy();
+        expect(screen.getByLabelText("Ratio, 1:18, recipe 1:16")).toBeTruthy();
+        expect(screen.getByLabelText(
+            "Temperature, 90, 92 degrees, offset +2 degrees"
+        )).toBeTruthy();
+        expect(screen.getByLabelText("Grind, 61, recipe 50")).toBeTruthy();
+    });
+
+    it("shows a saturating temperature edit as used temperatures, not a reconstructed recipe", async () => {
+        await renderWithProviders(
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
+                         water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                         adjustments={{temperature: {
+                             offset:       3,
+                             temperatures: [99, 98, 93]
+                         }}} />
+        );
+
+        expect(screen.getByText("TEMP")).toBeTruthy();
+        expect(screen.getByText("99, 98, 93")).toBeTruthy();
+        expect(screen.getByText("OFFSET +3")).toBeTruthy();
+        expect(screen.queryByText("RECIPE 96, 95, 90")).toBeNull();
+        expect(screen.queryByText("RECIPE 94")).toBeNull();
+        expect(screen.getByLabelText(
+            "Temperature, 99, 98, 93 degrees, offset +3 degrees"
+        )).toBeTruthy();
+    });
+
+    it("applies the measured adjustment width at the font cap on a 375 pt story card", async () => {
+        mockWindowFontScale(DOTO_MAX_FONT_SCALE);
+        const contentWidth = 375 - 56;
+        const adjustments = {
+            dose:        {value: 20, from: 18},
+            ratio:       {value: 18, from: 16},
+            grind:       {value: 61, from: 50},
+            temperature: {offset: -2, temperatures: [88, 86, 84]}
+        };
+        const expectedWidth = brewFigureAdjustmentColumnWidth(
+            contentWidth,
+            DOTO_MAX_FONT_SCALE,
+            brewFigureAdjustmentMeasures(adjustments)
+        );
+
+        await renderWithProviders(
+            <BrewFigures contentWidth={contentWidth}
+                         water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                         adjustments={adjustments} />
+        );
+
+        expect(screen.getByTestId("figures-adjusted-dose"))
+            .toHaveStyle({width: expectedWidth});
+        expect(screen.getByTestId("figures-adjusted-temperature"))
+            .toHaveStyle({width: expectedWidth});
+    });
+
+    it("carries unconfirmed grind styling into the adjusted grind figure", async () => {
+        await renderWithProviders(
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
+                         water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                         adjustments={{
+                             grind: {value: 61, from: 50, confirmed: false}
+                         }} />
+        );
+
+        expect(screen.getByTestId("figures-adjusted-grind-outline")).toBeTruthy();
+        expect(screen.getByText("RECIPE 50")).toBeTruthy();
+        expect(screen.getByLabelText(
+            "Grind, 61, recipe 50, not confirmed by the machine"
+        )).toBeTruthy();
     });
 
     describe("the detail row's columns", () => {

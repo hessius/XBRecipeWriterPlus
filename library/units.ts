@@ -40,6 +40,12 @@ export function toDisplay(celsius: number, unit: TemperatureUnit): number {
     return Math.round(celsius * 9 / 5 + 32);
 }
 
+/** Canonical Celsius difference to the whole-degree difference the user sees. */
+export function toDisplayOffset(celsiusOffset: number, unit: TemperatureUnit): number {
+    if (unit === "C") return celsiusOffset;
+    return Math.round(celsiusOffset * 9 / 5);
+}
+
 /**
  * A number the user was shown, back to canonical Celsius.
  *
@@ -50,6 +56,12 @@ export function fromDisplay(value: number, unit: TemperatureUnit): number {
     if (!Number.isFinite(value)) return CELSIUS_RANGE.min;
     const celsius = unit === "C" ? value : (value - 32) * 5 / 9;
     return clampCelsius(Math.round(celsius));
+}
+
+/** A displayed temperature difference back to the canonical whole Celsius offset. */
+export function fromDisplayOffset(value: number, unit: TemperatureUnit): number {
+    if (!Number.isFinite(value)) return 0;
+    return unit === "C" ? Math.round(value) : Math.round(value * 5 / 9);
 }
 
 /**
@@ -65,6 +77,20 @@ export function displayValues(unit: TemperatureUnit): readonly number[] {
     const values: number[] = [];
     for (let c = CELSIUS_RANGE.min; c <= CELSIUS_RANGE.max; c++) {
         values.push(toDisplay(c, unit));
+    }
+    return values;
+}
+
+export function displayOffsetValues(
+    range: {min: number; max: number},
+    unit: TemperatureUnit
+): readonly number[] {
+    const values: number[] = [];
+    let previous: number | undefined;
+    for (let c = range.min; c <= range.max; c++) {
+        const shown = toDisplayOffset(c, unit);
+        if (shown !== previous) values.push(shown);
+        previous = shown;
     }
     return values;
 }

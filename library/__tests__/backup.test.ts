@@ -1000,6 +1000,71 @@ describe("brew history through a backup", () => {
         expect(brew?.dialAfter).toBe(52);
     });
 
+    it("carries quick-edit adjustment metadata through a round trip", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1", {
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: -2
+        }))));
+
+        expect(brew).toMatchObject({
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: -2
+        });
+    });
+
+    it("accepts a grinder-off baseline and a zero temperature offset", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1", {
+            adjustedFromGrind: 81,
+            adjustedTempOffset: 0
+        }))));
+
+        expect(brew?.adjustedFromGrind).toBe(81);
+        expect(brew?.adjustedTempOffset).toBe(0);
+    });
+
+    it("accepts display-only quick-edit baselines outside the card-writing band", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1", {
+            adjustedFromDose: 32,
+            adjustedFromRatio: 101,
+            adjustedFromGrind: 39,
+            adjustedTempOffset: -60
+        }))));
+
+        expect(brew).toMatchObject({
+            adjustedFromDose: 32,
+            adjustedFromRatio: 101,
+            adjustedFromGrind: 39,
+            adjustedTempOffset: -60
+        });
+    });
+
+    it.each([
+        ["a zero saved dose", {adjustedFromDose: 0}],
+        ["an implausibly large saved dose", {adjustedFromDose: 1000}],
+        ["a fractional dose", {adjustedFromDose: 18.5}],
+        ["a zero saved ratio", {adjustedFromRatio: 0}],
+        ["an implausibly large saved ratio", {adjustedFromRatio: 1000}],
+        ["a ratio as a string", {adjustedFromRatio: "16"}],
+        ["a zero grind", {adjustedFromGrind: 0}],
+        ["a grind above the grinder-off sentinel", {adjustedFromGrind: 82}],
+        ["a fractional grind", {adjustedFromGrind: 62.5}],
+        ["a temperature offset below the possible card range", {adjustedTempOffset: -61}],
+        ["a temperature offset above the possible card range", {adjustedTempOffset: 61}],
+        ["a fractional temperature offset", {adjustedTempOffset: 1.5}],
+        ["a temperature offset as a string", {adjustedTempOffset: "2"}]
+    ])("skips a brew with %s, and counts it", (_label, extra) => {
+        const result = parseBackup(backupFileWithBrewFields(extra));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toEqual([]);
+        expect(result.payload.skippedBrews).toBe(1);
+    });
+
     it("refuses a dial reading that is not a number", () => {
         // A restored record's next stop is a surface that reports it as an
         // observation of the machine, so a string here would be presented as
