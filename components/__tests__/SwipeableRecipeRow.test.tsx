@@ -176,6 +176,65 @@ describe("SwipeableRecipeRow", () => {
         expect(onBounced).toHaveBeenCalledTimes(1);
     });
 
+    it("does not report the hint as shown before the opening timer fires", async () => {
+        jest.useFakeTimers();
+        const onShown = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action",
+            onShown,
+            onBrew: jest.fn(),
+            onShare: jest.fn(),
+            onWrite: jest.fn()
+        })}/>);
+
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY - 1); });
+
+        expect(screen.queryByTestId("swipeable-open-left")).toBeNull();
+        expect(mockOpenLeft).not.toHaveBeenCalled();
+        expect(onShown).not.toHaveBeenCalled();
+    });
+
+    it("reports the hint as shown exactly once when the tray opens", async () => {
+        jest.useFakeTimers();
+        const onShown = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action",
+            onShown,
+            onBrew: jest.fn(),
+            onShare: jest.fn(),
+            onWrite: jest.fn()
+        })}/>);
+
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY); });
+
+        expect(screen.getByTestId("swipeable-open-left")).toBeTruthy();
+        expect(onShown).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            jest.advanceTimersByTime(BOUNCE_CLOSE_DELAY - BOUNCE_OPEN_DELAY);
+        });
+
+        expect(onShown).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not report the hint as shown when cancelled before opening", async () => {
+        jest.useFakeTimers();
+        const onShown = jest.fn();
+        const {unmount} = await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action",
+            onShown,
+            onBrew: jest.fn(),
+            onShare: jest.fn(),
+            onWrite: jest.fn()
+        })}/>);
+
+        await act(async () => { unmount(); });
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY); });
+
+        expect(mockOpenLeft).not.toHaveBeenCalled();
+        expect(onShown).not.toHaveBeenCalled();
+    });
+
     it("opens the management tray for the management hint", async () => {
         jest.useFakeTimers();
         await renderWithProviders(<SwipeableRecipeRow {...props({
