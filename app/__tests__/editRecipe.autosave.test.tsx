@@ -3,7 +3,7 @@ import {Share} from "react-native";
 import {act, fireEvent, screen, waitFor} from "@testing-library/react-native";
 
 import EditRecipe from "@/app/editRecipe";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, SHEET_PRESS_TIMEOUT} from "@/test-utils/render";
 
 import Recipe from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
@@ -172,6 +172,14 @@ async function openSavedRecipe() {
     const saved = fixture();
     new RecipeDatabase().insertRecipe(saved);
     mockRecipeJSON = JSON.stringify(saved);
+    return renderWithProviders(<EditRecipe/>);
+}
+
+async function openSavedBrewableRecipe() {
+    const saved = brewableFixture();
+    new RecipeDatabase().insertRecipe(saved);
+    mockRecipeJSON = JSON.stringify(saved);
+    mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
     return renderWithProviders(<EditRecipe/>);
 }
 
@@ -479,5 +487,54 @@ describe("editRecipe autosave", () => {
 
         expect(screen.queryByLabelText("Save and brew")).toBeNull();
         expect(stored()?.grindSize).toBe(61);
+    });
+
+    it("brews the quick-edited clone with adjustments in the route", async () => {
+        await openSavedBrewableRecipe();
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+        await fireEvent.press(screen.getByLabelText("Increase Quick edit dose"));
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByLabelText("Brew quick edit"));
+            expect(mockPush).toHaveBeenCalledTimes(1);
+        }, {timeout: SHEET_PRESS_TIMEOUT});
+
+        const call = mockPush.mock.calls[0][0];
+        const brewed = new Recipe(undefined, call.params.recipeJSON);
+        expect(brewed.dosage).toBe(13);
+        expect(brewed.getStageTargetVolume()).toBe(208);
+        expect(JSON.parse(call.params.quickEditAdjustments)).toEqual({dose: 13});
+    });
+
+    it("does not write the recipe database for a saved quick-edited brew", async () => {
+        await openSavedBrewableRecipe();
+        const updateSpy = jest.spyOn(RecipeDatabase.prototype, "updateRecipe");
+        const insertSpy = jest.spyOn(RecipeDatabase.prototype, "insertRecipe");
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+        await fireEvent.press(screen.getByLabelText("Increase Quick edit dose"));
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByLabelText("Brew quick edit"));
+            expect(mockPush).toHaveBeenCalledTimes(1);
+        }, {timeout: SHEET_PRESS_TIMEOUT});
+
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(insertSpy).not.toHaveBeenCalled();
+        expect(stored()?.dosage).toBe(12);
+    });
+
+    it("reopens quick edit at saved values after a quick-edited brew", async () => {
+        await openSavedBrewableRecipe();
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+        await fireEvent.press(screen.getByLabelText("Increase Quick edit dose"));
+        await waitFor(async () => {
+            await fireEvent.press(screen.getByLabelText("Brew quick edit"));
+            expect(mockPush).toHaveBeenCalledTimes(1);
+        }, {timeout: SHEET_PRESS_TIMEOUT});
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+
+        expect(screen.getByLabelText("Quick edit dose, 12 g")).toBeTruthy();
     });
 });
