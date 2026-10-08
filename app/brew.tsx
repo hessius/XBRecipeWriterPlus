@@ -433,6 +433,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             ? {}
                             : {drawdown: liveDrawdownFigure.drawdown})}
                         {...(liveDelay === null ? {} : {delay: liveDelay})}
+                        contentWidth={width - SCREEN_PADDING * 2}
                     />
 
                             {/* Held for the whole run. Between the last pour and the

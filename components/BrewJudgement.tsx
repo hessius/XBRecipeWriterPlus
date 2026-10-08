@@ -74,7 +74,7 @@ export default function BrewJudgement({
                 accessibilityLabel="Note on this brew"
                 accessibilityHint="What the cup was like, and what to change next time."
                 defaultValue={note}
-                placeholder="Sweet, a little thin. Grind finer."
+                placeholder="e.g. Sweet, a little thin. Grind finer."
                 placeholderTextColor={palette.placeholder}
                 multiline={true}
                 returnKeyType="done"

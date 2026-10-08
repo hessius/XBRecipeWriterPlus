@@ -2,6 +2,7 @@ import React from "react";
 import {
     StyleSheet,
     Text,
+    Dimensions,
     type StyleProp,
     type TextStyle,
     type ViewStyle
@@ -24,6 +25,8 @@ import {renderWithProviders} from "@/test-utils/render";
 
 const MockText = Text;
 type MockTextStyle = TextStyle & {minFontSize?: number};
+const DEFAULT_CONTENT_WIDTH = 333;
+const mockWindow = {fontScale: 1, height: 852, scale: 3, width: 393};
 
 jest.mock("@/components/DotMatrixText", () => ({
     __esModule: true,
@@ -60,9 +63,13 @@ function viewStyleOf(testID: string): ViewStyle {
 }
 
 describe("BrewFigures story scaling", () => {
+    beforeEach(() => {
+        Dimensions.set({screen: mockWindow, window: mockWindow});
+    });
+
     it("passes the story text scale to both value and label text", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196}
                          accent="#8ab4f8" textScale={0.5} />
         );
 
@@ -76,7 +83,7 @@ describe("BrewFigures story scaling", () => {
 
     it("scales the bypass badge text and chrome with the story card", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196}
                          accent="#8ab4f8" bypass={60} textScale={0.5} />
         );
 
@@ -94,7 +101,7 @@ describe("BrewFigures story scaling", () => {
 
     it("scales every second-row value and badge gap with the story card", async () => {
         await renderWithProviders(
-            <BrewFigures water={240} cup={200} seconds={196}
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={240} cup={200} seconds={196}
                          accent="#8ab4f8" drawdown={32}
                          drawdownRate={2.1} delay={5}
                          grind={{kind: "dial", dial: 53, recipe: 60}}
@@ -104,7 +111,8 @@ describe("BrewFigures story scaling", () => {
         expect(fontSizeOf("53")).toBeCloseTo(BREW_FIGURE_DETAIL_VALUE_SIZE * 0.5, 6);
         expect(fontSizeOf("+5")).toBeCloseTo(BREW_FIGURE_DETAIL_VALUE_SIZE * 0.5, 6);
         expect(fontSizeOf("0:32")).toBeCloseTo(BREW_FIGURE_DETAIL_VALUE_SIZE * 0.5, 6);
-        expect(fontSizeOf("2.1 G/S")).toBeCloseTo(BREW_FIGURE_BADGE_FONT_SIZE * 0.5, 6);
+        expect(fontSizeOf("2.1")).toBeCloseTo(BREW_FIGURE_DETAIL_VALUE_SIZE * 0.5, 6);
+        expect(fontSizeOf("G/S")).toBeCloseTo(BREW_FIGURE_BADGE_FONT_SIZE * 0.5, 6);
         expect(fontSizeOf("RECIPE 60")).toBeCloseTo(BREW_FIGURE_BADGE_FONT_SIZE * 0.5, 6);
         expect(textStyleOf("RECIPE 60").letterSpacing)
             .toBeCloseTo(BREW_FIGURE_BADGE_TRACKING * 0.5, 6);

@@ -1,5 +1,5 @@
 import React from "react";
-import {StyleSheet, type StyleProp, type ViewStyle} from "react-native";
+import {Dimensions, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, within} from "@testing-library/react-native";
 
 import BrewSummary from "@/components/BrewSummary";
@@ -9,6 +9,8 @@ import type {BrewSample} from "@/library/brew/BrewRecord";
 import {storyChartWidth, storyTextContentWidth} from "@/library/brew/storyCard";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {renderWithProviders} from "@/test-utils/render";
+
+const mockWindow = {fontScale: 1, height: 852, scale: 3, width: 393};
 
 // Captured so a test can see what the summary asks of the marquee. Spread from
 // the real module so the name still renders.
@@ -55,6 +57,7 @@ const samples: BrewSample[] = [
 ];
 
 async function draw(overrides: Partial<React.ComponentProps<typeof BrewSummary>> = {}) {
+    Dimensions.set({screen: mockWindow, window: mockWindow});
     return renderWithProviders(
         <BrewSummary
             recipeName="Ethiopia Guji"
@@ -317,7 +320,8 @@ describe("BrewSummary", () => {
         });
 
         expect(screen.getByText("0:32")).toBeTruthy();
-        expect(screen.getByText("2.1 G/S")).toBeTruthy();
+        expect(screen.getByText("2.1")).toBeTruthy();
+        expect(screen.getByText("G/S")).toBeTruthy();
         expect(screen.getByText("+5")).toBeTruthy();
         expect(screen.getByText("53")).toBeTruthy();
         expect(screen.getByText("RECIPE 60")).toBeTruthy();

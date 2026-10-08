@@ -69,6 +69,15 @@ export type GrindFigure =
         kind: "dial";
         dial: number;
         recipe: number | null;
+    }
+    | {
+        /**
+         * No dial reading arrived, so this is the recipe's own setting: what
+         * was asked for rather than what was confirmed. Surfaces must draw it
+         * in the dashed outline that already carries that distinction.
+         */
+        kind: "recipe";
+        recipe: number;
     };
 
 /**
@@ -89,9 +98,11 @@ export type GrindFigure =
  * - It reports the confirmed dial as GRIND only when the record positively
  *   says the grinder ran. The dial proves where the dial was, not how the
  *   coffee was ground.
- * - **Only the post-brew reading may be reported.** The pre-send one may have
- *   been taken before the machine caught up with a dial that had just been
- *   moved, so a record holding only that cannot be presented as fact.
+ * - **Only the post-brew reading may be reported as a dial.** The pre-send one
+ *   may have been taken before the machine caught up with a dial that had just
+ *   been moved, so a record holding only that cannot be presented as fact. A
+ *   record with no post-brew reading falls back to the recipe's own grind as
+ *   `recipe`, which is not a reading and must not be drawn as one.
  * - A recipe grind badge appears only when the recorded recipe asked for a
  *   different setting.
  */
@@ -104,7 +115,18 @@ export function dialNote(record: BrewRecord): GrindFigure | null {
     }
     if (!grinderRan(record)) return null;
     const after = record.dialAfter ?? 0;
-    if (after <= 0) return null;
+    if (after <= 0) {
+        // No confirmed reading. The post-brew rule still holds and this is not
+        // being presented as one: the recipe's own setting is what was asked
+        // for, drawn in an outline that says so. Reporting it is strictly more
+        // than the silence this replaced, which threw away a fact we had.
+        // `grinderRan` has already established that this is a number in an
+        // on-card band; the typeof is only the narrowing TypeScript cannot get
+        // from a boolean helper.
+        return typeof recipeGrind === "number"
+            ? {kind: "recipe", recipe: recipeGrind}
+            : null;
+    }
     return {
         kind: "dial",
         dial: after,

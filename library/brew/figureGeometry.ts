@@ -15,6 +15,7 @@ export const BREW_FIGURE_BADGE_PADDING_Y = 1;
 export const BREW_FIGURE_BADGE_BORDER_WIDTH = 1;
 export const BREW_FIGURE_BADGE_GAP = 6;
 export const BREW_FIGURE_BADGE_RADIUS = 4;
+export const STORY_FIT_MARGIN = 0.75;
 
 export type BrewFigureTextGeometry = {
     labelSize: number;
@@ -72,4 +73,70 @@ export function brewFigureBadgeWidth(
         DOTO_MIN_FONT_SIZE * scale
     )
         + (badge.paddingHorizontal + badge.borderWidth) * 2;
+}
+
+/**
+ * DRAWDOWN is the only eight-character label in the row, so its column is
+ * wider than the others rather than the row being sized for its longest word.
+ */
+export const BREW_FIGURE_DRAWDOWN_FLEX = 1.4;
+
+/**
+ * GRIND carries the longest quiet-line text in the row (`RECIPE nn`), while
+ * DELAY's value is the shortest (`+N`), so DELAY yields share to GRIND without
+ * changing the DRAWDOWN slot or the row's total flex.
+ */
+export const BREW_FIGURE_GRIND_FLEX = 1.25;
+export const BREW_FIGURE_DELAY_FLEX = 0.75;
+
+const FOUR_COLUMN_FLEX = [
+    BREW_FIGURE_GRIND_FLEX,
+    BREW_FIGURE_DELAY_FLEX,
+    BREW_FIGURE_DRAWDOWN_FLEX,
+    1
+];
+const THREE_COLUMN_FLEX = [1, 1, 1];
+
+function columnWidthsForFlex(contentWidth: number, flex: number[], scale = 1): number[] {
+    const geometry = brewFigureTextGeometry(scale);
+    const free = Math.max(0, contentWidth - geometry.columnGap * (flex.length - 1));
+    const total = flex.reduce((sum, share) => sum + share, 0);
+    return flex.map((share) => (free * share) / total);
+}
+
+/** Whether the detail row can afford four columns at this width and text scale. */
+export function brewFigureUsesFourColumns(fontScale: number, contentWidth: number): boolean {
+    // Before the first layout pass there is no measured width. Assume the
+    // intended row, otherwise mount can blink through the fallback and back.
+    if (contentWidth <= 0) return true;
+
+    const [grind] = columnWidthsForFlex(contentWidth, FOUR_COLUMN_FLEX);
+    return brewFigureBadgeWidth("RECIPE 58", fontScale) + STORY_FIT_MARGIN <= grind;
+}
+
+/** The flex shares the detail row's columns take, left to right. */
+export function brewFigureColumnFlex(fontScale: number, contentWidth: number): number[] {
+    return brewFigureUsesFourColumns(fontScale, contentWidth)
+        ? FOUR_COLUMN_FLEX
+        : THREE_COLUMN_FLEX;
+}
+
+/**
+ * What each detail column actually measures, so a test can ask whether the
+ * text fits instead of looking at a picture of it.
+ *
+ * @param contentWidth the row's width, after the screen's padding.
+ * @param fontScale the user's text scale, which decides the column count.
+ * @param scale the story card's shrink from the reference width.
+ */
+export function brewFigureColumnWidths(
+    contentWidth: number,
+    fontScale: number,
+    scale = 1
+): number[] {
+    return columnWidthsForFlex(
+        contentWidth,
+        brewFigureColumnFlex(fontScale, contentWidth),
+        scale
+    );
 }

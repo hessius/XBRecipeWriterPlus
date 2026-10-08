@@ -87,9 +87,9 @@ const ENTRIES = {
                 "recipe card."
     },
     cup: {
-        title:  "Cup",
+        title:  "Brewer",
         hint:   "Other turns overflow protection off.",
-        question: "Which cup type should I pick?",
+        question: "Which brewer should I pick?",
         detail: "Omni is xBloom's own dripper, so the machine knows when " +
                 "your cup is full and stops. Other is for third-party " +
                 "brewers it cannot measure, so nothing stops it."

@@ -18,6 +18,9 @@ import {
     BREW_FIGURE_VALUE_SIZE,
     brewFigureBadgeGeometry,
     brewFigureBadgeWidth,
+    brewFigureColumnWidths,
+    brewFigureUsesFourColumns,
+    STORY_FIT_MARGIN,
     brewFigureTextGeometry
 } from "@/library/brew/figureGeometry";
 import {BYPASS_VOLUME} from "@/library/bypassLimits";
@@ -30,8 +33,11 @@ import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
 import {
     dotoRowHeight,
     dotoTextWidth,
-    DOTO_MAX_FONT_SCALE
+    DOTO_MAX_FONT_SCALE,
+    DOTO_MIN_FONT_SIZE
 } from "@/library/dotoMetrics";
+
+export {STORY_FIT_MARGIN} from "@/library/brew/figureGeometry";
 
 /**
  * The shape of a story frame, as a ratio of width to height.
@@ -214,7 +220,6 @@ const STORY_TAG_PAD_X = 8;
 const STORY_TAG_PAD_Y = 4;
 const STORY_TAG_GAP = 8;
 const STORY_TAG_MORE_CHARS = 3;
-export const STORY_FIT_MARGIN = 0.75;
 const STORY_DRAWDOWN_RATE_BADGE = "99.9 G/S";
 const STORY_SLOWEST_FLOW_ML_S = FLOW_RATE.min / 10;
 const STORY_RATE_MIN_HEIGHT = 32;
@@ -286,10 +291,25 @@ type StoryRows = {
     tag: number;
 };
 
-function figureRowHeight(valueSize: number, fontScale: number, width: number): number {
-    return dotoRowHeight(scaledSize(BREW_FIGURE_LABEL_SIZE, width), fontScale)
+function figureRowHeight(
+    valueSize: number,
+    fontScale: number,
+    width: number,
+    hasQuietLine = false
+): number {
+    const base = dotoRowHeight(scaledSize(BREW_FIGURE_LABEL_SIZE, width), fontScale)
         + BREW_FIGURE_INTERNAL_GAP
         + dotoRowHeight(scaledSize(valueSize, width), fontScale);
+    if (!hasQuietLine) return base;
+
+    const badge = brewFigureBadgeGeometry(storyTextScale(width));
+    const recipeBadgeHeight = dotoRowHeight(
+        badge.fontSize,
+        fontScale,
+        DOTO_MIN_FONT_SIZE * storyTextScale(width)
+    ) + (badge.paddingVertical + badge.borderWidth) * 2;
+    const rateUnitHeight = dotoRowHeight(badge.fontSize, fontScale);
+    return base + BREW_FIGURE_INTERNAL_GAP + Math.max(recipeBadgeHeight, rateUnitHeight);
 }
 
 export type StoryHeaderLayout = {
@@ -449,6 +469,18 @@ function storyFigureColumnWidth(width: number): number {
     );
 }
 
+function storyDetailColumnWidths(width: number, fontScale: number): number[] {
+    return brewFigureColumnWidths(
+        storyTextContentWidth(width),
+        fontScale,
+        storyTextScale(width)
+    );
+}
+
+function storyDetailUsesFourColumns(width: number, fontScale: number): boolean {
+    return brewFigureUsesFourColumns(fontScale, storyTextContentWidth(width));
+}
+
 function waterBypassRow(
     width: number,
     fontScale: number,
@@ -538,17 +570,12 @@ function grindRecipeBadgeRow(
     width: number,
     fontScale: number
 ): {id: string; width: number; limit: number} {
-    const figures = brewFigureTextGeometry(storyTextScale(width));
-    const badge = brewFigureBadgeGeometry(storyTextScale(width));
-    const column = storyFigureColumnWidth(width);
-    const grindWithRecipe = dotoTextWidth(
-        "80", figures.detailValueSize, fontScale, figures.valueTracking
-    ) + badge.gap + brewFigureBadgeWidth("RECIPE 80", fontScale, storyTextScale(width));
+    const [grind] = storyDetailColumnWidths(width, fontScale);
 
     return {
-        id:    "grind value and recipe",
-        width: grindWithRecipe,
-        limit: column
+        id:    "grind recipe badge",
+        width: brewFigureBadgeWidth("RECIPE 80", fontScale, storyTextScale(width)),
+        limit: grind
     };
 }
 
@@ -563,36 +590,75 @@ function drawdownRateBadgeText(drawdownRate?: number | null): string | null {
     return formatted === null ? null : `${formatted} G/S`;
 }
 
-function drawdownRateBadgeRow(
+function drawdownRateRows(
     width: number,
     fontScale: number,
-    maxima: StoryFigureMaxima,
+    showGrindRecipeBadge: boolean,
     drawdownRate?: number | null
-): {id: string; width: number; limit: number} | null {
+): {id: string; width: number; limit: number}[] {
     const figures = brewFigureTextGeometry(storyTextScale(width));
-    const badge = brewFigureBadgeGeometry(storyTextScale(width));
-    const column = storyFigureColumnWidth(width);
     const badgeText = drawdownRateBadgeText(drawdownRate);
-    if (badgeText === null) return null;
-    const drawdownWithRate = dotoTextWidth(
-        maxima.clock, figures.detailValueSize, fontScale, figures.valueTracking
-    ) + badge.gap + brewFigureBadgeWidth(badgeText, fontScale, storyTextScale(width));
+    if (badgeText === null) return [];
 
-    return {
-        id:    "drawdown value and rate",
-        width: drawdownWithRate,
-        limit: column
-    };
+    const columns = storyDetailColumnWidths(width, fontScale);
+    if (storyDetailUsesFourColumns(width, fontScale)) {
+        const rate = columns[3] ?? 0;
+        const label = showGrindRecipeBadge ? "RATE" : "RATE G/S";
+        const rows = [
+            {
+                id:    "rate label",
+                width: dotoTextWidth(
+                    label, figures.labelSize, fontScale, figures.labelTracking
+                ),
+                limit: rate
+            },
+            {
+                id:    "rate value",
+                width: dotoTextWidth(
+                    badgeText.replace(/ G\/S$/, ""),
+                    figures.detailValueSize,
+                    fontScale,
+                    figures.valueTracking
+                ),
+                limit: rate
+            }
+        ];
+        if (showGrindRecipeBadge) {
+            rows.push({
+                id:    "rate unit",
+                width: dotoTextWidth(
+                    "G/S",
+                    figures.labelSize,
+                    fontScale,
+                    figures.labelTracking
+                ),
+                limit: rate
+            });
+        }
+        return rows;
+    }
+
+    return [{
+        id:    "drawdown rate",
+        width: dotoTextWidth(
+            badgeText,
+            figures.labelSize,
+            fontScale,
+            figures.labelTracking
+        ),
+        limit: columns[2] ?? 0
+    }];
 }
 
 export function storyDrawdownRateBadgeFits(
     width: number,
     fontScale: number,
     drawdownRate?: number | null,
-    stages = MACHINE_CARD_MAX_STAGES
+    stages = MACHINE_CARD_MAX_STAGES,
+    showGrindRecipeBadge = false
 ): boolean {
-    const row = drawdownRateBadgeRow(width, fontScale, storyFigureMaxima(stages), drawdownRate);
-    return row !== null && fitResult([row]).fits;
+    void stages;
+    return fitResult(drawdownRateRows(width, fontScale, showGrindRecipeBadge, drawdownRate)).fits;
 }
 
 function storyDetailsFit(
@@ -604,34 +670,34 @@ function storyDetailsFit(
     drawdownRate?: number | null
 ): StoryHorizontalFit {
     const figures = brewFigureTextGeometry(storyTextScale(width));
-    const column = storyFigureColumnWidth(width);
+    const columns = storyDetailColumnWidths(width, fontScale);
     const rows = [
         {
             id:    "grind label",
             width: dotoTextWidth("GRIND", figures.labelSize, fontScale, figures.labelTracking),
-            limit: column
+            limit: columns[0] ?? 0
         },
         {
             id:    "grind value",
             width: dotoTextWidth("OFF", figures.detailValueSize, fontScale, figures.valueTracking),
-            limit: column
+            limit: columns[0] ?? 0
         },
         {
             id:    "delay label",
             width: dotoTextWidth("DELAY", figures.labelSize, fontScale, figures.labelTracking),
-            limit: column
+            limit: columns[1] ?? 0
         },
         {
             id:    "delay value",
             width: dotoTextWidth(
                 maxima.delay, figures.detailValueSize, fontScale, figures.valueTracking
             ),
-            limit: column
+            limit: columns[1] ?? 0
         },
         {
             id:    "drawdown label",
             width: dotoTextWidth("DRAWDOWN", figures.labelSize, fontScale, figures.labelTracking),
-            limit: column
+            limit: columns[2] ?? 0
         },
         {
             id:    "drawdown value",
@@ -641,15 +707,14 @@ function storyDetailsFit(
                 fontScale,
                 figures.valueTracking
             ),
-            limit: column
+            limit: columns[2] ?? 0
         }
     ];
     if (showGrindRecipeBadge) {
         rows.push(grindRecipeBadgeRow(width, fontScale));
     }
     if (showDrawdownRateBadge) {
-        const row = drawdownRateBadgeRow(width, fontScale, maxima, drawdownRate);
-        if (row !== null) rows.push(row);
+        rows.push(...drawdownRateRows(width, fontScale, showGrindRecipeBadge, drawdownRate));
     }
     return fitResult(rows);
 }
@@ -680,7 +745,9 @@ export function storyHorizontalFit(
         ?? (
             budget.showFigureDetails
             && input.drawdownRate !== null
-            && storyDrawdownRateBadgeFits(width, fontScale, input.drawdownRate, input.stages)
+            && storyDrawdownRateBadgeFits(
+                width, fontScale, input.drawdownRate, input.stages, showGrindRecipeBadge
+            )
         );
     const details = budget.showFigureDetails
         ? storyDetailsFit(
@@ -808,7 +875,9 @@ export function storySummaryBudget(
         && storyGrindRecipeBadgeFits(width, fontScale);
     const canShowDrawdownRateBadge = figureExtraRows > 0
         && drawdownRate !== null
-        && storyDrawdownRateBadgeFits(width, fontScale, drawdownRate, stages);
+        && storyDrawdownRateBadgeFits(
+            width, fontScale, drawdownRate, stages, canShowGrindRecipeBadge
+        );
     const canShowBypassBadge = hasBypass && storyBypassBadgeFits(width, fontScale, stages);
 
     const build = (
@@ -836,10 +905,15 @@ export function storySummaryBudget(
                     ? dotoRowHeight(11, fontScale)
                     : ladderRows * stageLadderRungMinHeight(fontScale, BAR_FLOOR, GAP_FLOOR))
             : 0;
+        const detailsUseFourColumns = storyDetailUsesFourColumns(width, fontScale);
+        const hasQuietLine = canShowGrindRecipeBadge
+            || (canShowDrawdownRateBadge && (!detailsUseFourColumns || canShowGrindRecipeBadge));
         const figureBlock = rows.figures
             + (showDetails ? Math.max(0, figureExtraRows) * (
                 BREW_FIGURE_ROW_GAP
-                + figureRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale, width)
+                + figureRowHeight(
+                    BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale, width, hasQuietLine
+                )
             ) : 0)
             + (showNote ? dotoRowHeight(scaledSize(11, width), fontScale) + 8 : 0);
         const summary = STORY_CAPTURE_PADDING * 2

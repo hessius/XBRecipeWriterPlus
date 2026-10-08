@@ -18,7 +18,7 @@ import {useBrewHistory} from "@/hooks/useBrewHistory";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {useSetting} from "@/hooks/useSetting";
 import type {StoredBrew} from "@/library/BrewDatabase";
-import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
+import {canHandOff} from "@/library/brew/handoff/targets";
 import {UNCLIPPED_LIST} from "@/constants/lists";
 
 /** How long one push to the record screen refuses a second (same latch as index.tsx). */
@@ -190,13 +190,15 @@ function SelectionActionRow({
                             COMPARE
                         </DotMatrixText>
                     </Button>
-                    {/* The same outlined Doto button, and the same words, the
-                        record screen sends a single brew with, so the batch
-                        action reads as the same action rather than a second,
-                        louder one. A bare "Send" did not say where to. */}
+                    {/* SEND, not the target's full label. This button sits
+                        among the rows it acts on, so the destination is
+                        already in view and the long label only costs width
+                        the count and the cancel need. The screen reader hears
+                        the whole sentence below, where there is no row in
+                        earshot to supply it. */}
                     {canSend && (
                         <ExportButton
-                            label={HANDOFF_TARGETS[0].buttonLabel}
+                            label="SEND"
                             accessibilityLabel="Send selected brews to Beanconqueror"
                             busy={busy}
                             disabled={count === 0 || tooLarge || blocked > 0}

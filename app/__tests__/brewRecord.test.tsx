@@ -1,6 +1,7 @@
 // app/__tests__/brewRecord.test.tsx
 import React from "react";
 import {
+    Dimensions,
     Linking,
     StyleSheet,
     type StyleProp,
@@ -31,6 +32,8 @@ import type {HandoffEnvelope} from "@/library/brew/handoff/envelope";
 import {BREW_FIGURE_VALUE_SIZE} from "@/library/brew/figureGeometry";
 import {storyTextScale} from "@/library/brew/storyCard";
 
+const mockWindow = {fontScale: 1, height: 852, scale: 3, width: 393};
+
 const mockPush = jest.fn();
 const mockSetOptions = jest.fn();
 
@@ -39,6 +42,7 @@ const mockSetOptions = jest.fn();
 // screen as a Labs tester sees it, not the one a default install draws.
 // brewRecordHandoffGate.test.tsx covers the shipped default.
 beforeEach(() => {
+    Dimensions.set({screen: mockWindow, window: mockWindow});
     sharedSettings().set("beanconquerorHandoff", true);
     sharedSettings().set("storyCardHidden", "");
 });
@@ -155,6 +159,11 @@ function recordWithDrawdownRate(over: Partial<StoredBrew> = {}) {
         cupAtDrawdown: 200,
         ...over
     };
+}
+
+function mockWindowFontScale(fontScale: number): void {
+    const window = {...mockWindow, fontScale};
+    Dimensions.set({screen: window, window});
 }
 
 async function pressOnSheet(
@@ -1115,15 +1124,21 @@ describe("the drawdown on the record screen", () => {
         expect(screen.queryByTestId("figures-drawdown")).toBeNull();
     });
 
-    it("charts the rate and names it on the drawdown line", async () => {
+    it("charts the rate and names it in the figures", async () => {
+        mockWindowFontScale(1);
         mockOpened = {record: recordWithDrawdownRate(), samples: samplesForRate()};
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
         expect(await screen.findByTestId("rate-chart")).toBeTruthy();
-        expect(screen.getByTestId("figures-drawdown-rate")).toBeTruthy();
+        expect(screen.getByTestId("figures-rate")).toBeTruthy();
+        expect(screen.getByLabelText(/Drawdown, .* average .* grams per second/))
+            .toBeTruthy();
+        expect(screen.getByLabelText(/Average rate, .* grams per second/))
+            .toBeTruthy();
     });
 
     it("still names the rate when the stream has been swept", async () => {
+        mockWindowFontScale(1);
         mockOpened = {
             record: recordWithDrawdownRate({hasStream: false}),
             samples: []
@@ -1131,7 +1146,11 @@ describe("the drawdown on the record screen", () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
         expect(screen.queryByTestId("rate-chart")).toBeNull();
-        expect(screen.getByTestId("figures-drawdown-rate")).toBeTruthy();
+        expect(screen.getByTestId("figures-rate")).toBeTruthy();
+        expect(screen.getByLabelText(/Drawdown, .* average .* grams per second/))
+            .toBeTruthy();
+        expect(screen.getByLabelText(/Average rate, .* grams per second/))
+            .toBeTruthy();
     });
 
     it("keeps the rate chart inside the shared capture", async () => {

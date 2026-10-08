@@ -310,7 +310,7 @@ describe("the editor", () => {
         // `TEA` is deliberately not one of the cup options, so the row could
         // only ever show nothing selected — and tapping an option would turn
         // the recipe into a coffee card. The grinder is inert on tea besides.
-        expect(screen.queryByText("Cup")).toBeNull();
+        expect(screen.queryByText("Brewer")).toBeNull();
         expect(screen.queryByText("Grinder")).toBeNull();
     });
 
@@ -321,7 +321,7 @@ describe("the editor", () => {
         // `textTransform`, which is a style — the text content is unchanged,
         // so a query for "RATIO" would find nothing.
         for (const label of ["Dose", "Ratio", "Grind size · French press", "Grind speed",
-                             "Cup", "Grinder"]) {
+                             "Brewer", "Grinder"]) {
             expect(screen.getByText(label)).toBeTruthy();
         }
         // And only brew fields. Identity moved to ABOUT in phase 5, which is
