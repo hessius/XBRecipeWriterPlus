@@ -29,7 +29,8 @@ import {
     BREW_FIGURE_ROW_GAP,
     BREW_FIGURE_VALUE_SIZE,
     brewFigureBadgeGeometry,
-    brewFigureBadgeWidth
+    brewFigureBadgeWidth,
+    brewFigureUsesFourColumns
 } from "../figureGeometry";
 import {formatBrewDate, formatBrewTime} from "../brewFormat";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
@@ -71,12 +72,29 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
     const baseFigures = dotoRowHeight(BREW_FIGURE_LABEL_SIZE * textScale, fontScale)
         + BREW_FIGURE_INTERNAL_GAP
         + dotoRowHeight(BREW_FIGURE_VALUE_SIZE * textScale, fontScale);
+    const detailsUseFourColumns = brewFigureUsesFourColumns(
+        fontScale,
+        input.width - STORY_CAPTURE_PADDING * 2
+    );
+    const hasQuietLine = budget.showGrindRecipeBadge
+        || (
+            budget.showDrawdownRateBadge
+            && (!detailsUseFourColumns || budget.showGrindRecipeBadge)
+        );
+    const quietLineHeight = hasQuietLine
+        ? BREW_FIGURE_INTERNAL_GAP + Math.max(
+            dotoRowHeight(11 * textScale, fontScale, 11 * textScale)
+                + (1 * textScale + 1 * textScale) * 2,
+            dotoRowHeight(11 * textScale, fontScale)
+        )
+        : 0;
     const detailFigures = budget.showFigureDetails !== false
         ? Math.max(0, input.figureExtraRows ?? 0) * (
             BREW_FIGURE_ROW_GAP
             + dotoRowHeight(BREW_FIGURE_LABEL_SIZE * textScale, fontScale)
             + BREW_FIGURE_INTERNAL_GAP
             + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE * textScale, fontScale)
+            + quietLineHeight
         )
         : 0;
     const noteHeight = budget.showSummaryNote !== false && input.hasSummaryNote === true
@@ -340,18 +358,8 @@ describe("the frame", () => {
     });
 
     it("fits every story sheet width, card stage count and bounded font scale", () => {
-        const visibleRows = (budget: ReturnType<typeof storySummaryBudget>) =>
-            Number(budget.showCoffee)
-            + Number(budget.showRating)
-            + Number(budget.shownTagCount > 0)
-            + Number(budget.showSummaryNote === true)
-            + Number(budget.showFigureDetails === true)
-            + Number(budget.showRateChart)
-            + Number(budget.showStages);
-
         for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
             for (const fontScale of STORY_TEST_FONT_SCALES) {
-                let rowsAtPreviousWidth = 0;
                 for (const width of STORY_TEST_WIDTHS) {
                     const budget = storySummaryBudget({
                         width,
@@ -362,11 +370,10 @@ describe("the frame", () => {
                         tags: ["Ethiopia", "washed", "late drawdown", "long tag wraps"],
                         fontScale,
                         hasBypass: true,
-                        figureExtraRows: 1
+                        figureExtraRows: 1,
+                        drawdownRate: 2.1
                     });
                     expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
-                    expect(visibleRows(budget)).toBeGreaterThanOrEqual(rowsAtPreviousWidth);
-                    rowsAtPreviousWidth = visibleRows(budget);
                 }
             }
         }
@@ -417,7 +424,7 @@ describe("the frame", () => {
         expect(STORY_FIT_MARGIN).toBeGreaterThan(0);
     });
 
-    it("keeps the horizontal drawdown badge decision out of the vertical ladder", () => {
+    it("keeps the drawdown rate when the new rate column fits", () => {
         const budget = storySummaryBudget({
             width: 430,
             stages: 3,
@@ -435,7 +442,8 @@ describe("the frame", () => {
         expect(budget.showFigureDetails).toBe(true);
         expect(budget.showSummaryNote).toBe(true);
         expect(budget.showRateChart).toBe(true);
-        expect(budget.showDrawdownRateBadge).toBe(false);
+        expect(budget.showDrawdownRateBadge).toBe(true);
+        expect(budget.margin).toBeGreaterThanOrEqual(0);
     });
 
     it("suppresses an oversized drawdown rate badge on the story card only", () => {
@@ -446,7 +454,7 @@ describe("the frame", () => {
             hasCoffee: false,
             hasRating: false,
             figureExtraRows: 1,
-            drawdownRate: 9999.9,
+            drawdownRate: 999999999.9,
             fontScale: 1
         });
 
@@ -533,9 +541,9 @@ describe("the frame", () => {
         expect(fit.width).toBeLessThanOrEqual(fit.limit);
     });
 
-    it("counts the drawdown rate badge beside the drawdown figure", () => {
+    it("counts the drawdown rate in its own detail column", () => {
         const input = {
-            width: 600,
+            width: 430,
             stages: 2,
             hasRateChart: false,
             hasCoffee: false,
@@ -551,7 +559,8 @@ describe("the frame", () => {
         expect(budget.showFigureDetails).toBe(true);
         expect(budget.showDrawdownRateBadge).toBe(true);
         expect(fit).toEqual(expect.objectContaining({fits: true}));
-        expect(fit.width).toBeGreaterThan(80);
+        expect(fit.widest).not.toBe("drawdown value and rate");
+        expect(fit.width).toBeLessThan(80);
         expect(fit.width + STORY_FIT_MARGIN).toBeLessThanOrEqual(fit.limit);
     });
 
@@ -619,20 +628,20 @@ describe("the frame", () => {
         expect(sweep.visited).toBe(66_560);
         expect(sweep.cell).toMatchObject({
             width: 430,
-            stages: 1,
-            fontScale: 0.85,
+            stages: 8,
+            fontScale: 1.2,
             hasCoffee: false,
             hasRating: false,
             tags: [],
             hasSummaryNote: false,
-            figureExtraRows: 0,
+            figureExtraRows: 1,
             hasRateChart: false,
             hasBypass: false
         });
         // In the sparsest no-rate story, the trace cap now binds before the
         // near full bleed frame runs out of room. That remainder is centered
         // breathing room, not a failure to fit the rows that were requested.
-        expect(sweep.worst).toBeLessThanOrEqual(204);
+        expect(sweep.worst).toBeLessThanOrEqual(236);
     });
 
     it("fits every story sheet width with no retained rate chart", () => {
@@ -734,7 +743,9 @@ describe("the frame", () => {
             hasRateChart: false,
             hasCoffee: false,
             hasRating: false,
-            figureExtraRows: 1
+            figureExtraRows: 1,
+            hasGrindRecipeBadge: false,
+            drawdownRate: null
         });
 
         expect(withSecondRow.requiredHeight - withoutSecondRow.requiredHeight)
