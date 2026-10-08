@@ -98,43 +98,47 @@ export const SPIKE_FRAMES: SpikeFrame[] = [
     },
     {
         id: "pro-mode",
-        question: "Q4 setup",
+        question: "Q4, settled 2026-10-08",
         label: "Switch to PRO (11511)",
-        watch: "Slot writes are refused in AUTO, where the machine sits at 0x41.",
+        watch: "Acknowledged, and makes no difference. The batch behaved the "
+            + "same with and without it, so PRO is not a precondition for a "
+            + "slot write after all.",
         build: () => buildType2(11511, ascii("00000000"))
     },
     {
         id: "slot-a",
-        question: "Q4",
+        question: "Q4, settled 2026-10-08",
         label: "Easy slot A only (15 g / 225 ml)",
-        watch: "Ten seconds after this alone: does the machine report 0x43 and "
-            + "display RETRY?",
-        hazard: "A partial batch is documented to hang the machine. Q5 is whether "
-            + "sending the other two gets it back.",
+        watch: "The machine goes unresponsive with a looping animation. That is "
+            + "the documented 0x43 hang, and it is not a brick: sending B and C "
+            + "releases it.",
+        hazard: "Leaves the machine stuck until the batch is finished. Only send "
+            + "this if you intend to send B and C after it.",
         build: () => slotFrame(0, 0x02)
     },
     {
         id: "slot-b",
-        question: "Q5",
+        question: "Q5, settled 2026-10-08",
         label: "Easy slot B (18 g / 270 ml)",
-        watch: "Second of the three. Nothing should complete until C arrives.",
+        watch: "Nothing visible changes, which is what an atomic batch looks "
+            + "like from outside. Still hung until C arrives.",
         build: () => slotFrame(1, 0x02)
     },
     {
         id: "slot-c-04",
-        question: "Q5 and Q6",
+        question: "Q5 and Q6, settled 2026-10-08",
         label: "Easy slot C, grinder nibble 0x04",
-        watch: "Does the batch now progress 0x43 to 0x25 to 0x01? Then open slot "
-            + "C on the machine: does it show the grinder as off?",
+        watch: "Releases the hang, and the slot shows the grinder off.",
         build: () => slotFrame(2, 0x04)
     },
     {
         id: "slot-c-02",
-        question: "Q6",
+        question: "Q6, settled 2026-10-08",
         label: "Easy slot C, grinder nibble 0x02",
-        watch: "Send A and B again first, the batch is atomic. If C looks the "
-            + "same either way then the nibble is not what carries the grinder "
-            + "and the blob's own FE byte is.",
+        watch: "Releases the hang too, and shows the grinder off as well. So the "
+            + "nibble is not what carries the grinder; the blob's own FE byte "
+            + "is, and the two constants in the catalogue were never in "
+            + "disagreement about anything.",
         build: () => slotFrame(2, 0x02)
     }
 ];

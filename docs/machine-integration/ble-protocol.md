@@ -544,17 +544,42 @@ Command 11510, Type 2 packet:
 ```
 **Flags byte:**
 - Bit 4 (0x10): Scale ON
-- Bits 0–3: Grinder — `0x02`=ON, `0x04`=OFF
-- Common values: `0x02`=scale-off+grind-on, `0x04`=scale-off+grind-off, `0x12`=scale-on+grind-on, `0x14`=scale-on+grind-off
+- Bits 0–3: claimed to be the grinder — `0x02`=ON, `0x04`=OFF. **It is not.** See below.
 
-Janczykkkko's implementation uses `SLOT_FLAG_SCALE_ON = 0x12`, `SLOT_FLAG_SCALE_OFF = 0x02` — note these both have grinder-ON in the lower nibble (0x02). `inferred` — may conflict with brAzzi64's `SLOT_GRINDER_OFF = 0x04`.
+Janczykkkko's implementation uses `SLOT_FLAG_SCALE_ON = 0x12`, `SLOT_FLAG_SCALE_OFF = 0x02` — note these both have grinder-ON in the lower nibble (0x02). `inferred` — appeared to conflict with brAzzi64's `SLOT_GRINDER_OFF = 0x04`.
+
+> **Observed on hardware 2026-10-08 (V12.0D.500): the lower nibble does not
+> carry the grinder, and the disagreement was never about anything.** The same
+> grinder-off recipe was written to slot C twice, once with flags `0x04` and
+> once with `0x02`, and the machine displayed the slot's grinder as **off both
+> times**. What carries it is the `0xFE` grind byte inside the recipe blob,
+> which is the field C5 already settled. Janczykkkko and brAzzi64 can both be
+> right about their constants because neither constant was doing anything.
+>
+> This is why a slot write should be built from the same encoder as a brew:
+> the blob is the single place the grinder is expressed, and the flags byte is
+> at most the scale bit.
 
 ### Batch-Write Requirement `corroborated`
 All three slots (A, B, C) MUST be written in a single batch. Writing only one or two leaves the machine hung at state `0x43` (saving_slots) and it displays RETRY. There is no "commit" frame — the machine saves atomically once all three 11510 frames have been received. Sequence:
-1. Switch to PRO mode (11511, `"00000000"`) — slot writes are only accepted in PRO mode. In AUTO mode the machine sits at state `0x41` and rejects saves.
+1. ~~Switch to PRO mode (11511, `"00000000"`) — slot writes are only accepted in PRO mode. In AUTO mode the machine sits at state `0x41` and rejects saves.~~ **Not required.** On hardware 2026-10-08, V12.0D.500, the batch behaved identically with and without the mode switch. The switch is still acknowledged; it just is not a precondition. Sending it is harmless, and an implementation that skips it has one fewer way to leave a machine in a mode its owner did not ask for.
 2. Send 11510 × 3 (slots A, B, C in order).
 3. Machine ACKs each with a 11510 notification (status C2).
 4. Machine progresses: state `0x43` (saving) → `0x25` (saved) → `0x01` (idle), confirmed by an `0xF8` notify.
+
+> **Observed on hardware 2026-10-08 (V12.0D.500): the hang is recoverable, and
+> finishing the batch is the recovery.** Slot A alone put the machine into an
+> unresponsive state with a looping animation on its display. Slot B changed
+> nothing visible, which is what an atomic batch should look like from outside.
+> Slot C released it, and the slot it had written was correct. So a write
+> interrupted after one or two frames is not a brick and does not need a power
+> cycle: it needs the remaining frames.
+>
+> That is worth knowing before building this, because the obvious failure mode
+> is a BLE drop halfway through three frames. The repair is to send the rest,
+> which means an implementation should hold all three blobs before it sends the
+> first, and should retry the batch from where it stopped rather than from the
+> beginning.
 
 ### Sync Flow with 11512 `corroborated`
 After the 3 slot writes, the app sends command 11512 (Recipe Order). APK decompile confirms this is a real command (`BleCodeFactory.easyModeRecipesOrder`). Its exact payload is documented but not always implemented.
