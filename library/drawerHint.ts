@@ -40,7 +40,7 @@ export const DRAWER_HINT_DORMANCY_MS = 60 * DAY_MS;
  * and that test fails.
  */
 export const DRAWER_ACTIONS = [
-    "brew", "share", "write",
+    "brew", "quick-edit", "write",
     "copy", "delete", "favourite"
 ] as const;
 

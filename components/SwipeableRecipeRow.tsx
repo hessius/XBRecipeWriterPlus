@@ -60,7 +60,9 @@ type Props = {
     evidence?: RecipeEvidence;
     /** Brew this recipe. Present only when there is a machine to brew on. */
     onBrew?: () => void;
-    /** Share a link to this recipe. */
+    /** Open a one-brew edit surface for this recipe. */
+    onQuickEdit?: () => void;
+    /** Share a link to this recipe through the card's accessibility action. */
     onShare?: () => void;
     /** Write this recipe to an NFC card. */
     onWrite?: () => void;
@@ -175,6 +177,7 @@ export default function SwipeableRecipeRow({
                                                dottedProfile = false,
                                                evidence,
                                                onBrew,
+                                               onQuickEdit,
                                                onShare,
                                                onWrite,
                                                onToggleFavourite,
@@ -220,7 +223,7 @@ export default function SwipeableRecipeRow({
         // then right still reads as a glitch, while two different cards each
         // revealing one side read as two discoverable affordances.
         //
-        // `openLeft` reveals the left-rendered action tray (BREW/SHARE/WRITE),
+        // `openLeft` reveals the left-rendered action tray (BREW/TUNE/WRITE),
         // while `openRight` reveals the right-rendered management tray.
         const open = setTimeout(() => {
             if (hintTray === "action") {
@@ -317,11 +320,11 @@ export default function SwipeableRecipeRow({
     /**
      * The action tray, revealed by swiping the card right.
      *
-     * BREW, SHARE and WRITE all act on the *recipe* — run it, hand out a link to
-     * it, put it on a card — which is a different kind of thing from managing the
-     * list, and so deserves its own side. Each tile appears only when the screen
-     * can perform it: BREW needs a machine, so it is absent when `onBrew` is not
-     * given. A dead BREW on every row would be worse than no BREW.
+     * BREW, TUNE and WRITE all act on the *recipe* — run it, adjust it for one
+     * brew, put it on a card — which is a different kind of thing from managing
+     * the list, and so deserves its own side. Each tile appears only when the
+     * screen can perform it: BREW needs a machine, so it is absent when `onBrew`
+     * is not given. A dead BREW on every row would be worse than no BREW.
      */
     function renderLeftActions() {
         return (
@@ -341,15 +344,15 @@ export default function SwipeableRecipeRow({
                               onBrew();
                           }}/>
                 )}
-                {onShare !== undefined && (
-                    // Recipe-agnostic verbs, so a neutral ink rather than the
-                    // accent BREW earns.
-                    <Tile icon="share" caption="SHARE" tone={palette.info}
-                          testID="recipe-row-share"
-                          label={`Share ${recipe.displayName()}`}
+                {onQuickEdit !== undefined && (
+                    // Temporary tuning is a frequent brew-side action, but it
+                    // is not the brew itself, so it keeps the neutral tray ink.
+                    <Tile icon="settings" caption="TUNE" tone={palette.info}
+                          testID="recipe-row-quick-edit"
+                          label={`Quick edit ${recipe.displayName()}`}
                           onPress={() => {
                               swipeableRef.current?.close();
-                              onShare();
+                              onQuickEdit();
                           }}/>
                 )}
                 {onWrite !== undefined && (
@@ -375,10 +378,10 @@ export default function SwipeableRecipeRow({
     }
 
     // Both trays are drawn only when they have at least one tile: an empty
-    // action tray (no machine, and a caller that also withholds share/write)
+    // action tray (no machine, and a caller that also withholds tune/write)
     // would otherwise open onto a blank strip.
     const hasLeftActions =
-        onBrew !== undefined || onShare !== undefined || onWrite !== undefined;
+        onBrew !== undefined || onQuickEdit !== undefined || onWrite !== undefined;
 
     return (
         <View style={{maxWidth: 600, paddingHorizontal: 12, paddingVertical: 6}}>
@@ -401,6 +404,7 @@ export default function SwipeableRecipeRow({
                             showCoffeeMarker={showCoffeeMarker}
                             dottedProfile={dottedProfile}
                             onBrew={onBrew}
+                            onQuickEdit={onQuickEdit}
                             onShare={onShare} onWrite={onWrite}
                             onDelete={onDelete} onDuplicate={onDuplicate}
                             onToggleFavourite={onToggleFavourite}

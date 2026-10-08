@@ -836,31 +836,36 @@ describe("RecipeCard", () => {
         expect(onBrew).toHaveBeenCalledTimes(1);
     });
 
-    it("offers the tray's share and write verbs to a screen reader", async () => {
-        // SHARE and WRITE live only in the swipe tray, whose tiles sit inside
+    it("offers the tray's tune and write verbs to a screen reader", async () => {
+        // TUNE and WRITE live only in the swipe tray, whose tiles sit inside
         // this card's accessibility group and behind a pan gesture. Without
         // these two actions there is no way at all for a VoiceOver or TalkBack
-        // user to hand out a link or put a recipe on a card.
+        // user to adjust one brew or put a recipe on a card.
+        const onQuickEdit = jest.fn();
         const onShare = jest.fn();
         const onWrite = jest.fn();
         // Writable, because WRITE is withdrawn from a recipe no card can hold
         // -- the mirror of the dimmed tile.
         await renderWithProviders(
             <RecipeCard recipe={makeWritableRecipe()} onPress={jest.fn()}
-                        onShare={onShare} onWrite={onWrite}/>
+                        onQuickEdit={onQuickEdit} onShare={onShare} onWrite={onWrite}/>
         );
         const card = screen.getByTestId("recipe-card");
         expect(card.props.accessibilityActions).toEqual(
             expect.arrayContaining([
+                {name: "quickEdit", label: "Quick edit recipe"},
                 {name: "share", label: "Share recipe"},
                 {name: "write", label: "Write recipe to card"}
             ])
         );
 
         await fireEvent(card, "accessibilityAction",
+                        {nativeEvent: {actionName: "quickEdit"}});
+        await fireEvent(card, "accessibilityAction",
                         {nativeEvent: {actionName: "share"}});
         await fireEvent(card, "accessibilityAction",
                         {nativeEvent: {actionName: "write"}});
+        expect(onQuickEdit).toHaveBeenCalledTimes(1);
         expect(onShare).toHaveBeenCalledTimes(1);
         expect(onWrite).toHaveBeenCalledTimes(1);
     });

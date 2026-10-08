@@ -125,12 +125,14 @@ type Props = {
     dottedProfile?: boolean;
     /** Called by the accessibility action that mirrors the swipe tray's BREW tile. */
     onBrew?: () => void;
+    /** Called by the accessibility action that mirrors the swipe tray's TUNE tile. */
+    onQuickEdit?: () => void;
     /**
-     * The swipe tray's other two verbs.
+     * Home sharing no longer has a swipe tile, but the row actions sheet still
+     * does and long press is not a screen reader gesture.
      *
-     * The card draws neither. They are here only so that the tray's tiles --
-     * which sit inside this card's accessibility group, behind a pan gesture --
-     * have a non-visual path; see the actions list below.
+     * The card draws none of these. They are here only so that gestures a
+     * reader cannot perform have a non-visual path; see the actions list below.
      */
     onShare?: () => void;
     onWrite?: () => void;
@@ -189,6 +191,7 @@ export default function RecipeCard({
     showCoffeeMarker = true,
     dottedProfile = false,
     onBrew,
+    onQuickEdit,
     onShare,
     onWrite,
     onToggleFavourite,
@@ -240,10 +243,14 @@ export default function RecipeCard({
             : []),
         ...(onDelete !== undefined ? [{name: "delete", label: "Delete recipe"}] : []),
         ...(onBrew !== undefined ? [{name: "brew", label: "Brew this recipe"}] : []),
-        // Same reasoning as `brew`, and for the same tray: SHARE and WRITE are
+        // Same reasoning as `brew`, and for the same tray: TUNE and WRITE are
         // tiles revealed by a swipe, and a swipe is not something VoiceOver or
-        // TalkBack can perform. Without these two the only way to hand out a
-        // link or put a recipe on a card is a gesture those users do not have.
+        // TalkBack can perform.
+        ...(onQuickEdit !== undefined
+            ? [{name: "quickEdit", label: "Quick edit recipe"}]
+            : []),
+        // Share is no longer in the tray, but the home actions sheet is reached
+        // by long press, so it still needs a reader path.
         ...(onShare !== undefined ? [{name: "share", label: "Share recipe"}] : []),
         // The mirror of the tray tile, which is dimmed on a recipe no card can
         // hold. An accessibility action has no disabled state, so withdrawing
@@ -300,6 +307,8 @@ export default function RecipeCard({
                     onDelete?.();
                 } else if (event.nativeEvent.actionName === "brew") {
                     onBrew?.();
+                } else if (event.nativeEvent.actionName === "quickEdit") {
+                    onQuickEdit?.();
                 } else if (event.nativeEvent.actionName === "share") {
                     onShare?.();
                 } else if (event.nativeEvent.actionName === "write") {

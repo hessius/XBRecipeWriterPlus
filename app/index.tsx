@@ -21,8 +21,10 @@ import LibraryRail, {type RailFilter} from "@/components/LibraryRail";
 import MachinePanel from "@/components/MachinePanel";
 import NewRecipeSheet from "@/components/NewRecipeSheet";
 import NfcOverlay from "@/components/NfcOverlay";
+import QuickEditPanel from "@/components/QuickEditPanel";
 import SortSheet from "@/components/SortSheet";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
+import XbrwSheet from "@/components/XbrwSheet";
 import {notify} from "@/components/XbrwToast";
 import type {MachineVitals} from "@/components/MachinePanel";
 import {OVER} from "@/constants/brewCopy";
@@ -47,7 +49,7 @@ import Recipe from "@/library/Recipe";
 import {serialiseCapture} from "@/library/cardDiagnostics";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {blankRecipe} from "@/library/newRecipe";
-import {assignAccent} from "@/library/accent";
+import {assignAccent, resolveAccent} from "@/library/accent";
 import NameShelfSheet from "@/components/NameShelfSheet";
 import RemoveShelfSheet from "@/components/RemoveShelfSheet";
 import SelectableRecipeRow from "@/components/SelectableRecipeRow";
@@ -81,6 +83,11 @@ import {
 } from "@/library/hiddenShelves";
 import {moveShelf, orderShelves} from "@/library/shelfOrder";
 import {canWriteToCard} from "@/library/cardLimits";
+import {
+    applyQuickEdit,
+    quickEditProblems,
+    type QuickEditAdjustments
+} from "@/library/quickEdit";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
 import {type Settings} from "@/library/Settings";
@@ -133,6 +140,11 @@ let lastEditorPushAt = 0;
 type RecipeListItem =
     | {kind: "heading"; id: string; label: string}
     | {kind: "recipe"; recipe: Recipe; recipeIndex: number};
+
+type HomeQuickEditState = {
+    recipe: Recipe;
+    adjustments: QuickEditAdjustments;
+};
 
 // The id rides along only to name the test target. The two headings and the
 // rail chip beside them say the same words -- STARRED is the mark, whether it
@@ -219,6 +231,50 @@ function EmptySelection() {
     );
 }
 
+function HomeQuickEditSheet({
+    state,
+    onOpenChange,
+    onChange,
+    onBrew
+}: {
+    state: HomeQuickEditState | null;
+    onOpenChange: (open: boolean) => void;
+    onChange: (adjustments: QuickEditAdjustments) => void;
+    onBrew: () => void;
+}) {
+    const recipe = state?.recipe ?? null;
+    const adjustments = state?.adjustments ?? {};
+    const accent = recipe ? resolveAccent(recipe) : palette.text;
+
+    return (
+        <XbrwSheet open={recipe !== null} onOpenChange={onOpenChange}
+                   title="QUICK EDIT" heightPercent={72}>
+            {recipe !== null && (
+                <QuickEditPanel
+                    recipe={recipe}
+                    adjustments={adjustments}
+                    accent={accent}
+                    onChange={onChange}
+                    renderBrewAction={(brewability) => (
+                        <Button
+                            testID="home-quick-edit-brew"
+                            accessibilityRole="button"
+                            accessibilityLabel="Brew with quick edits"
+                            accessibilityState={{disabled: !brewability.brewable}}
+                            disabled={!brewability.brewable}
+                            opacity={brewability.brewable ? 1 : 0.45}
+                            backgroundColor={brewability.brewable ? accent : palette.raised}
+                            color={brewability.brewable ? onAccent.text : palette.dim}
+                            borderRadius="$5"
+                            onPress={onBrew}>
+                            BREW THIS
+                        </Button>
+                    )}/>
+            )}
+        </XbrwSheet>
+    );
+}
+
 export default function HomeScreen({db, beanStore, settings}: Props) {
     const insets = useSafeAreaInsets();
     const router = useSteadyRouter();
@@ -290,6 +346,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // than two lists that can drift. Held at the screen so a single sheet serves
     // every tile and every row, rather than one sheet per recipe.
     const [overflowRecipe, setOverflowRecipe] = useState<Recipe | null>(null);
+    const [quickEdit, setQuickEdit] = useState<HomeQuickEditState | null>(null);
 
     // Advance the displayed age while the popover is open.
     //
@@ -1141,7 +1198,25 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         void brewMind.open();
     }
 
-    function openBrew(recipe: Recipe): void {
+    function openQuickEdit(recipe: Recipe): void {
+        setQuickEdit({recipe, adjustments: {}});
+    }
+
+    function onQuickEditChange(adjustments: QuickEditAdjustments): void {
+        setQuickEdit((current) => current === null ? null : {...current, adjustments});
+    }
+
+    function brewQuickEdit(): void {
+        if (quickEdit === null) return;
+        const {recipe, adjustments} = quickEdit;
+        if (quickEditProblems(recipe, adjustments).length > 0) return;
+        const edited = applyQuickEdit(recipe, adjustments);
+        if (openBrew(edited, adjustments)) {
+            setQuickEdit(null);
+        }
+    }
+
+    function openBrew(recipe: Recipe, adjustments?: QuickEditAdjustments): boolean {
         // There is one machine, and `LiveBrewProvider.start` refuses a second
         // run while the first is still going. Without this the tap would push
         // a brew screen that quietly showed the *other* recipe brewing, which
@@ -1153,18 +1228,23 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 tone:    "info",
                 message: `The machine is busy brewing ${liveRun.recipe.displayName()}.`
             });
-            return;
+            return false;
         }
-        // eslint-disable-next-line react-hooks/purity
         if (Date.now() - lastBrewPushRef.current < EDITOR_PUSH_GUARD_MS) {
-            return;
+            return false;
         }
-        // eslint-disable-next-line react-hooks/purity
         lastBrewPushRef.current = Date.now();
+        const params = adjustments === undefined
+            ? {recipeJSON: JSON.stringify(recipe)}
+            : {
+                recipeJSON:            JSON.stringify(recipe),
+                quickEditAdjustments: JSON.stringify(adjustments)
+            };
         router.push({
             pathname: "/brew",
-            params:   {recipeJSON: JSON.stringify(recipe)}
+            params
         });
+        return true;
     }
 
     async function shareFromHome(recipe: Recipe): Promise<void> {
@@ -1205,7 +1285,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const screenCovered = scanning || importOpen || newOpen || sortOpen || showNfcOverlay
         || namingShelf || renamingShelf !== null || shelfActions !== null
         || deletingShelf !== null || beanFilterOpen
-        || removingShelf !== null || overflowRecipe !== null || ratingNoteOpen;
+        || removingShelf !== null || overflowRecipe !== null || quickEdit !== null
+        || ratingNoteOpen;
 
     // The sheet's own row, reachable without the long press that opens it. A
     // reader cannot make that gesture, so every verb the sheet offers is also an
@@ -1480,9 +1561,10 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                                 onShown={drawerHint.noteShown}
                                 onBounced={() => drawerHint.noteBounced(item.recipeIndex)}
                                 // Gated on a machine: a dead BREW in every row's
-                                // tray is worse than none. Share and write need
+                                // tray is worse than none. Tune and write need
                                 // no machine, so they are always offered.
                                 onBrew={remembered !== "" ? () => openBrew(item.recipe) : undefined}
+                                onQuickEdit={() => openQuickEdit(item.recipe)}
                                 onShare={() => shareFromHome(item.recipe)}
                                 onWrite={() => writeCard(item.recipe)}
                                 onPress={() => openRecipe(item.recipe)}
@@ -1679,6 +1761,14 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 onDelete={() => {
                     if (overflowRecipe !== null) library.deleteRecipe(overflowRecipe);
                 }}/>
+
+            <HomeQuickEditSheet
+                state={quickEdit}
+                onOpenChange={(next) => {
+                    if (!next) setQuickEdit(null);
+                }}
+                onChange={onQuickEditChange}
+                onBrew={brewQuickEdit}/>
 
             <ImportSheet
                 open={importOpen}
