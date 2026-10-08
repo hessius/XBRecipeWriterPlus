@@ -70,6 +70,8 @@ type LiveBrew = {
     /** Command the machine to brew this recipe.  Only meaningful after `start`. */
     brew: (recipe: Recipe) => Promise<void>;
     startBrew: () => Promise<void>;
+    pauseBrew: () => Promise<void>;
+    resumeBrew: () => Promise<void>;
     cancelBrew: () => Promise<void>;
     canOfferProMode: () => boolean;
     switchToProAndRetry: (recipe: Recipe) => Promise<void>;
@@ -101,6 +103,8 @@ const defaultValue: LiveBrew = {
     watch: () => () => {},
     brew: noop,
     startBrew: noop,
+    pauseBrew: noop,
+    resumeBrew: noop,
     cancelBrew: noop,
     canOfferProMode: () => false,
     switchToProAndRetry: noop,
@@ -186,6 +190,7 @@ function RunOwner({
     const result = useBrewRun(recipe, store, runId, quickEdit);
     const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
            heldSeconds, stalls, stageWater, pauseElapsed, brew, startBrew,
+           pauseBrew, resumeBrew,
            cancelBrew, canOfferProMode, switchToProAndRetry, bypass, record} = result;
 
     // Command the machine exactly once, on the first mount of this RunOwner.
@@ -266,7 +271,8 @@ function RunOwner({
                     setWatchers((n) => n - 1);
                 };
             },
-            brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry, error,
+            brew, startBrew, pauseBrew, resumeBrew, cancelBrew, canOfferProMode,
+            switchToProAndRetry, error,
         }}>
             {children}
         </Context.Provider>

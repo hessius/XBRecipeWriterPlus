@@ -6,7 +6,7 @@ import {Linking} from "react-native";
 
 import Brew from "@/app/brew";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {LONGEST_ACTIVE_HEADLINE, RATING_CAN_WAIT} from "@/constants/brewCopy";
+import {LONGEST_ACTIVE_HEADLINE, PAUSED_NOTE, RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {StoredBrew} from "@/library/BrewDatabase";
@@ -63,6 +63,8 @@ let mockBandAllocationArgs: [number, number][] = [];
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
+const mockPauseBrew = jest.fn();
+const mockResumeBrew = jest.fn();
 const mockSwitchToProAndRetry = jest.fn();
 const mockStart = jest.fn();
 const mockStartInPro = jest.fn();
@@ -140,6 +142,8 @@ jest.mock("@/hooks/useLiveBrew", () => {
         brew: mockBrew,
         startBrew: mockStartBrew,
         cancelBrew: mockCancelBrew,
+        pauseBrew: mockPauseBrew,
+        resumeBrew: mockResumeBrew,
         canOfferProMode: () => mockCanOfferPro,
         switchToProAndRetry: mockSwitchToProAndRetry,
         error: mockError,
@@ -203,6 +207,8 @@ beforeEach(() => {
     mockBrew.mockClear();
     mockStartBrew.mockClear();
     mockCancelBrew.mockClear();
+    mockPauseBrew.mockClear();
+    mockResumeBrew.mockClear();
     mockSwitchToProAndRetry.mockClear();
     mockStart.mockClear();
     mockPush.mockClear();
@@ -799,6 +805,57 @@ describe("brew route", () => {
         const {getByLabelText} = await renderWithProviders(<Brew />);
         await fireEvent.press(getByLabelText("Cancel"));
         expect(mockCancelBrew).toHaveBeenCalled();
+    });
+
+    it("offers Pause while water is going into the dripper", async () => {
+        mockPhase = {name: "pouring", pour: 1, pours: 2} as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+        await fireEvent.press(getByLabelText("Pause"));
+        expect(mockPauseBrew).toHaveBeenCalled();
+    });
+
+    it("does not offer Pause before a brew is running", async () => {
+        // 40518 is inert here, so the button would do nothing while claiming
+        // to stop a machine.
+        mockPhase = {name: "readyToStart"} as BrewPhase;
+        const {queryByLabelText} = await renderWithProviders(<Brew />);
+        expect(queryByLabelText("Pause")).toBeNull();
+    });
+
+    it("does not offer Pause once the water is off and the bed is draining", async () => {
+        mockPhase = {name: "settling"} as BrewPhase;
+        const {queryByLabelText} = await renderWithProviders(<Brew />);
+        expect(queryByLabelText("Pause")).toBeNull();
+    });
+
+    it("offers Resume, and not Pause, on a paused brew", async () => {
+        mockPhase = {
+            name: "paused", pour: 1, pours: 2, was: {name: "pouring", pour: 1, pours: 2}
+        } as BrewPhase;
+        const {getByLabelText, queryByLabelText} = await renderWithProviders(<Brew />);
+        await fireEvent.press(getByLabelText("Resume"));
+        expect(mockResumeBrew).toHaveBeenCalled();
+        expect(queryByLabelText("Pause")).toBeNull();
+    });
+
+    it("still offers Cancel while paused, because they are opposite answers", async () => {
+        mockPhase = {
+            name: "paused", pour: 1, pours: 2, was: {name: "pouring", pour: 1, pours: 2}
+        } as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+        await fireEvent.press(getByLabelText("Cancel"));
+        expect(mockCancelBrew).toHaveBeenCalled();
+    });
+
+    it("says the machine's own screen will not mention the pause", async () => {
+        // Nothing on the machine knows a brew is paused: its state is ARMED,
+        // which is what a brew waiting to start looks like. Somebody who walks
+        // over to it needs to have been told.
+        mockPhase = {
+            name: "paused", pour: 1, pours: 2, was: {name: "pouring", pour: 1, pours: 2}
+        } as BrewPhase;
+        const {getByText} = await renderWithProviders(<Brew />);
+        expect(getByText(PAUSED_NOTE)).toBeTruthy();
     });
 
     it("says the machine is still brewing when contact is lost", async () => {

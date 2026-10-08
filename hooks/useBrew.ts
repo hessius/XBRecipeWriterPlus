@@ -29,6 +29,8 @@ export type Brewer = {
      * auto-start off. Only meaningful in the `readyToStart` phase.
      */
     startBrew: () => Promise<void>;
+    pauseBrew: () => Promise<void>;
+    resumeBrew: () => Promise<void>;
     cancelBrew: () => Promise<void>;
     /**
      * Whether offering a switch to PRO mode would be a reasonable thing to do.
@@ -137,6 +139,24 @@ export function useBrew(injected?: Machine): Brewer {
         }
     }
 
+    async function pauseBrew(): Promise<void> {
+        setError(null);
+        try {
+            await machine.pauseBrew();
+        } catch (e) {
+            setError((e as Error).message);
+        }
+    }
+
+    async function resumeBrew(): Promise<void> {
+        setError(null);
+        try {
+            await machine.resumeBrew();
+        } catch (e) {
+            setError((e as Error).message);
+        }
+    }
+
     async function cancelBrew(): Promise<void> {
         try {
             await machine.cancelBrew();
@@ -161,7 +181,8 @@ export function useBrew(injected?: Machine): Brewer {
         }
     }
 
-    return {phase, error, machine, brew, startBrew, cancelBrew, canOfferProMode, switchToProAndRetry};
+    return {phase, error, machine, brew, startBrew, pauseBrew, resumeBrew, cancelBrew,
+            canOfferProMode, switchToProAndRetry};
 }
 
 export default useBrew;
