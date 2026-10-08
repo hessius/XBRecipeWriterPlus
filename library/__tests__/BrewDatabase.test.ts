@@ -268,6 +268,10 @@ function realBrewDatabase(): BrewDatabase {
         if (/FROM brew_tags/i.test(source)) tagRowsRead += rows.length;
         return rows;
     }) as typeof raw.getAllSync;
+    return brewDatabaseOn(raw);
+}
+
+function brewDatabaseOn(raw: FakeSQLiteDatabase): BrewDatabase {
     const database = Object.create(BrewDatabase.prototype) as BrewDatabase;
     (database as unknown as {db: FakeSQLiteDatabase}).db = raw;
     return database;
@@ -908,6 +912,131 @@ describe("the recipe snapshot for export", () => {
     });
 });
 
+describe("quick-edit adjustment metadata", () => {
+    const adjustmentKeys = [
+        "adjustedFromDose",
+        "adjustedFromRatio",
+        "adjustedFromGrind",
+        "adjustedTempOffset"
+    ];
+
+    it("round-trips the recipe values a one-brew edit moved away from", () => {
+        const db = realBrewDatabase();
+
+        db.insert(record({
+            id: "brew-adjusted",
+            dose: 20,
+            ratio: 18,
+            grindSize: 68,
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: 2
+        }), []);
+
+        expect(db.get("brew-adjusted")).toMatchObject({
+            dose: 20,
+            ratio: 18,
+            grindSize: 68,
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: 2
+        });
+    });
+
+    it("leaves all adjustment keys absent when the stored sentinels are zero", () => {
+        const db = realBrewDatabase();
+
+        db.insert(record({
+            id: "brew-unadjusted",
+            adjustedFromDose: 0,
+            adjustedFromRatio: 0,
+            adjustedFromGrind: 0,
+            adjustedTempOffset: 0
+        }), []);
+
+        const keys = Object.keys(db.get("brew-unadjusted")!);
+        for (const key of adjustmentKeys) {
+            expect(keys).not.toContain(key);
+        }
+    });
+
+    it("migrates a pre-quick-edit database without changing old records", () => {
+        const raw = createTestDatabase();
+        raw.execSync(`
+            CREATE TABLE brews (
+                id TEXT PRIMARY KEY NOT NULL,
+                recipeUuid TEXT NOT NULL,
+                recipeName TEXT NOT NULL,
+                accent TEXT NOT NULL,
+                startedAt INTEGER NOT NULL,
+                pouringAt INTEGER NOT NULL DEFAULT 0,
+                drawdownAt INTEGER NOT NULL DEFAULT 0,
+                cupAtDrawdown REAL NOT NULL DEFAULT 0,
+                endedAt INTEGER NOT NULL,
+                outcome TEXT NOT NULL,
+                failure TEXT,
+                pours INTEGER NOT NULL,
+                waterTotal REAL NOT NULL,
+                cupTotal REAL NOT NULL,
+                heldSeconds INTEGER NOT NULL,
+                stalls TEXT NOT NULL DEFAULT '[]',
+                plan TEXT NOT NULL DEFAULT '[]',
+                stageWater TEXT NOT NULL DEFAULT '[]',
+                rating INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT '',
+                pinned INTEGER NOT NULL DEFAULT 0,
+                watched INTEGER NOT NULL DEFAULT 1,
+                bypass TEXT NOT NULL DEFAULT '',
+                dose REAL NOT NULL DEFAULT 0,
+                ratio REAL NOT NULL DEFAULT 0,
+                grindSize INTEGER NOT NULL DEFAULT 0,
+                grinderRpm INTEGER NOT NULL DEFAULT 0,
+                grinderUsed INTEGER NOT NULL DEFAULT 0,
+                dialBefore INTEGER NOT NULL DEFAULT 0,
+                dialAfter INTEGER NOT NULL DEFAULT 0,
+                coffee TEXT NOT NULL DEFAULT '',
+                recipeUrl TEXT NOT NULL DEFAULT '',
+                origin TEXT NOT NULL DEFAULT '',
+                roast TEXT NOT NULL DEFAULT '',
+                process TEXT NOT NULL DEFAULT '',
+                fermentation TEXT NOT NULL DEFAULT '',
+                sentAt INTEGER NOT NULL DEFAULT 0,
+                hasStream INTEGER NOT NULL
+            );
+        `);
+        raw.runSync(
+            `INSERT INTO brews (
+                id, recipeUuid, recipeName, accent, startedAt, endedAt, outcome,
+                pours, waterTotal, cupTotal, heldSeconds, hasStream
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+            [
+                "brew-old", "uuid-1", "Ethiopia Guji", "#C86A3B", 1_000,
+                2_000, "done", 2, 250, 244, 0, 0
+            ]
+        );
+
+        ensureBrewTables(raw as Parameters<typeof ensureBrewTables>[0]);
+
+        expect(raw.getFirstSync(
+            `SELECT adjustedFromDose, adjustedFromRatio, adjustedFromGrind,
+                    adjustedTempOffset
+             FROM brews WHERE id = ?;`,
+            ["brew-old"]
+        )).toEqual({
+            adjustedFromDose: 0,
+            adjustedFromRatio: 0,
+            adjustedFromGrind: 0,
+            adjustedTempOffset: 0
+        });
+        const keys = Object.keys(brewDatabaseOn(raw).get("brew-old")!);
+        for (const key of adjustmentKeys) {
+            expect(keys).not.toContain(key);
+        }
+    });
+});
+
 describe("what the coffee was", () => {
     it("stores and reads back the preset fields", () => {
         const db = realBrewDatabase();
@@ -1396,6 +1525,26 @@ describe("what a recipe's history adds up to", () => {
         expect(summary.avgRating).toBe(4);
         expect(summary.rated).toBe(2);
         expect(summary.times).toBe(3);
+    });
+
+    it("counts an adjusted brew toward evidence and the rating average", () => {
+        const db = realBrewDatabase();
+        db.insert(record({
+            id: "adjusted",
+            recipeUuid: "uuid-1",
+            rating: 5,
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: -2
+        }), []);
+        db.insert(record({id: "plain", recipeUuid: "uuid-1", rating: 3}), []);
+
+        expect(db.summaryFor("uuid-1")).toMatchObject({
+            times: 2,
+            rated: 2,
+            avgRating: 4
+        });
     });
 
     it("reports no average at all for a recipe nobody has judged", () => {

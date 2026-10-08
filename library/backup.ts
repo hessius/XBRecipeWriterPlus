@@ -8,8 +8,8 @@ import {
     MAX_ORIGIN_LENGTH,
     normaliseBeanTags
 } from "./brew/beanTags";
-import {DOSE} from "./cardLimits";
-import Recipe, {MAX_DESCRIPTION} from "./Recipe";
+import {DOSE, GRIND_SIZE, RATIO, TEMPERATURE} from "./cardLimits";
+import Recipe, {GRINDER_OFF_VALUE, MAX_DESCRIPTION} from "./Recipe";
 import {XBLOOM_SHARE_HOST} from "./shareLink";
 
 /**
@@ -229,12 +229,19 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /** A number the model can do arithmetic with. Rejects NaN, Infinity and null. */
-function isNumber(value: unknown): boolean {
+function isNumber(value: unknown): value is number {
     return typeof value === "number" && Number.isFinite(value);
 }
 
 function isNumberArray(value: unknown): boolean {
     return Array.isArray(value) && value.every(isNumber);
+}
+
+function isIntegerIn(value: unknown, min: number, max: number): boolean {
+    return isNumber(value)
+        && Number.isInteger(value)
+        && value >= min
+        && value <= max;
 }
 
 /**
@@ -616,6 +623,13 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     // transit would turn a typed verdict into a brew the app claims to have
     // watched, with no water and no time to show for it.
     watched:    (v) => typeof v === "boolean",
+    adjustedFromDose:  (v) => isIntegerIn(v, DOSE.min, DOSE.max),
+    adjustedFromRatio: (v) => isIntegerIn(v, RATIO.min, RATIO.max),
+    adjustedFromGrind: (v) => isIntegerIn(v, GRIND_SIZE.min, GRIND_SIZE.max)
+        || v === GRINDER_OFF_VALUE,
+    adjustedTempOffset: (v) =>
+        isIntegerIn(v, TEMPERATURE.min - TEMPERATURE.max,
+                    TEMPERATURE.max - TEMPERATURE.min),
     // The recipe snapshot, taken at brew time. Absent from every backup made
     // before the export existed, so optional, and checked only to shape: a
     // stored dose is read back through the same guards a live row is, and
@@ -717,6 +731,10 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         // writing `true` here would put a field on every record in the file to
         // say what its absence already says.
         watched: record.watched,
+        adjustedFromDose: record.adjustedFromDose,
+        adjustedFromRatio: record.adjustedFromRatio,
+        adjustedFromGrind: record.adjustedFromGrind,
+        adjustedTempOffset: record.adjustedTempOffset,
         // Carried through because the record is rebuilt field by field: a
         // field this list forgets is a field the restore drops, and these are
         // what an export hands to another app. Undefined stays undefined so an

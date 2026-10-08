@@ -120,6 +120,14 @@ type BrewRow = {
     pinned: number | null;
     /** 1 on a brew the app saw; 0 only on one a person logged by hand. */
     watched: number | null;
+    /** 0 on rows written before it and on unadjusted brews. */
+    adjustedFromDose: number;
+    /** 0 on rows written before it and on unadjusted brews. */
+    adjustedFromRatio: number;
+    /** 0 on rows written before it and on unadjusted brews. */
+    adjustedFromGrind: number;
+    /** 0 on rows written before it and on unadjusted brews. */
+    adjustedTempOffset: number;
     /** JSON, the bypass as it stood. `''` on rows written before it. */
     bypass: string;
     /** 0 on rows written before it, which reads as "not recorded". */
@@ -192,6 +200,10 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 note TEXT NOT NULL DEFAULT '',
                 pinned INTEGER NOT NULL DEFAULT 0,
                 watched INTEGER NOT NULL DEFAULT 1,
+                adjustedFromDose INTEGER NOT NULL DEFAULT 0,
+                adjustedFromRatio INTEGER NOT NULL DEFAULT 0,
+                adjustedFromGrind INTEGER NOT NULL DEFAULT 0,
+                adjustedTempOffset INTEGER NOT NULL DEFAULT 0,
                 bypass TEXT NOT NULL DEFAULT '',
                 dose REAL NOT NULL DEFAULT 0,
                 ratio REAL NOT NULL DEFAULT 0,
@@ -310,6 +322,24 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
         db.execSync("ALTER TABLE brews ADD COLUMN watched INTEGER NOT NULL DEFAULT 1;");
     } catch {
         // Already there.
+    }
+    // Quick-edit metadata uses the table's optional-number convention: 0 is
+    // absence, and hydrate is the only place that turns storage back into a
+    // missing key. That is safe here because dose, ratio and grind can never
+    // be 0, while a 0 temperature offset is exactly "not adjusted".
+    for (const column of [
+        "adjustedFromDose",
+        "adjustedFromRatio",
+        "adjustedFromGrind",
+        "adjustedTempOffset"
+    ]) {
+        try {
+            db.execSync(
+                `ALTER TABLE brews ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0;`
+            );
+        } catch {
+            // Already there.
+        }
     }
     // Rows written before these six existed keep zero or an empty string,
     // which reads as "not recorded"; zero is not a live dose, ratio, grind
@@ -478,12 +508,15 @@ class BrewDatabase {
                                 drawdownAt, cupAtDrawdown,
                                 endedAt, outcome, failure, pours, waterTotal, cupTotal,
                                 heldSeconds, stalls, plan, stageWater, bypass,
-                                rating, note, pinned, watched, dose, ratio,
+                                rating, note, pinned, watched,
+                                adjustedFromDose, adjustedFromRatio,
+                                adjustedFromGrind, adjustedTempOffset,
+                                dose, ratio,
                                 grindSize, grinderRpm, grinderUsed,
                                 dialBefore, dialAfter, coffee, recipeUrl,
                                 origin, roast, process, fermentation, sentAt, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0, record.drawdownAt ?? 0,
@@ -505,6 +538,10 @@ class BrewDatabase {
                 record.note ?? "",
                 record.pinned ? 1 : 0,
                 record.watched === false ? 0 : 1,
+                record.adjustedFromDose ?? 0,
+                record.adjustedFromRatio ?? 0,
+                record.adjustedFromGrind ?? 0,
+                record.adjustedTempOffset ?? 0,
                 record.dose ?? 0,
                 record.ratio ?? 0,
                 record.grindSize ?? 0,
@@ -1157,6 +1194,17 @@ function hydrate(row: BrewRow): StoredBrew {
         // what it was before this column existed and the round trip stays
         // honest about "absent means the app saw it".
         ...(row.watched === 0 ? {watched: false} : {}),
+        // Same optional-number convention as the recipe snapshot below. These
+        // are emitted only when non-zero so an unadjusted brew serialises
+        // exactly like one written before quick edits existed.
+        ...((row.adjustedFromDose ?? 0) !== 0
+            ? {adjustedFromDose: row.adjustedFromDose} : {}),
+        ...((row.adjustedFromRatio ?? 0) !== 0
+            ? {adjustedFromRatio: row.adjustedFromRatio} : {}),
+        ...((row.adjustedFromGrind ?? 0) !== 0
+            ? {adjustedFromGrind: row.adjustedFromGrind} : {}),
+        ...((row.adjustedTempOffset ?? 0) !== 0
+            ? {adjustedTempOffset: row.adjustedTempOffset} : {}),
         // Emitted only when set, matching the optional-column convention above:
         // a brew never handed over serialises exactly like one written before
         // this existed, while a backup can carry the user-facing note along.

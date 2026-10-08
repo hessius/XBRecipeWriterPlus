@@ -1000,6 +1000,55 @@ describe("brew history through a backup", () => {
         expect(brew?.dialAfter).toBe(52);
     });
 
+    it("carries quick-edit adjustment metadata through a round trip", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1", {
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: -2
+        }))));
+
+        expect(brew).toMatchObject({
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: -2
+        });
+    });
+
+    it("accepts a grinder-off baseline and a zero temperature offset", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1", {
+            adjustedFromGrind: 81,
+            adjustedTempOffset: 0
+        }))));
+
+        expect(brew?.adjustedFromGrind).toBe(81);
+        expect(brew?.adjustedTempOffset).toBe(0);
+    });
+
+    it.each([
+        ["a zero saved dose", {adjustedFromDose: 0}],
+        ["a dose above the card range", {adjustedFromDose: 32}],
+        ["a fractional dose", {adjustedFromDose: 18.5}],
+        ["a ratio below the card range", {adjustedFromRatio: 4}],
+        ["a ratio above the card range", {adjustedFromRatio: 101}],
+        ["a ratio as a string", {adjustedFromRatio: "16"}],
+        ["a grind below the brewing band", {adjustedFromGrind: 39}],
+        ["a grind above the brewing band and not off", {adjustedFromGrind: 82}],
+        ["a fractional grind", {adjustedFromGrind: 62.5}],
+        ["a temperature offset below the possible card range", {adjustedTempOffset: -61}],
+        ["a temperature offset above the possible card range", {adjustedTempOffset: 61}],
+        ["a fractional temperature offset", {adjustedTempOffset: 1.5}],
+        ["a temperature offset as a string", {adjustedTempOffset: "2"}]
+    ])("skips a brew with %s, and counts it", (_label, extra) => {
+        const result = parseBackup(backupFileWithBrewFields(extra));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toEqual([]);
+        expect(result.payload.skippedBrews).toBe(1);
+    });
+
     it("refuses a dial reading that is not a number", () => {
         // A restored record's next stop is a surface that reports it as an
         // observation of the machine, so a string here would be presented as
