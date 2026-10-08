@@ -324,6 +324,7 @@ describe("brew route", () => {
         ["a non-object payload", "1"],
         ["an array", "[1]"],
         ["a non-integer value", JSON.stringify({dose: 20, ratio: 18.5})],
+        ["an unknown key", JSON.stringify({dose: 20, futureKnob: 1})],
     ])("starts the adjusted recipe without record metadata for %s", async (_name, payload) => {
         const saved = new Recipe();
         saved.uuid = "quick-route";

@@ -85,6 +85,11 @@ function parseQuickEditParam(value: string | undefined): QuickEditAdjustments | 
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
         return undefined;
     }
+    if (Object.keys(parsed).some((key) => !QUICK_EDIT_KEYS.includes(
+        key as (typeof QUICK_EDIT_KEYS)[number]
+    ))) {
+        return undefined;
+    }
     const source = parsed as Record<keyof QuickEditAdjustments, unknown>;
     const adjustments: QuickEditAdjustments = {};
     for (const key of QUICK_EDIT_KEYS) {
