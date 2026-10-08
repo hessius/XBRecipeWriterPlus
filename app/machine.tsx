@@ -7,6 +7,7 @@ import type {ColorTokens} from "tamagui";
 
 import ScreenHeader from "@/components/ScreenHeader";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
+import MachineSpikeSection from "@/components/MachineSpikeSection";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
 import XbrwSheet from "@/components/XbrwSheet";
@@ -480,6 +481,8 @@ export default function MachineConsole() {
                         options={BYPASS_TEMP_OPTIONS}
                         onChange={(value) => setBypassTempEncoding(value === "plain" ? "plain" : "scaled")}/>
                 </SettingsSection>
+
+                <MachineSpikeSection onSend={(frame) => void dispatch(frame)}/>
 
                 <SettingsSection title="Raw frame">
                     <YStack gap="$2" paddingVertical="$3" paddingHorizontal="$4">

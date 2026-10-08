@@ -237,10 +237,12 @@ document's `single-source` marking on those two comes from.
 | 0x04, 0x05 | scale sub-states | Observed cycling around scale enter/tare/exit. Undocumented. `observed 2026-09-01, V12.0D.500` |
 | 0x0C | no_water | No water (checked after commit) |
 | 0x0F | no_beans | Waiting for beans |
+| 0x03 | paused | Recipe brew paused by `8019`; `8021` returns it to `0x23` |
 | 0x10 | brewing | Live pour in progress |
 | 0x1D | loading | Recipe being received |
 | 0x1F | armed | Recipe loaded, awaiting approval |
 | 0x1E | awaiting_confirm | Waiting for human confirm on device |
+| 0x20 | pre_brew | Between `armed` and the first `40502`; purpose unestablished |
 | 0x22 | starting | Post-confirm: grinding/spinning up |
 | 0x23 | brewing (sub) | Mid-pour sub-state | 
 | 0x24 | ready | Brew DONE — coffee ready beep (cup still on scale; machine waits for cup removal before → idle) |
@@ -250,6 +252,19 @@ document's `single-source` marking on those two comes from.
 | 0x25 | slots_saved | Slots stored OK (then → idle) |
 
 `corroborated` for core states (0x01, 0x1F, 0x1E, 0x22, 0x24); `single-source` (Janczykkkko) for 0x23, 0x24 distinction.
+
+> **Observed on hardware 2026-10-08 (V12.0D.500), answering Appendix A question 2:**
+> `8019` and `8021` are **not** FreeSolo-only. Sent into a running *recipe* brew,
+> `8019` was acknowledged by an event carrying its own code and the machine moved
+> from `0x23` to `0x03`; `8021` was acknowledged and moved it back to `0x23`. The
+> pair was exercised twice in the one brew. The frames were
+> `58 01 01 53 1F 0C 00 00 00 01 63 E5` and `58 01 01 55 1F 0C 00 00 00 01 AE BD`,
+> which `library/machine/__tests__/spikeFrames.test.ts` now pins.
+>
+> Still open: whether the resume continues the stage or restarts it. The session
+> ran with telemetry suppressed, so the cup reading that would settle it was not
+> in the log. The stage-progress events (`40510`, arguments 0 to 3) did not repeat
+> across the pause, which is suggestive and not proof.
 
 > **Observed on hardware 2026-09-01 (V12.0D.500):** commit (`8002`) **auto-proceeds**. The machine went from commit straight to grinding, in both EASY and PRO, without ever passing through `0x1E`. `0x1E` is corroborated by three sources, so it is kept as a fallback path — but on this unit it is not the normal route.
 

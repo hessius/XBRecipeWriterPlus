@@ -128,12 +128,27 @@ export function ascii(text: string): Uint8Array {
 /** The states the machine reports in a `0x57` frame. */
 export const MACHINE_STATE = {
     IDLE:             0x01,
+    /**
+     * Paused, mid-recipe.
+     *
+     * Observed on hardware 2026-10-08, V12.0D.500, twice in one brew: `8019`
+     * into a running recipe was acknowledged and the machine moved from
+     * `0x23` to here, and `8021` moved it back to `0x23`. `8019` and `8021`
+     * were documented as FreeSolo standalone dispense only; they are not.
+     */
+    PAUSED:           0x03,
     NO_WATER:         0x0C,
     NO_BEANS:         0x0F,
     BREWING:          0x10,
     LOADING:          0x1D,
     AWAITING_CONFIRM: 0x1E,
     ARMED:            0x1F,
+    /**
+     * Seen between `armed` and `brewing` on 2026-10-08, V12.0D.500, after a
+     * confirm and before the first `40502`. Named for where it sits; nobody
+     * has established what it is doing.
+     */
+    PRE_BREW:         0x20,
     STARTING:         0x22,
     BREWING_SUB:      0x23,
     READY:            0x24,
