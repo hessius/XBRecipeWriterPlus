@@ -561,7 +561,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // on the spent one brewed a coffee that no history row
                         // ever mentioned.
                         <Action label="Try again" color={palette.text}
-                                onPress={() => start(recipe)} />
+                                onPress={() => start(recipe, quickEditRecord)} />
                     )}
                     {offerPro && (
                         <Action label="Switch to Pro" color={palette.warn}

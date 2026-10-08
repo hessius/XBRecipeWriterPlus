@@ -147,6 +147,63 @@ describe("LiveBrewProvider", () => {
         expect(h.written[0].samples.length).toBeGreaterThan(0);
     });
 
+    it("preserves quick-edit metadata when retrying the same refused recipe", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        const r = recipe();
+        await act(async () => {
+            result.current.start(r, {adjustedFromDose: 15});
+        });
+        await h.setPhase({
+            name: "failed", reason: "blocked", block: "notEnoughWater",
+            detail: "The tank is low."
+        } as BrewPhase);
+
+        await act(async () => { result.current.start(r); });
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(200);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.setPhase({name: "done"});
+
+        expect(h.written).toHaveLength(1);
+        expect(h.written[0].record.adjustedFromDose).toBe(15);
+    });
+
+    it("does not carry quick-edit metadata into a different recipe after refusal", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+
+        const first = recipe();
+        await act(async () => {
+            result.current.start(first, {adjustedFromDose: 15});
+        });
+        await h.setPhase({
+            name: "failed", reason: "blocked", block: "notEnoughWater",
+            detail: "The tank is low."
+        } as BrewPhase);
+
+        const second = recipe();
+        second.name = "Kenya Nyeri";
+        await act(async () => { result.current.start(second); });
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(200);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        await h.setPhase({name: "done"});
+
+        expect(h.written).toHaveLength(1);
+        expect(h.written[0].record.recipeName).toBe("Kenya Nyeri");
+        expect(h.written[0].record).not.toHaveProperty("adjustedFromDose");
+    });
+
     /**
      * The PRO retry is a retry too, and went the same way as the plain one.
      */

@@ -224,6 +224,13 @@ function RunOwner({
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
         holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
     };
+    const quickEditFor = (
+        next: Recipe,
+        nextQuickEdit?: QuickEditRecordAdjustments
+    ): QuickEditRecordAdjustments | undefined => {
+        if (nextQuickEdit !== undefined) return nextQuickEdit;
+        return next === recipe ? quickEdit : undefined;
+    };
 
     return (
         <Context.Provider value={{
@@ -238,11 +245,13 @@ function RunOwner({
             // here — `app/brew.tsx` skips `start` in view mode — or tapping
             // the bar to see the brew you just made would make it again.
             start: (next: Recipe, nextQuickEdit?: QuickEditRecordAdjustments) => {
-                if (recipe === null || OVER.has(phase.name)) onStart(next, false, nextQuickEdit);
+                if (recipe === null || OVER.has(phase.name)) {
+                    onStart(next, false, quickEditFor(next, nextQuickEdit));
+                }
             },
             startInPro: (next: Recipe, nextQuickEdit?: QuickEditRecordAdjustments) => {
                 if (recipe === null || OVER.has(phase.name)) {
-                    onStart(next, true, nextQuickEdit ?? quickEdit);
+                    onStart(next, true, quickEditFor(next, nextQuickEdit));
                 }
             },
             dismiss: onDismiss,
