@@ -8,7 +8,7 @@ import {
     MAX_ORIGIN_LENGTH,
     normaliseBeanTags
 } from "./brew/beanTags";
-import {DOSE, GRIND_SIZE, RATIO, TEMPERATURE} from "./cardLimits";
+import {DOSE, TEMPERATURE} from "./cardLimits";
 import Recipe, {GRINDER_OFF_VALUE, MAX_DESCRIPTION} from "./Recipe";
 import {XBLOOM_SHARE_HOST} from "./shareLink";
 
@@ -385,6 +385,14 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     uid:            isNumberArray
 };
 
+const BREW_BASELINE_DOSE = {min: 1, max: 999};
+const BREW_BASELINE_RATIO = {min: 1, max: 999};
+const BREW_BASELINE_GRIND = {min: 1, max: GRINDER_OFF_VALUE};
+const BREW_TEMP_OFFSET = {
+    min: TEMPERATURE.min - TEMPERATURE.max,
+    max: TEMPERATURE.max - TEMPERATURE.min
+};
+
 /**
  * The six fields every serialised pour carries.
  *
@@ -623,13 +631,18 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     // transit would turn a typed verdict into a brew the app claims to have
     // watched, with no water and no time to show for it.
     watched:    (v) => typeof v === "boolean",
-    adjustedFromDose:  (v) => isIntegerIn(v, DOSE.min, DOSE.max),
-    adjustedFromRatio: (v) => isIntegerIn(v, RATIO.min, RATIO.max),
-    adjustedFromGrind: (v) => isIntegerIn(v, GRIND_SIZE.min, GRIND_SIZE.max)
-        || v === GRINDER_OFF_VALUE,
+    // Historical baselines draw badges only. They are not written back to a
+    // card, so imported but real recipe values outside the card-writing band
+    // must survive restore while hostile storage-scale numbers are still
+    // refused at the boundary.
+    adjustedFromDose:  (v) =>
+        isIntegerIn(v, BREW_BASELINE_DOSE.min, BREW_BASELINE_DOSE.max),
+    adjustedFromRatio: (v) =>
+        isIntegerIn(v, BREW_BASELINE_RATIO.min, BREW_BASELINE_RATIO.max),
+    adjustedFromGrind: (v) =>
+        isIntegerIn(v, BREW_BASELINE_GRIND.min, BREW_BASELINE_GRIND.max),
     adjustedTempOffset: (v) =>
-        isIntegerIn(v, TEMPERATURE.min - TEMPERATURE.max,
-                    TEMPERATURE.max - TEMPERATURE.min),
+        isIntegerIn(v, BREW_TEMP_OFFSET.min, BREW_TEMP_OFFSET.max),
     // The recipe snapshot, taken at brew time. Absent from every backup made
     // before the export existed, so optional, and checked only to shape: a
     // stored dose is read back through the same guards a live row is, and

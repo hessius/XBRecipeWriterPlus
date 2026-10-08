@@ -1026,15 +1026,31 @@ describe("brew history through a backup", () => {
         expect(brew?.adjustedTempOffset).toBe(0);
     });
 
+    it("accepts display-only quick-edit baselines outside the card-writing band", () => {
+        const brew = reviveBrew(JSON.parse(JSON.stringify(brewNamed("b1", {
+            adjustedFromDose: 32,
+            adjustedFromRatio: 101,
+            adjustedFromGrind: 39,
+            adjustedTempOffset: -60
+        }))));
+
+        expect(brew).toMatchObject({
+            adjustedFromDose: 32,
+            adjustedFromRatio: 101,
+            adjustedFromGrind: 39,
+            adjustedTempOffset: -60
+        });
+    });
+
     it.each([
         ["a zero saved dose", {adjustedFromDose: 0}],
-        ["a dose above the card range", {adjustedFromDose: 32}],
+        ["an implausibly large saved dose", {adjustedFromDose: 1000}],
         ["a fractional dose", {adjustedFromDose: 18.5}],
-        ["a ratio below the card range", {adjustedFromRatio: 4}],
-        ["a ratio above the card range", {adjustedFromRatio: 101}],
+        ["a zero saved ratio", {adjustedFromRatio: 0}],
+        ["an implausibly large saved ratio", {adjustedFromRatio: 1000}],
         ["a ratio as a string", {adjustedFromRatio: "16"}],
-        ["a grind below the brewing band", {adjustedFromGrind: 39}],
-        ["a grind above the brewing band and not off", {adjustedFromGrind: 82}],
+        ["a zero grind", {adjustedFromGrind: 0}],
+        ["a grind above the grinder-off sentinel", {adjustedFromGrind: 82}],
         ["a fractional grind", {adjustedFromGrind: 62.5}],
         ["a temperature offset below the possible card range", {adjustedTempOffset: -61}],
         ["a temperature offset above the possible card range", {adjustedTempOffset: 61}],
