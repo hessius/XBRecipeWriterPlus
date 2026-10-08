@@ -39,6 +39,8 @@ type Props = {
      * on every change to the query.
      */
     onBounced?: () => void;
+    /** Called once the tray opens, so the owner records only delivered lessons. */
+    onShown?: () => void;
     /**
      * The user opened a tray by dragging it.
      *
@@ -165,6 +167,7 @@ export default function SwipeableRecipeRow({
                                                hintTray = null,
                                                hintDelayMs = 0,
                                                onBounced,
+                                               onShown,
                                                onManualOpen,
                                                editing = false,
                                                showCoffeeMarker = true,
@@ -188,9 +191,11 @@ export default function SwipeableRecipeRow({
     // and the card would never come back. The ref keeps the latest callback
     // without making it an input to the effect.
     const bouncedRef = useRef(onBounced);
+    const shownRef = useRef(onShown);
 
     useEffect(() => {
         bouncedRef.current = onBounced;
+        shownRef.current = onShown;
     });
 
     useEffect(() => {
@@ -214,6 +219,7 @@ export default function SwipeableRecipeRow({
             } else {
                 swipeableRef.current?.openRight();
             }
+            shownRef.current?.();
         }, BOUNCE_OPEN_DELAY + hintDelayMs);
         const close = setTimeout(() => {
             swipeableRef.current?.close();

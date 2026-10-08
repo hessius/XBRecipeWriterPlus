@@ -156,6 +156,22 @@ describe("useDrawerHint", () => {
         await act(async () => { unmount(); });
     });
 
+    it("suppresses a latched lesson when reduced motion arrives after the first render", async () => {
+        mockReducedMotion.mockReturnValueOnce(false).mockReturnValue(true);
+        const {settings} = sqliteSettings();
+        const {result, rerender, unmount} = await renderDrawerHint(settings);
+
+        expect(result.current.trayFor(0)).toBe("action");
+
+        await act(async () => { rerender({}); });
+
+        expect(result.current.trayFor(0)).toBeNull();
+        expect(result.current.trayFor(1)).toBeNull();
+        expect(settings.get("drawerHintShownCount")).toBe(0);
+
+        await act(async () => { unmount(); });
+    });
+
     it("records one appearance for the two-row lesson", async () => {
         const {settings} = sqliteSettings();
         const {result, unmount} = await renderDrawerHint(settings);
@@ -163,8 +179,8 @@ describe("useDrawerHint", () => {
         expect(result.current.trayFor(0)).toBe("action");
         expect(result.current.trayFor(1)).toBe("management");
         await act(async () => {
-            result.current.dismiss();
-            result.current.dismiss();
+            result.current.noteShown();
+            result.current.noteShown();
         });
 
         expect(settings.get("drawerHintShownCount")).toBe(1);

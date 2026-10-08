@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useEffect, useRef, useState} from "react";
 
 import {STAGGER, useReducedMotion} from "@/constants/motion";
 import {
@@ -16,6 +16,7 @@ export type DrawerHint = {
     /** Which tray this row should demonstrate, or null for silence. */
     trayFor: (recipeIndex: number) => "action" | "management" | null;
     delayFor: (recipeIndex: number) => number;
+    noteShown: () => void;
     noteBounced: (recipeIndex: number) => void;
     noteManualOpen: () => void;
     dismiss: () => void;
@@ -57,26 +58,20 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
         return {
             armed,
             decidedAt: now,
-            // A user who asks the OS to reduce motion should not be shown an
-            // animated demonstration. The trays stay discoverable by swiping.
-            showing:  !reducedMotion && shouldShowDrawerHint(armed, now)
+            showing: shouldShowDrawerHint(armed, now)
         };
     });
     const [showing, setShowing] = useState(decision.showing);
     const [bouncedRows, setBouncedRows] = useState<ReadonlySet<number>>(() => new Set());
+    const shownRecordedRef = useRef(false);
 
     useEffect(() => {
-        // Count the lesson when the launch decision is made, not when either
-        // row finishes animating: two rows close separately, and completion
-        // callbacks would count one lesson twice.
-        const next = decision.showing
-            ? {...noteHintShown(decision.armed, decision.decidedAt), lastSeenAt: decision.decidedAt}
-            : {...decision.armed, lastSeenAt: decision.decidedAt};
+        const next = {...decision.armed, lastSeenAt: decision.decidedAt};
         writeDrawerHintState(settings, next);
     }, [decision, settings]);
 
     function trayFor(recipeIndex: number): "action" | "management" | null {
-        if (!showing || bouncedRows.has(recipeIndex)) return null;
+        if (!showing || reducedMotion || bouncedRows.has(recipeIndex)) return null;
         if (recipeIndex === 0) return "action";
         if (recipeIndex === 1) return "management";
         return null;
@@ -84,6 +79,14 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
 
     function delayFor(recipeIndex: number): number {
         return recipeIndex === 1 ? STAGGER.drawerHint : 0;
+    }
+
+    function noteShown() {
+        if (shownRecordedRef.current) return;
+        shownRecordedRef.current = true;
+
+        const next = noteHintShown(readDrawerHintState(settings), Date.now());
+        writeDrawerHintState(settings, next);
     }
 
     function noteBounced(recipeIndex: number) {
@@ -106,5 +109,5 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
         setShowing(false);
     }
 
-    return {trayFor, delayFor, noteBounced, noteManualOpen, dismiss};
+    return {trayFor, delayFor, noteShown, noteBounced, noteManualOpen, dismiss};
 }
