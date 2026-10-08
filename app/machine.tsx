@@ -75,10 +75,20 @@ const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0, infoSeen: 0};
  * rewrites what you pasted is not a raw field, and sending a deliberately
  * broken checksum is a legitimate thing to want to try.
  */
+export function rawFrameProblem(input: string): string | null {
+    const cleaned = input.replace(/[\s:]/g, "");
+    if (cleaned.length === 0) return "nothing to send";
+    if (!/^[0-9a-fA-F]+$/.test(cleaned)) {
+        const bad = Array.from(new Set(cleaned.replace(/[0-9a-fA-F]/g, ""))).join(" ");
+        return `not hex: ${bad}`;
+    }
+    if (cleaned.length % 2 !== 0) return `odd number of digits: ${cleaned.length}`;
+    return null;
+}
+
 export function parseRawFrame(input: string): Uint8Array | null {
     const cleaned = input.replace(/[\s:]/g, "");
-    if (cleaned.length === 0 || cleaned.length % 2 !== 0) return null;
-    if (!/^[0-9a-fA-F]+$/.test(cleaned)) return null;
+    if (rawFrameProblem(input) !== null) return null;
     const bytes = new Uint8Array(cleaned.length / 2);
     for (let i = 0; i < bytes.length; i++) {
         bytes[i] = parseInt(cleaned.slice(i * 2, i * 2 + 2), 16);
@@ -283,6 +293,7 @@ export default function MachineConsole() {
     const [machineState, setMachineState] = useState<MachineStateReading | null>(null);
     const lastStateRef = useRef<number | null>(null);
     const [rawText, setRawText] = useState("");
+    const [rawProblem, setRawProblem] = useState<string | null>(null);
     const [pending, setPending] = useState<{command: Command; values: number[]} | null>(null);
 
     useEffect(() => {
@@ -341,8 +352,16 @@ export default function MachineConsole() {
     }
 
     function sendRaw() {
+        // A silent return reads exactly like a dead button, which cost a
+        // hardware session. The field says why instead.
+        const problem = rawFrameProblem(rawText);
+        if (problem !== null) {
+            setRawProblem(problem);
+            return;
+        }
         const frame = parseRawFrame(rawText);
         if (frame === null) return;
+        setRawProblem(null);
         void dispatch(frame);
     }
 
@@ -472,8 +491,17 @@ export default function MachineConsole() {
                                placeholderTextColor={palette.muted as ColorTokens} autoCapitalize="none"
                                autoCorrect={false} placeholder="58 01 01 …"
                                accessibilityLabel="Raw frame"
-                               value={rawText} onChangeText={setRawText}
+                               value={rawText}
+                               onChangeText={(text) => {
+                                   setRawText(text);
+                                   setRawProblem(null);
+                               }}
                                fontFamily="monospace"/>
+                        {rawProblem !== null && (
+                            <Text testID="raw-frame-problem" fontSize={12} color={palette.danger}>
+                                {rawProblem}
+                            </Text>
+                        )}
                         <Button size="$3" accessibilityRole="button"
                                 accessibilityLabel="Send raw frame"
                                 borderColor={palette.line} borderWidth={1}

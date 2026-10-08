@@ -260,6 +260,24 @@ describe("the machine console", () => {
         await fireEvent.press(screen.getByLabelText("Send raw frame"));
 
         expect(send).not.toHaveBeenCalled();
+        // A silent refusal reads as a dead button, which is how a hardware
+        // session was spent typing a frame that was never going anywhere.
+        expect(screen.getByTestId("raw-frame-problem")).toHaveTextContent(/not hex/);
+    });
+
+    it("names an odd digit count rather than refusing in silence", async () => {
+        sharedSettings().set("machineConsoleAcknowledged", true);
+        await renderWithProviders(<Console/>);
+
+        await fireEvent.changeText(screen.getByLabelText("Raw frame"), "58 01 0");
+        await fireEvent.press(screen.getByLabelText("Send raw frame"));
+
+        expect(send).not.toHaveBeenCalled();
+        expect(screen.getByTestId("raw-frame-problem")).toHaveTextContent(/odd number of digits/);
+
+        await fireEvent.changeText(screen.getByLabelText("Raw frame"), "58 01 01");
+
+        expect(screen.queryByTestId("raw-frame-problem")).toBeNull();
     });
 
     it("summarises weight telemetry instead of appending log entries while telemetry is hidden", async () => {
