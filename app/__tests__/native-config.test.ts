@@ -4,7 +4,7 @@ type PluginEntry = string | [string, Record<string, unknown>];
 
 describe("native release configuration", () => {
     /**
-     * 2.0.0.
+     * 2.1.0.
      *
      * The ladder in issue #76 put M5 at 1.7.0 and reserved the major for the
      * account import, the release in which credentials leave the device for the
@@ -13,12 +13,19 @@ describe("native release configuration", () => {
      * import together, and one of those three is the one that changes what the
      * app does with their password.
      *
-     * The public store release is 1.5.0, so 2.0.0 is the next version a user
-     * will ever see. It was briefly carried to 2.1.0 on the reasoning that the
-     * BrewMind import (#159) added browser native code and so changed the
-     * binary, but every 2.0.0 build so far reached TestFlight only. Nobody
-     * outside the beta has held a 2.0.0, so the minor was spent on a release
-     * that never happened, and it is spent back here.
+     * The public store release is 1.5.0, so 2.0.0 was the next version a user
+     * would ever see. It was briefly carried to 2.1.0 on the reasoning that
+     * the BrewMind import (#159) added browser native code and so changed the
+     * binary, and then spent back, because every 2.0.0 build had reached
+     * TestFlight only and a minor spent on a release that never happened is a
+     * minor wasted.
+     *
+     * It is 2.1.0 again now, and this time it stays. The reason is not the
+     * size of the change but that the name is already outside the building:
+     * `2.1.0-android-beta.1` is a published pre-release, so a tester holding
+     * that artifact and a tree calling itself 2.0.0 disagree about which is
+     * newer. The argument above only ever held while nothing outside the
+     * repository carried the number.
      *
      * `runtimeVersion.policy` is `appVersion`, so the version string is also
      * the runtime version, which is why a native affecting change has to bump
@@ -30,8 +37,8 @@ describe("native release configuration", () => {
      * ever adopted, that stops being true and the paragraph above carries the
      * whole weight.
      */
-    it("ships as 2.0.0, on the appVersion runtime policy", () => {
-        expect(appConfig.expo.version).toBe("2.0.0");
+    it("ships as 2.1.0, on the appVersion runtime policy", () => {
+        expect(appConfig.expo.version).toBe("2.1.0");
         expect(appConfig.expo.runtimeVersion.policy).toBe("appVersion");
     });
 
