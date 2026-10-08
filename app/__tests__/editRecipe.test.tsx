@@ -1204,6 +1204,36 @@ describe("the stages deck", () => {
             .toBe(false);
     });
 
+    it("says at edit time that a temperature is out of range", async () => {
+        // #199: a recipe imported asking for boiling point arrived as 99.4 C.
+        // The band stops at 99, and nothing said so until BREW was pressed at
+        // the machine with the hopper already loaded.
+        const hot = fixture();
+        hot.pours.forEach((p) => { p.temperature = 99.4; });
+        await renderEditor({pours: hot.pours});
+
+        expect(screen.getByTestId("range-problems")).toBeTruthy();
+    });
+
+    it("says nothing about range when every value is in it", async () => {
+        await renderEditor();
+
+        expect(screen.queryByTestId("range-problems")).toBeNull();
+    });
+
+    it("leaves the sum to the banner that can fix it", async () => {
+        // An unbalanced recipe is a brew problem too, but the stages deck
+        // already draws it with AUTO FIX beside it. Two banners, and the one
+        // without the button is the louder.
+        await renderEditor();
+        await fireEvent.press(screen.getByLabelText("Stages, 3"));
+        await fireEvent.press(screen.getByLabelText("Stage 1 of 3"));
+        await fireEvent.press(screen.getByLabelText("Decrease Stage volume"));
+
+        expect(screen.getByTestId("stage-mismatch")).toBeTruthy();
+        expect(screen.queryByTestId("range-problems")).toBeNull();
+    });
+
     it("offers no mismatch and no auto fix before there are any stages", async () => {
         // A blank recipe from the NEW tile arrives with a dose and a ratio but
         // no stages, so `poured` is 0 against a target of 240 and the balance

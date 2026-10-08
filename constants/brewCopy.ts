@@ -63,7 +63,12 @@ export const FAILURE_COPY: Record<string, string> = {
     gearPosition: "The grinder could not find its gear position.",
     doseMismatch: "The machine would not accept that dose and water volume.",
     idling:       "The machine went idle before the brew started.",
-    rejected:     "The machine would not take the recipe."
+    rejected:     "The machine would not take the recipe.",
+    // Deliberately says only what was seen. The machine goes back to its
+    // loaded screen and sends no fault, so a cause here would be a guess: the
+    // field report was a tank two grams short, but somebody reaching over and
+    // stopping it looks identical from the radio.
+    stopped:      "The machine stopped the brew before it finished."
 };
 
 /**
@@ -134,7 +139,7 @@ export const OVER: ReadonlySet<string> = new Set([
  * The dose is ground and the water is spent. Offering a retry here would read
  * as "this one is free".
  */
-export const NO_RETRY: ReadonlySet<string> = new Set(["noWater"]);
+export const NO_RETRY: ReadonlySet<string> = new Set(["noWater", "stopped"]);
 
 /**
  * The mid-brew failures in three or four words, for the bar.
@@ -150,7 +155,8 @@ export const MINI_FAILURE_WHY: Record<string, string> = {
     gearPosition: "the grinder jammed",
     doseMismatch: "the dose was refused",
     idling:       "it went idle",
-    rejected:     "the recipe was refused"
+    rejected:     "the recipe was refused",
+    stopped:      "the machine stopped"
 };
 
 /**

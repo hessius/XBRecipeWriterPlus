@@ -1,4 +1,4 @@
-import {fireEvent, screen, waitFor} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 
 import ImportCloudScreen from "@/app/importCloud";
 import {notify} from "@/components/XbrwToast";
@@ -332,6 +332,29 @@ describe("importCloud", () => {
         await renderWithProviders(<ImportCloudScreen/>);
 
         expect(screen.getByText("Import 2 recipes")).toBeTruthy();
+    });
+
+    it("pins the import button to the screen rather than the end of the list", async () => {
+        // An account with a hundred recipes puts a button at the end of the
+        // list a hundred rows below the fold, which is where the user who most
+        // needs it will not find it.
+        choosing({
+            entries: [entry(), entry({cloudId: 2, name: "Peru"})],
+            counts: {new: 2, updated: 0, unchanged: 0, edited: 0},
+        });
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(within(screen.getByTestId("import-bar"))
+            .getByLabelText("Import 2 recipes")).toBeTruthy();
+        expect(within(screen.getByTestId("cloud-list"))
+            .queryByLabelText(/^Import /)).toBeNull();
+    });
+
+    it("shows no import bar when there is nothing to import", async () => {
+        choosing({entries: [], counts: {new: 0, updated: 0, unchanged: 0, edited: 0}});
+        await renderWithProviders(<ImportCloudScreen/>);
+
+        expect(screen.queryByTestId("import-bar")).toBeNull();
     });
 
     it("disables the button when nothing is chosen", async () => {

@@ -1,6 +1,7 @@
 import router from "@/hooks/steadyRouter";
 import React, {useState} from "react";
 import {FlatList} from "react-native-gesture-handler";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {Button, Input, Text, YStack, type ColorTokens} from "tamagui";
 
 import CloudImportRow from "@/components/CloudImportRow";
@@ -19,9 +20,12 @@ import {UNCLIPPED_LIST} from "@/constants/lists";
  * A full screen rather than a sheet: this is a form, a list that can be long,
  * and a decision per row. A sheet would put all three behind a keyboard.
  *
- * The whole screen is one `FlatList`, and the list is the account's recipes.
- * Everything else -- the sign-in form, the caveats, the counts, the import
- * button -- rides in the header and footer. An account can hold two thousand
+ * The list is the account's recipes and the sign-in form, the caveats and the
+ * counts ride in its header and footer. The import button does not: an account
+ * with a hundred recipes put it a hundred rows below the fold, so it is pinned
+ * to the bottom of the screen instead. The counts stay in the footer, because
+ * they explain the list, and a number nobody scrolled to is not a button they
+ * could not reach. An account can hold two thousand
  * recipes, which is the pagination cap, and laying out two thousand rows at
  * once is a spinning phone; this way only what is on screen is drawn, and the
  * screen still reads top to bottom as one thing rather than as a form with a
@@ -55,6 +59,7 @@ export default function ImportCloudScreen() {
         replaceRecipe: (uuid, recipe) => database.updateRecipe(uuid, recipe),
     });
 
+    const insets = useSafeAreaInsets();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
@@ -71,6 +76,11 @@ export default function ImportCloudScreen() {
     const listed = cloud.status === "choosing" && cloud.plan
         ? cloud.plan.entries
         : [];
+
+    /** Nothing to import means nothing to pin, and no bar eating the last row. */
+    const showImportBar = cloud.status === "choosing"
+        && cloud.plan !== null && cloud.plan !== undefined
+        && cloud.plan.entries.length > 0;
 
     /**
      * Take the password, then let go of it.
@@ -148,6 +158,7 @@ export default function ImportCloudScreen() {
             <ScreenHeader title="xBloom account" onBack={() => router.back()}/>
 
             <FlatList {...UNCLIPPED_LIST}
+                testID="cloud-list"
                 data={listed}
                 keyExtractor={(item) => String(item.cloudId)}
                 renderItem={({item}) => (
@@ -275,17 +286,6 @@ export default function ImportCloudScreen() {
                                 </Text>
                             )}
 
-                            {cloud.plan.entries.length > 0 && (
-                                <Button
-                                    accessibilityLabel={`Import ${recipes(selected.length)}`}
-                                    accessibilityState={{disabled: selected.length === 0}}
-                                    disabled={selected.length === 0}
-                                    backgroundColor={palette.raised}
-                                    color={palette.text}
-                                    onPress={finish}>
-                                    {`Import ${recipes(selected.length)}`}
-                                </Button>
-                            )}
                         </>
                     )}
 
@@ -320,6 +320,30 @@ export default function ImportCloudScreen() {
                     )}
                 </YStack>
                 }/>
+
+            {/* Pinned, not the last thing in the list. An account with a
+                hundred recipes put this a hundred rows below the fold, which
+                is where the user who most needs it will not find it. The
+                counts above stay in the list: they explain the list, and a
+                number nobody has scrolled to is not a button they cannot
+                reach. */}
+            {showImportBar && (
+                <YStack testID="import-bar"
+                        paddingHorizontal="$4" paddingTop="$3"
+                        paddingBottom={Math.max(insets.bottom, 12)}
+                        backgroundColor={palette.base}
+                        borderTopWidth={1} borderTopColor={palette.line}>
+                    <Button
+                        accessibilityLabel={`Import ${recipes(selected.length)}`}
+                        accessibilityState={{disabled: selected.length === 0}}
+                        disabled={selected.length === 0}
+                        backgroundColor={palette.raised}
+                        color={palette.text}
+                        onPress={finish}>
+                        {`Import ${recipes(selected.length)}`}
+                    </Button>
+                </YStack>
+            )}
         </YStack>
     );
 }

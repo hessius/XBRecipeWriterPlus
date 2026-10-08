@@ -94,6 +94,16 @@ function checkInteger(value: number, rangeMessage: string, problems: string[]): 
 const FRACTIONAL_RATIO = (ratio: number): string =>
     `The ratio is 1:${ratio}. It has to be a whole number.`;
 
+/**
+ * The one problem the editor draws its own banner for.
+ *
+ * Same reasoning as `FRACTIONAL_RATIO`: built by a function so it can be taken
+ * out of a list by identity rather than by matching on a sentence somebody
+ * will improve one day.
+ */
+const VOLUME_MISMATCH = (poured: number, total: number): string =>
+    `The stages pour ${poured} ml, but the dose and ratio ask for ${total} ml.`;
+
 export function cardWriteProblems(
     recipe: Recipe,
     temperatureUnit: TemperatureUnit = "C"
@@ -218,8 +228,7 @@ export function cardWriteProblems(
     // not also need to be told the sum is therefore wrong first.
     if (!recipe.isPourVolumeValid()) {
         problems.push(
-            `The stages pour ${recipe.getPourTotalVolume()} ml, ` +
-            `but the dose and ratio ask for ${recipe.getTotalVolume()} ml.`
+            VOLUME_MISMATCH(recipe.getPourTotalVolume(), recipe.getTotalVolume())
         );
     }
 
@@ -259,4 +268,28 @@ export function brewProblems(
     const cardOnly = FRACTIONAL_RATIO(recipe.ratio);
     return cardWriteProblems(recipe, temperatureUnit)
         .filter((problem) => problem !== cardOnly);
+}
+
+/**
+ * Every reason a brew would be refused, except the sum.
+ *
+ * The editor is where a value should be found to be out of range, not the
+ * moment somebody presses BREW with a full hopper. A recipe imported with a
+ * boiling-point temperature -- 211 F is 99.4 C, and the band stops at 99 --
+ * looked fine in the editor and was refused at the machine, which is the
+ * furthest possible point from where it could be fixed.
+ *
+ * The sum is left out because the stages deck already draws it, with an AUTO
+ * FIX beside it. Saying it twice in two different shapes would make the louder
+ * banner the less actionable one.
+ */
+export function outOfRangeProblems(
+    recipe: Recipe,
+    temperatureUnit: TemperatureUnit = "C"
+): string[] {
+    const balance = VOLUME_MISMATCH(
+        recipe.getPourTotalVolume(), recipe.getTotalVolume()
+    );
+    return brewProblems(recipe, temperatureUnit)
+        .filter((problem) => problem !== balance);
 }
