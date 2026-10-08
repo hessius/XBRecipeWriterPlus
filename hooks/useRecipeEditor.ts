@@ -6,7 +6,7 @@ import {
     clampBypassTemp, isUsableBypassTemp
 } from "@/library/bypassLimits";
 import {sharedSettings} from "@/hooks/useSetting";
-import {brewProblems, cardWriteProblems} from "@/library/cardLimits";
+import {brewProblems, cardWriteProblems, outOfRangeProblems} from "@/library/cardLimits";
 import {CARD_GRIND_MIN} from "@/library/grindBands";
 import {asMachineModel} from "@/library/machine/machineModel";
 import {editsPendingSave, snapshotForSave} from "@/library/recipeDirty";
@@ -210,6 +210,17 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
      */
     const brewProblemsForRecipe = recipe
         ? brewProblems(recipe, temperatureUnit)
+        : [];
+
+    /**
+     * The values the machine would refuse, for the banner that says so.
+     *
+     * The editor is where a value should be found to be out of range. Until
+     * this existed the only report was at the machine, with the hopper full,
+     * which is the furthest possible point from where it can be fixed.
+     */
+    const rangeProblems = recipe
+        ? outOfRangeProblems(recipe, temperatureUnit)
         : [];
 
     /** A recipe the card would reject cannot be written; it can still be kept. */
@@ -748,6 +759,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         // is something a test can observe rather than only infer from a
         // boolean.
         writeProblems,
+        rangeProblems,
         revertSources: buildRevertSources(),
         bumpKey: () => setKey((prev) => prev + 1),
         handleReloadTitlePress,

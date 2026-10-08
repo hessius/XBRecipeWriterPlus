@@ -919,6 +919,7 @@ export default function EditRecipe(
 
     const {
         recipe, balance, canBrew, canWrite, canSave, revertSources, inputError,
+        rangeProblems,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, saveMetadata,
         hasPendingEdits, recipeInLibrary, toggleFavourite, editTags,
         editInputComplete, setVolumeError, setInputError, editStage,
@@ -1336,6 +1337,40 @@ export default function EditRecipe(
 
                 <DeckSwitch deck={deck} stageCount={recipe.pours.length}
                             accent={accent} onChange={setDeck}/>
+
+                {/* Above the decks rather than on one of them, because a
+                    recipe can be out of range in a stage's temperature and in
+                    its dose at the same time, and the two live on different
+                    decks. It is drawn wherever the user is standing.
+
+                    The sum is deliberately not in this list: the stages deck
+                    draws it with an AUTO FIX beside it, and a second, louder
+                    copy with no button would be the less actionable one.
+
+                    Not a gate. SAVE stays live, the way it does for every
+                    other invalid recipe -- an unbalanced recipe is still a
+                    recipe, and keeping one to fix later is intended. */}
+                {rangeProblems.length > 0 && (
+                    <XStack testID="range-problems" alignItems="flex-start" gap="$2.5"
+                            marginTop="$2.5" padding="$3" borderRadius="$4"
+                            backgroundColor={palette.raised}
+                            borderLeftWidth={2} borderLeftColor={palette.danger}>
+                        <YStack flex={1} gap={4}>
+                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                           color={palette.danger}>
+                                {rangeProblems.length === 1
+                                    ? "THE MACHINE WOULD REFUSE THIS"
+                                    : `${rangeProblems.length} VALUES THE MACHINE WOULD REFUSE`}
+                            </DotMatrixText>
+                            {rangeProblems.map((problem) => (
+                                <Text key={problem} fontSize={12} lineHeight={16}
+                                      color={palette.dim}>
+                                    {problem}
+                                </Text>
+                            ))}
+                        </YStack>
+                    </XStack>
+                )}
 
                 {deck === "stages" ? (
                     <StageProfileCard pours={recipe.pours} target={balance.target}

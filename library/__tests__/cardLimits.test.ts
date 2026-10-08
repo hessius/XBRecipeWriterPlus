@@ -7,7 +7,8 @@
  */
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
-import {brewProblems, canWriteToCard, cardWriteProblems} from "@/library/cardLimits";
+import {brewProblems, canWriteToCard, cardWriteProblems, outOfRangeProblems}
+    from "@/library/cardLimits";
 
 /** A recipe the machine would accept, as the baseline every case perturbs. */
 function validRecipe(): Recipe {
@@ -329,5 +330,31 @@ describe("a recipe with a half ratio", () => {
         recipe.ratio = 400;
 
         expect(brewProblems(recipe).length).toBeGreaterThan(0);
+    });
+});
+
+describe("outOfRangeProblems", () => {
+    it("finds nothing wrong with a recipe the machine would accept", () => {
+        expect(outOfRangeProblems(validRecipe())).toEqual([]);
+    });
+
+    it("catches a boiling-point temperature in the editor rather than at the machine", () => {
+        // The bug report: a recipe specifying boiling point arrived as 211 F,
+        // which is 99.4 C, and the band stops at 99. Nothing said so until the
+        // user pressed BREW.
+        const recipe = validRecipe();
+        recipe.pours[0].temperature = 99.4;
+
+        expect(outOfRangeProblems(recipe, "F").join(" ")).toContain("211");
+    });
+
+    it("leaves the sum to the banner that already draws it", () => {
+        // The stages deck shows the mismatch with an AUTO FIX beside it. Said
+        // twice in two shapes, the louder banner is the less actionable one.
+        const recipe = validRecipe();
+        recipe.pours[0].volume = 100;
+
+        expect(brewProblems(recipe).some((p) => p.includes("ask for"))).toBe(true);
+        expect(outOfRangeProblems(recipe)).toEqual([]);
     });
 });
