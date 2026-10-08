@@ -7,6 +7,7 @@ import {
     describeAdjustment,
     describeTemperatureBaseline,
     quickEditBounds,
+    quickEditProblems,
 } from "@/library/quickEdit";
 
 function coffeeRecipe(
@@ -41,7 +42,7 @@ function teaRecipe(): Recipe {
     const recipe = coffeeRecipe([50, 50, 50], [85, 84, 83]);
     recipe.cupType = CUP_TYPE.TEA;
     recipe.dosage = 5;
-    recipe.ratio = 20;
+    recipe.ratio = 30;
     return recipe;
 }
 
@@ -148,11 +149,11 @@ describe("applyQuickEdit", () => {
         expect(original.pours.map((pour) => pour.volume)).toEqual([30, 105, 105]);
     });
 
-    it("lets tea recompute the ratio after a requested ratio change", () => {
-        const edited = applyQuickEdit(teaRecipe(), {ratio: 30});
+    it("ignores ratio adjustments for tea because tea derives ratio from fixed stage volumes", () => {
+        const edited = applyQuickEdit(teaRecipe(), {ratio: 20});
 
-        expect(edited.pours.map((pour) => pour.volume)).toEqual([90, 90, 90]);
-        expect(edited.ratio).toBe(54);
+        expect(edited.pours.map((pour) => pour.volume)).toEqual([50, 50, 50]);
+        expect(edited.ratio).toBe(30);
         expect(edited.isPourVolumeValid()).toBe(true);
     });
 });
@@ -169,6 +170,39 @@ describe("quickEditBounds", () => {
 
     it("narrows tea dose to ten grams", () => {
         expect(quickEditBounds(teaRecipe()).dose).toEqual({min: DOSE.min, max: 10});
+    });
+
+    it("marks ratio unavailable for tea", () => {
+        expect(quickEditBounds(teaRecipe()).ratio).toBeNull();
+    });
+});
+
+describe("quickEditProblems", () => {
+    it("reports coffee ratio adjustments that rescale a stage beyond the card limit", () => {
+        const problems = quickEditProblems(coffeeRecipe(), {ratio: RATIO.max});
+
+        expect(problems).toEqual(expect.arrayContaining([
+            "Stage 2 pours 656 ml. The most is 240 ml.",
+            "Stage 3 pours 656 ml. The most is 240 ml.",
+        ]));
+    });
+
+    it("reports tea dose adjustments that derive an out-of-range ratio", () => {
+        const recipe = teaRecipe();
+        recipe.pours = [
+            new Pour(1, 50, 85, 30, 0, POUR_PATTERN.CENTERED, 0),
+            new Pour(2, 50, 84, 30, 0, POUR_PATTERN.CIRCULAR, 0),
+            new Pour(3, 50, 83, 30, 0, POUR_PATTERN.SPIRAL, 0),
+        ];
+
+        const problems = quickEditProblems(recipe, {dose: DOSE.min});
+
+        expect(problems).toContain("The ratio is 1:270. The range is 1:5-1:100.");
+    });
+
+    it("reports no problems for an ordinary in-range adjustment", () => {
+        expect(quickEditProblems(coffeeRecipe(), {dose: 16, ratio: 15, tempOffset: 1, grind: 55}))
+            .toEqual([]);
     });
 });
 
@@ -202,14 +236,19 @@ describe("describeTemperatureBaseline", () => {
         expect(describeTemperatureBaseline(coffeeRecipe([240], [88]), 1.3)).toBe("recipe 88");
     });
 
-    it("lists three stages from the short side of the boundary", () => {
-        expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 88, 90]), 1.3))
-            .toBe("recipe 88, 88, 90");
+    it("lists three distinct stages from the short side of the boundary", () => {
+        expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 90, 92]), 1.3))
+            .toBe("recipe 88, 90, 92");
     });
 
-    it("keeps repeated values in a three-stage list", () => {
+    it("collapses an all-identical three-stage list", () => {
         expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 88, 88]), 1.3))
             .toBe("recipe 88");
+    });
+
+    it("keeps partially repeated values in a three-stage list", () => {
+        expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 88, 90]), 1.3))
+            .toBe("recipe 88, 88, 90");
     });
 
     it("drops the recipe prefix for a three-stage list at the font cap", () => {

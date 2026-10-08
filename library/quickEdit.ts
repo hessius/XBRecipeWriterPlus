@@ -1,5 +1,13 @@
-import {DOSE, GRIND_SIZE, RATIO, TEMPERATURE, type Range} from "@/library/cardLimits";
+import {
+    cardWriteProblems,
+    DOSE,
+    GRIND_SIZE,
+    RATIO,
+    TEMPERATURE,
+    type Range,
+} from "@/library/cardLimits";
 import Recipe, {GRINDER_OFF_VALUE} from "@/library/Recipe";
+import type {TemperatureUnit} from "@/library/units";
 
 export type QuickEditAdjustments = {
     dose?: number;
@@ -10,12 +18,14 @@ export type QuickEditAdjustments = {
 
 export type QuickEditBounds = {
     dose: Range;
-    ratio: Range;
+    ratio: Range | null;
     grind: Range & {off: typeof GRINDER_OFF_VALUE};
     tempOffset: Range;
 };
 
 export function cloneRecipe(recipe: Recipe): Recipe {
+    // Good enough for quick edits: a zero dose would migrate to the default,
+    // but zero is already invalid and cannot reach a real brew or card write.
     return new Recipe(undefined, JSON.stringify(recipe));
 }
 
@@ -40,10 +50,10 @@ export function applyQuickEdit(recipe: Recipe, adjustments: QuickEditAdjustments
     if (adjustments.dose !== undefined) {
         edited.dosage = adjustments.dose;
     }
-    if (adjustments.ratio !== undefined) {
+    if (adjustments.ratio !== undefined && !edited.isTea()) {
         edited.ratio = adjustments.ratio;
     }
-    if (adjustments.dose !== undefined || adjustments.ratio !== undefined) {
+    if (adjustments.dose !== undefined || (adjustments.ratio !== undefined && !edited.isTea())) {
         edited.autoFixPourVolumes();
     }
 
@@ -56,11 +66,14 @@ export function quickEditBounds(recipe: Recipe): QuickEditBounds {
     const maxTemperature = temperatures.length > 0 ? Math.max(...temperatures) : TEMPERATURE.max;
 
     return {
+        // These are the per-knob travel limits. Dose, ratio and stage volumes
+        // interact after auto-fix, so quickEditProblems reports whether a
+        // chosen combination still makes a brewable recipe.
         dose: {
             min: DOSE.min,
             max: recipe.isTea() ? 10 : DOSE.max,
         },
-        ratio: RATIO,
+        ratio: recipe.isTea() ? null : RATIO,
         grind: {
             ...GRIND_SIZE,
             off: GRINDER_OFF_VALUE,
@@ -72,12 +85,20 @@ export function quickEditBounds(recipe: Recipe): QuickEditBounds {
     };
 }
 
+export function quickEditProblems(
+    recipe: Recipe,
+    adjustments: QuickEditAdjustments,
+    temperatureUnit?: TemperatureUnit
+): string[] {
+    return cardWriteProblems(applyQuickEdit(recipe, adjustments), temperatureUnit);
+}
+
 export function describeAdjustment(
     recipe: Recipe,
     adjustments: QuickEditAdjustments
 ): string | null {
     const changesDose = adjustments.dose !== undefined;
-    const changesRatio = adjustments.ratio !== undefined;
+    const changesRatio = adjustments.ratio !== undefined && !recipe.isTea();
 
     if (!changesDose && !changesRatio) {
         return null;
@@ -104,6 +125,8 @@ export function describeTemperatureBaseline(recipe: Recipe, fontScale: number): 
         return `recipe ${minTemperature} to ${maxTemperature}`;
     }
 
+    // A fully identical list reads as one baseline; a partially repeated list
+    // keeps every stage visible because the repetition is part of the recipe.
     const values = minTemperature === maxTemperature
         ? `${minTemperature}`
         : temperatures.join(", ");
