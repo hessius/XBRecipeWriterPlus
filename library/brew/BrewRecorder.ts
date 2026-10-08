@@ -195,6 +195,13 @@ export default class BrewRecorder {
         // through anyway.
         if (parsed.kind !== "waterWeight") return;
         this.lastWater = parsed.grams;
+        // Nothing is kept from a pause. The water is flat throughout one by
+        // design and the scale goes on reporting it at about 10 Hz, so those
+        // readings are an observed plateau -- which is exactly what `stalls.ts`
+        // defines a stall as. Kept, a brew would report the user's own button
+        // press back to them as a fault. The reading is still carried into
+        // `lastWater`, so the settle path and the resume both pick up from it.
+        if (this.pausedAt !== null) return;
         if (this.pouringAt === 0) {
             // Before the pour opens the machine is grinding; nothing it says
             // then belongs on the plan's axis.

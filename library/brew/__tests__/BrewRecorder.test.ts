@@ -1199,3 +1199,42 @@ describe("the pause clock", () => {
         expect(records[0].record.pausedSeconds).toBe(40);
     });
 });
+
+describe("the scale while a brew is paused", () => {
+    function paused(pour = 1): BrewPhase {
+        return {name: "paused", pour, pours: 2, was: {name: "pouring", pour, pours: 2}};
+    }
+
+    it("keeps no readings from a paused brew", () => {
+        // The water is flat throughout a pause by design, and the scale goes
+        // on reporting it ten times a second. Kept, those readings are an
+        // observed plateau, which is the definition of a stall -- so the brew
+        // would report the user's own button press back to them as a fault.
+        const {fake, recorder} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.water(210);
+        const before = recorder.samples.length;
+
+        fake.phase(paused());
+        fake.water(210);
+        fake.water(210);
+        fake.water(210);
+
+        expect(recorder.samples.length).toBe(before);
+    });
+
+    it("starts taking readings again once the brew resumes", () => {
+        const {fake, recorder} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        fake.water(210);
+        const held = recorder.samples.length;
+
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(220);
+
+        expect(recorder.samples.length).toBe(held + 1);
+    });
+});

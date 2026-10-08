@@ -234,3 +234,30 @@ The overshoot cannot be tested. It has to be measured.
 3. Whether a pause survives the app backgrounding and the link dropping and
    reconnecting, which is the realistic way a user will discover whether the
    remembered flag is trustworthy.
+
+## A pause is not a stall, in the end
+
+`stalls.ts` calls flat water a stall when the stage still owes millilitres,
+and it requires the plateau to have been *seen*. A pause is flat water by
+design, the stage still owes its millilitres, and the scale goes on reporting
+at about 10 Hz throughout. Every clause is satisfied, so without a gate a brew
+reports the user's own button press back to them as a fault.
+
+The gate is in `BrewRecorder.receive`: nothing is kept while a pause is open.
+That is the right layer, because the recorder is the only place that knows a
+pause happened. Inferring it in `stalls.ts` from a gap in the timestamps was
+tried and abandoned: the rule is sound, but the file's fixtures use readings
+several seconds apart to mean watched stalls, so any gap threshold low enough
+to catch a pause also rewrites seven existing characterisation tests, and the
+threshold itself is a number nobody can pick without a real stream.
+
+The live HOLDING warning needs no gate: it requires the `pouring` phase, and a
+paused brew is not in it.
+
+One residual, and it wants a real stream rather than an argument. If the water
+was *already* flat when the user pressed PAUSE, the plateau's anchor sits
+before the pause, so the stall that follows the resume is reported with the
+pause's seconds inside it. Water rising up to the moment of the press -- the
+ordinary case -- is unaffected, because the first reading after the resume is
+a rise and closes the plateau at zero. Worth timing once the overshoot round
+happens.
