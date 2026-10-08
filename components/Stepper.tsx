@@ -90,6 +90,8 @@ type Props = {
     accent?: string;
     /** Appended to the spoken value, e.g. "g". */
     unit?: string;
+    /** How the committed value is shown when it is not being typed. */
+    formatValue?: (value: number) => string;
     onChange: (value: number) => void;
 };
 
@@ -106,7 +108,9 @@ type Props = {
  * entry is not clamped out from under the cursor. Typing "9" on the way to "95"
  * must not become "9" the moment it is entered.
  */
-export default function Stepper({label, value, min, max, step, values, accent, unit, onChange}: Props) {
+export default function Stepper({
+    label, value, min, max, step, values, accent, unit, formatValue, onChange
+}: Props) {
     // null means the Doto readout is showing; a string means the field is
     // open and holds the in-progress text.
     const [draft, setDraft] = useState<string | null>(null);
@@ -175,11 +179,13 @@ export default function Stepper({label, value, min, max, step, values, accent, u
     }
 
     const editing = draft !== null;
+    const shownValue = formatValue ? formatValue(value) : String(value);
+    const spokenUnit = unit && shownValue !== unit ? ` ${unit}` : "";
 
     return (
         <XStack alignItems="center" gap="$2"
                 accessibilityRole="adjustable"
-                accessibilityLabel={`${label}, ${value}${unit ? ` ${unit}` : ""}`}
+                accessibilityLabel={`${label}, ${shownValue}${spokenUnit}`}
                 accessibilityValue={{min, max, now: value}}
                 accessibilityActions={[{name: "increment"}, {name: "decrement"}]}
                 onAccessibilityAction={(event) => {
@@ -232,7 +238,7 @@ export default function Stepper({label, value, min, max, step, values, accent, u
                         <DotMatrixText testID="stepper-value" fontSize={22}
                                        weight="extrabold" color={accent ?? palette.text}
                                        style={{minWidth: 54, textAlign: "center"}}>
-                            {String(value)}
+                            {shownValue}
                         </DotMatrixText>
                     </Pressable>
                 )}
