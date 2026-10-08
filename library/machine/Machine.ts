@@ -1268,6 +1268,17 @@ export default class Machine {
                 // load here would throw the pause away a moment after
                 // entering it, and would do so whichever order 40515 and the
                 // state arrive in.
+                //
+                // Three readings of the same flag, kept apart on purpose.
+                // `pauseSent` is the long one: it is true from the frame
+                // going out until a resume goes out, and it is what stops the
+                // #199 ending below from calling a held brew a stopped one.
+                // `pauseRequested` is the short one, dropped after
+                // `PAUSE_ACK_MS`, and it is what stops a *fresh load* being
+                // read in. They overlap here and that is fine; collapsing
+                // them would tie the ending's silence to the acknowledgement
+                // window, which is a guess.
+                if (this.pauseSent) break;
                 if (this.pauseRequested || this.phase.name === "paused") break;
                 // Not while a recipe is waiting to be started: this is the
                 // machine acknowledging the upload, and letting it replace the
@@ -1284,11 +1295,6 @@ export default class Machine {
                 //
                 // So the state walking backwards is itself the ending. Why is
                 // not knowable from here and is not guessed at.
-                // A pause lands here too, on the same code (`PAUSED_STATE`),
-                // and a paused brew is still a brew: the machine is holding
-                // it and a resume carries on from where it stopped. Only the
-                // sender knows which this is.
-                if (this.pauseSent) break;
                 if (STARTED.has(this.phase.name)) {
                     this.setPhase({name: "failed", reason: "stopped"});
                     break;
