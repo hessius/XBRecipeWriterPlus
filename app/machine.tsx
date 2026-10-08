@@ -7,6 +7,7 @@ import type {ColorTokens} from "tamagui";
 
 import ScreenHeader from "@/components/ScreenHeader";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
+import MachineSpikeSection from "@/components/MachineSpikeSection";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
 import XbrwSheet from "@/components/XbrwSheet";
@@ -17,6 +18,7 @@ import {useSetting} from "@/hooks/useSetting";
 import BrewDatabase, {type StoredFrameLogSummary} from "@/library/BrewDatabase";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {COMMANDS, type Command, frameFor, type Tier} from "@/library/machine/commands";
+import type {SpikeFrame} from "@/library/machine/spikeFrames";
 import {
     frameLogText, readingOf, stateName, toHex
 } from "@/library/machine/frameLog";
@@ -75,10 +77,20 @@ const INITIAL_TELEMETRY: TelemetrySnapshot = {suppressed: 0, infoSeen: 0};
  * rewrites what you pasted is not a raw field, and sending a deliberately
  * broken checksum is a legitimate thing to want to try.
  */
+export function rawFrameProblem(input: string): string | null {
+    const cleaned = input.replace(/[\s:]/g, "");
+    if (cleaned.length === 0) return "nothing to send";
+    if (!/^[0-9a-fA-F]+$/.test(cleaned)) {
+        const bad = Array.from(new Set(cleaned.replace(/[0-9a-fA-F]/g, ""))).join(" ");
+        return `not hex: ${bad}`;
+    }
+    if (cleaned.length % 2 !== 0) return `odd number of digits: ${cleaned.length}`;
+    return null;
+}
+
 export function parseRawFrame(input: string): Uint8Array | null {
     const cleaned = input.replace(/[\s:]/g, "");
-    if (cleaned.length === 0 || cleaned.length % 2 !== 0) return null;
-    if (!/^[0-9a-fA-F]+$/.test(cleaned)) return null;
+    if (rawFrameProblem(input) !== null) return null;
     const bytes = new Uint8Array(cleaned.length / 2);
     for (let i = 0; i < bytes.length; i++) {
         bytes[i] = parseInt(cleaned.slice(i * 2, i * 2 + 2), 16);
@@ -205,6 +217,19 @@ type CommandRowProps = {
 };
 
 /**
+ * A frame waiting on a confirmation, from the catalogue or from the spike
+ * section. The frame is built at confirm time rather than held, so cancelling
+ * costs nothing and a stale frame cannot be sent.
+ */
+type Pending = {
+    name: string;
+    tier: Tier;
+    /** The contradiction or the hazard. Shown in danger colour when present. */
+    warning?: string;
+    build: () => Uint8Array;
+};
+
+/**
  * One catalogue row: name, code, packet type, tier badge, an argument field per
  * `args` entry, and a `Send <name>` button the tests address by that exact label.
  *
@@ -283,7 +308,8 @@ export default function MachineConsole() {
     const [machineState, setMachineState] = useState<MachineStateReading | null>(null);
     const lastStateRef = useRef<number | null>(null);
     const [rawText, setRawText] = useState("");
-    const [pending, setPending] = useState<{command: Command; values: number[]} | null>(null);
+    const [rawProblem, setRawProblem] = useState<string | null>(null);
+    const [pending, setPending] = useState<Pending | null>(null);
 
     useEffect(() => {
         return machine.onFrame((direction, frame, parsed, source) => {
@@ -321,28 +347,61 @@ export default function MachineConsole() {
     }
 
     function onSend(command: Command, values: number[]) {
+        ask({
+            name: command.name,
+            tier: command.tier,
+            warning: command.tier === "unresolved" ? command.contradiction : undefined,
+            build: () => frameFor(command, values)
+        });
+    }
+
+    /**
+     * A spike frame is not a catalogue row, but it reaches the same machine, so
+     * it asks the same question. A hazard is treated as an `unresolved`
+     * contradiction is: always shown, never silenced by the toggle, because a
+     * warning the user can switch off is no use on the one frame that abandons
+     * a running brew.
+     */
+    function onSendSpike(spike: SpikeFrame) {
+        ask({
+            name: spike.label,
+            tier: spike.hazard === undefined ? "moves" : "unresolved",
+            warning: spike.hazard,
+            build: spike.build
+        });
+    }
+
+    function ask(next: Pending) {
         // An unresolved command always confirms. The toggle is there to stop
         // the console nagging about commands whose effect is known; it is not
         // a way to switch off the warning that the sources disagree about what
         // this one does, which is the only warning that can cost anything.
-        const needsConfirm = command.tier === "unresolved"
-            || (confirmations && command.tier !== "inert");
+        const needsConfirm = next.tier === "unresolved"
+            || (confirmations && next.tier !== "inert");
         if (needsConfirm) {
-            setPending({command, values});
+            setPending(next);
             return;
         }
-        void dispatch(frameFor(command, values));
+        void dispatch(next.build());
     }
 
     function confirmPending() {
         if (pending === null) return;
-        void dispatch(frameFor(pending.command, pending.values));
+        void dispatch(pending.build());
         setPending(null);
     }
 
     function sendRaw() {
+        // A silent return reads exactly like a dead button, which cost a
+        // hardware session. The field says why instead.
+        const problem = rawFrameProblem(rawText);
+        if (problem !== null) {
+            setRawProblem(problem);
+            return;
+        }
         const frame = parseRawFrame(rawText);
         if (frame === null) return;
+        setRawProblem(null);
         void dispatch(frame);
     }
 
@@ -462,6 +521,8 @@ export default function MachineConsole() {
                         onChange={(value) => setBypassTempEncoding(value === "plain" ? "plain" : "scaled")}/>
                 </SettingsSection>
 
+                <MachineSpikeSection onSend={onSendSpike}/>
+
                 <SettingsSection title="Raw frame">
                     <YStack gap="$2" paddingVertical="$3" paddingHorizontal="$4">
                         <Text fontSize={12} color={palette.dim}>
@@ -472,8 +533,25 @@ export default function MachineConsole() {
                                placeholderTextColor={palette.muted as ColorTokens} autoCapitalize="none"
                                autoCorrect={false} placeholder="58 01 01 …"
                                accessibilityLabel="Raw frame"
-                               value={rawText} onChangeText={setRawText}
+                               value={rawText}
+                               onChangeText={(text) => {
+                                   setRawText(text);
+                                   setRawProblem(null);
+                               }}
                                fontFamily="monospace"/>
+                        {rawProblem !== null && (
+                            // `alert` plus the live region, which is the
+                            // repo's cross-platform pattern -- see
+                            // `ImportSheet`. The region is Android-only, so
+                            // without the role an iOS VoiceOver user who
+                            // mistypes a frame still meets a button that does
+                            // nothing, which is the whole defect this message
+                            // was added to fix.
+                            <Text testID="raw-frame-problem" fontSize={12} color={palette.danger}
+                                  accessibilityRole="alert" accessibilityLiveRegion="polite">
+                                {rawProblem}
+                            </Text>
+                        )}
                         <Button size="$3" accessibilityRole="button"
                                 accessibilityLabel="Send raw frame"
                                 borderColor={palette.line} borderWidth={1}
@@ -557,19 +635,19 @@ export default function MachineConsole() {
             </ScrollView>
 
             <XbrwSheet open={pending !== null} onOpenChange={(next) => {if (!next) setPending(null);}}
-                       title="Confirm send" heightPercent={pending?.command.tier === "unresolved" ? 60 : 42}>
+                       title="Confirm send" heightPercent={pending?.warning !== undefined ? 60 : 42}>
                 <YStack gap="$3" paddingHorizontal="$4" paddingBottom="$4">
                     <Text fontSize={15} color={palette.text}>
-                        {pending?.command.tier === "unresolved"
-                            ? "Nobody agrees what this does. What the sources actually observed:"
+                        {pending?.tier === "unresolved"
+                            ? "This one costs something, or nobody agrees what it does:"
                             : "This starts a motor, a heater, or rewrites a machine setting."}
                     </Text>
-                    {pending?.command.tier === "unresolved" && pending.command.contradiction !== undefined && (
-                        <Text fontSize={13} color={palette.danger}>{pending.command.contradiction}</Text>
+                    {pending?.warning !== undefined && (
+                        <Text fontSize={13} color={palette.danger}>{pending.warning}</Text>
                     )}
                     <Button accessibilityRole="button"
-                            accessibilityLabel={`Confirm send ${pending?.command.name ?? ""}`}
-                            borderColor={pending === null ? palette.line : TIER_COLOUR[pending.command.tier]}
+                            accessibilityLabel={`Confirm send ${pending?.name ?? ""}`}
+                            borderColor={pending === null ? palette.line : TIER_COLOUR[pending.tier]}
                             borderWidth={1} backgroundColor={palette.raised} color={palette.text}
                             onPress={confirmPending}>
                         Send it

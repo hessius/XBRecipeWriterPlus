@@ -25,11 +25,11 @@ describe("the command catalogue", () => {
             "Back to home",
             "Bypass and dose",
             "Commit",
-            "Start / confirm / pause",
+            "Coffee pause",
             "Cancel",
             "Coffee resume",
-            "Brewer pause",
-            "Brewer resume",
+            "FreeSolo pour (named Brewer pause)",
+            "FreeSolo stop (named Brewer resume)",
             "Brewer quit",
             "Recipe start quit",
             "Brewer enter",
@@ -92,7 +92,12 @@ describe("the command catalogue", () => {
     it("marks the commands whose meaning nobody agrees on", () => {
         // These are the ones the console must show the disagreement for, at
         // the point of sending, rather than a generic warning.
-        expect(commandByCode(40518)?.tier).toBe("unresolved");
+        // 40518 used to sit here. Hardware settled it on 2026-10-08: it is a
+        // pause, and it is now tiered "moves" with the result as its note.
+        // 8019 took its place, in the opposite direction: every source calls
+        // it a pause and it is not one.
+        expect(commandByCode(8019)?.tier).toBe("unresolved");
+        expect(commandByCode(40518)?.tier).toBe("moves");
         expect(commandByCode(8104)?.tier).toBe("unresolved");
         expect(commandByCode(8005)?.tier).toBe("unresolved");
         expect(commandByCode(8010)?.tier).toBe("unresolved");

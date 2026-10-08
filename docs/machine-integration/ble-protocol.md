@@ -85,12 +85,11 @@
 | 8001 | 0x1F41 | **Recipe Send (with grind)** | T1h | recipe blob | Pours frame opcode when grinder IS used. | `corroborated` |
 | 8004 | 0x1F44 | **Recipe Send (no grind)** | T1h | recipe blob | Pours frame opcode when grinder OFF. Distinct from 8001. | `corroborated` |
 | 8002 | 0x1F42 | **Execute / Commit** | T1 | `[1]` | Arms → awaiting-confirm. Byte-exact: `580101421F0C000000017FCF`. | `spec` |
-| 40518 | 0x9E46 | **Start / Confirm** | T1 | `[1]` | Seq=0x9E. Sends after commit if machine stalls in awaiting-confirm. See CONTRADICTION C4. | `corroborated` |
+| 40518 | 0x9E46 | **Coffee Pause** | T1 | `[1]` | Seq=0x9E. Pauses a running recipe; state goes to `0x1F`, and `40515` reports volume so far. Inert if already paused. C4 settled. | `hardware 2026-10-08, V12.0D.500` |
 | 40519 | 0x9E47 | **Cancel** | T1 | `[1]` | Seq=0x9E. Abort committed/running brew. | `corroborated` |
-| 40524 | 0x9E4C | **Coffee Resume** | T1 | `[1]` | Resume after pause. | `single-source` (HomoLand) |
-| 40518 | 0x9E46 | **Coffee Pause** | — | — | Same code as Start — context-dependent. See CONTRADICTION C4. | `single-source` (HomoLand) |
-| 8019 | 0x1F53 | **Brewer Pause** | T1 | (none) | Pause brew. | `spec` |
-| 8021 | 0x1F55 | **Brewer Resume** | T1 | (none) | Resume brew. | `spec` |
+| 40524 | 0x9E4C | **Coffee Resume** | T1 | `[1]` | Resumes a `40518` pause; `40516`, then back to `0x23`. The brew continues, it does not restart. Inert if not paused. | `hardware 2026-10-08, V12.0D.500` |
+| 8019 | 0x1F53 | **FreeSolo pour** (named Brewer Pause) | T1 | (none) | **Destructive.** Abandons any running recipe and starts a standalone water pour: `0x03`, then `9006` and `0x41` about 13 s later. It is not a pause. | `hardware 2026-10-08, V12.0D.500` |
+| 8021 | 0x1F55 | **FreeSolo stop** (named Brewer Resume) | T1 | (none) | Ends a `8019` pour and reports `0x23`, but no recipe survives to resume. | `hardware 2026-10-08, V12.0D.500` |
 | 8013 | 0x1F4D | **Brewer Quit** | T1 | (none) | Quit brewer. | `spec` |
 | 8017 | 0x1F51 | **Recipe Start Quit** | T1 | (none) | Exit pre-start recipe screen. | `spec` |
 | 8007 | 0x1F47 | **Brewer Enter** | T1 | `[pattern_byte, temp×10_floatbits]` | Navigate to FreeSolo brewer screen. | `single-source` (HomoLand) |
@@ -151,8 +150,8 @@
 | 40511 | 0x9E3F | Brewer Stop | — | Brew complete | `spec` |
 | 40512 | 0x9E40 | Enjoy! | — | Final "coffee ready" notification | `spec` |
 | 40513 | 0x9E41 | Enjoy (2) | — | Second enjoy notification | `spec` |
-| 40515 | 0x9E43 | Pour Volume ACK | — | May be firmware-version dependent | `single-source` (brAzzi64) |
-| 40516 | 0x9E44 | Pour Transition | — | May be firmware-version dependent | `single-source` (brAzzi64) |
+| 40515 | 0x9E43 | Pour volume at pause | — | Emitted right after a `40518` pause, carrying a rising float (138, then 184 within one brew). Volume so far is the obvious reading, unconfirmed against the scale. | `hardware 2026-10-08, V12.0D.500` |
+| 40516 | 0x9E44 | Pour resumed | — | Emitted right after a `40524` resume, before the state returns to `0x23`. | `hardware 2026-10-08, V12.0D.500` |
 | 40517 | 0x9E45 | Error: Idling | — | | `spec` |
 | 40520 | 0x9E48 | RD_Bypass | — | The bypass firing, after the drawdown | **`verified`** (capture 2026-09-10) |
 | 40522 | 0x9E4A | Error: No Water | — | Tank empty | `spec` |
@@ -219,7 +218,7 @@ document's `single-source` marking on those two comes from.
 | 9003 | 0x232B | Grinder Begin | — | | `spec` |
 | 9004 | 0x232C | Grinder Out | — | | `spec` |
 | 9005 | 0x232D | Brewer Begin | — | | `spec` |
-| 9006 | 0x232E | Brewer Out | — | | `spec` |
+| 9006 | 0x232E | FreeSolo pour finished | — | Ends the `0x03` pour started by `8019`; the state goes to `0x41` next. | `hardware 2026-10-08, V12.0D.500` |
 | 9008 | 0x2330 | Scale Out | — | Object removed from scale | `spec` |
 | 9009 | 0x2331 | Grinder Paused | — | | `spec` |
 | 9010 | 0x2332 | Brewer Paused | — | | `spec` |
@@ -233,14 +232,15 @@ document's `single-source` marking on those two comes from.
 |------|-----------|---------|
 | 0x01 | idle | Pro-mode home / ready |
 | 0x02 | scale/grinder busy? | Observed after 8006 (grinder enter). Undocumented. `observed 2026-09-01, V12.0D.500` |
-| 0x03 | brewer busy? | Observed after event 9001. Undocumented. `observed 2026-09-01, V12.0D.500` |
+| 0x03 | dispensing | Standalone FreeSolo pour, entered by `8019`. Ends on `9006` into `0x41`. Also seen after `9001`. `observed 2026-10-08, V12.0D.500` |
 | 0x04, 0x05 | scale sub-states | Observed cycling around scale enter/tare/exit. Undocumented. `observed 2026-09-01, V12.0D.500` |
 | 0x0C | no_water | No water (checked after commit) |
 | 0x0F | no_beans | Waiting for beans |
 | 0x10 | brewing | Live pour in progress |
 | 0x1D | loading | Recipe being received |
-| 0x1F | armed | Recipe loaded, awaiting approval |
+| 0x1F | armed | Recipe loaded, awaiting approval **and also** a recipe paused by `40518`. The two are the same code; only the sender knows which it is. `observed 2026-10-08, V12.0D.500` |
 | 0x1E | awaiting_confirm | Waiting for human confirm on device |
+| 0x20 | pre_brew | Between `armed` and the first `40502`; purpose unestablished. `observed 2026-10-08, V12.0D.500` |
 | 0x22 | starting | Post-confirm: grinding/spinning up |
 | 0x23 | brewing (sub) | Mid-pour sub-state | 
 | 0x24 | ready | Brew DONE — coffee ready beep (cup still on scale; machine waits for cup removal before → idle) |
@@ -250,6 +250,36 @@ document's `single-source` marking on those two comes from.
 | 0x25 | slots_saved | Slots stored OK (then → idle) |
 
 `corroborated` for core states (0x01, 0x1F, 0x1E, 0x22, 0x24); `single-source` (Janczykkkko) for 0x23, 0x24 distinction.
+
+> **Observed on hardware 2026-10-08 (V12.0D.500). Pause and resume are `40518`
+> and `40524`, and `8019` is not a pause at all.**
+>
+> Sent into a running recipe, **`40518` pauses it**: acknowledged by its own
+> event, followed by `40515` carrying a rising number (138, then 184 on the
+> second pause of the same brew), and the state settles on **`0x1F armed`**.
+> **`40524` resumes**: acknowledged, followed by `40516`, back to `0x23`.
+>
+> **The brew continues rather than restarting.** Paused in stage 0 and resumed,
+> the machine went on to emit `40510 (1)`, `(2)`, `(3)` and finished through
+> `40511`, `40512`, `0x24 ready`, `40513`. No stage index was repeated. The
+> cycle was run twice in the one brew and the coffee came out.
+>
+> Both commands are **inert when they do not apply**: `40524` sent to a running
+> brew was acknowledged and changed nothing, and `40518` sent to an
+> already-paused brew likewise. A pause UI does not have to track which one is
+> safe to send.
+>
+> **`8019` aborts the recipe into a standalone FreeSolo pour.** It is
+> acknowledged, the machine drops to `0x03` and *pours water*, and about
+> thirteen seconds later `9006` arrives and it lands in `0x41`. The recipe is
+> gone. `8021` returns it to `0x23` but there is no longer a recipe behind that
+> state. The earlier reading of this pair as a working pause came from watching
+> the state numbers alone, which is exactly the failure the display was warning
+> about: the machine's screen said water, the log said `0x23`.
+>
+> The frames are `58 01 01 46 9E 10 00 00 00 01 01 00 00 00 65 DB` (40518) and
+> `58 01 01 4C 9E 10 00 00 00 01 01 00 00 00 ED CC` (40524), pinned in
+> `library/machine/__tests__/spikeFrames.test.ts`.
 
 > **Observed on hardware 2026-09-01 (V12.0D.500):** commit (`8002`) **auto-proceeds**. The machine went from commit straight to grinding, in both EASY and PRO, without ever passing through `0x1E`. `0x1E` is corroborated by three sources, so it is kept as a fallback path — but on this unit it is not the normal route.
 
@@ -322,12 +352,15 @@ brAzzi64: 4-byte LE length at offset 5. Janczykkkko/HomoLand: 2-byte LE length a
 - **Assessment:** The three implementations send materially different values. The machine reportedly brews correctly regardless (brAzzi64). The field's exact semantics — cup geometry, weight range, or something else — remain unverified. **Do not trust any single value set blindly.**
 - **XBRW++ (M3, 2026-09-01):** ~~omits 8104 entirely~~ — **reversed, same day, after hardware testing.** The original reasoning misread the evidence: the sources disagree about the *values*, not about whether the command is sent. All three send it, and `xbloom.py`'s `run_brew` — the only brew sequence we have that is known to work on hardware — sends it between the dose and the recipe. XBRW++ now sends `(200.0, 80.0)`, the reference's default and HCI-confirmed for Free Solo, which is also the widest range and so the conservative choice for a field that appears to govern overflow protection.
 
-### C4 — Command 40518 (0x9E46): Start vs Pause `single-source conflict`
+### C4 — Command 40518 (0x9E46): Start vs Pause `RESOLVED on hardware`
 - **brAzzi64 / Janczykkkko:** Treat this as the post-commit "start" frame (`build_start()`), sent ONLY when the machine stalls in awaiting-confirm. Janczykkkko warns: "sending it into a running brew aborts it back to armed — verified on hardware."
 - **saya6k brewing.py (comment):** "Third-party notes (HomoLand/Janczykkkko) claim 40518 acts as 'start' from awaiting-confirm on their unit; tried live on this machine 2026-07-19 and it bounced the state back to `recipe_loaded` instead of starting." saya6k therefore does NOT send 40518 at all and instead waits for the machine to auto-start or prompts the user.
 - **HomoLand protocol.py:** Names 40518 as `CMD_COFFEE_PAUSE` but also documents it as `START_OPCODE = 0x46`.
 - **Assessment: HIGH-RISK CONTRADICTION.** The same command code may behave differently across units/firmware. On one machine it starts the brew; on another it sends the brew back to armed. **Do not send 40518 unconditionally after commit.** Safe strategy: observe state, send only if machine is in awaiting_confirm AND has been confirmed stable there for several seconds.
 - **XBRW++ (M3, 2026-09-01):** the brew path never sends 40518 under any condition. When the machine parks in awaiting-confirm the app asks the user to press the button on the machine, which is a thing they are standing next to anyway. A regression test asserts the frame is absent and has been red-green verified against the guard. The command remains reachable from the machine console behind a confirmation that shows this disagreement verbatim — deliberately, because settling it needs somebody to send it on purpose and watch.
+- **Resolved on hardware 2026-10-08 (V12.0D.500): it is Pause.** HomoLand's `CMD_COFFEE_PAUSE` name was right and the `START_OPCODE` reading was wrong. Sent mid-pour it was acknowledged, emitted `40515` with the volume so far, and settled on `0x1F`. Sent again while paused it did nothing. `40524` resumed it and the brew **continued** from where it stopped, finishing normally.
+- **Which means saya6k saw a pause and called it a bounce.** "Bounced the state back to `recipe_loaded`" is `0x1F`, and `0x1F` is where a pause lands. The observation was accurate; only the name was wrong. Janczykkkko's "aborts it back to armed" is the same event with the same misreading, and the brew was not aborted, it was waiting.
+- **The standing advice does not change.** 40518 is still never sent by the brew path, because pausing a brew nobody asked to pause is as bad as aborting one. It is now safe to *offer*, which is what packages 8 and 9 turn on.
 
 ### C5 — Command 8005 (Weight Unit) Payload Values
 - **brAzzi64 PROTOCOL.md:** `0=g, 1=oz, 2=ml`
@@ -359,10 +392,11 @@ Janczykkkko uses `round(total/dose*10)`. saya6k uses `math.ceil(ratio * 10)`, cl
 **All later sources (Janczykkkko, HomoLand):** Send `0xFE` for no-grind. `0x00` grinds at the finest setting.  
 **Assessment:** `0xFE` is the correct value, confirmed by HCI capture of the app's grinder-OFF slot save. `corroborated`
 
-### C10 — Commit + Start Sequencing `corroborated conflict`
+### C10 — Commit + Start Sequencing `RESOLVED on hardware`
 - **brAzzi64 / Janczykkkko / HomoLand (theory):** Send 8002 (commit), then observe; send 40518 (start) only if machine stalls.
 - **saya6k (observed on hardware 2026-07-19):** Sends 8002, waits for state transition — auto-proceed works. Sending 40518 bounced state backward. Does NOT send 40518.
 - **Assessment:** The machine's behavior after commit is firmware/unit dependent. Implement an observe-then-decide strategy. Do not hardcode a 40518 send.
+- **Resolved on hardware 2026-10-08 (V12.0D.500):** there was never a start/stall question here. 40518 is Pause (see C4), so sending it after commit could only ever have moved the machine to `0x1F`, which is what saya6k saw. Auto-proceed after `8002` is the only route, and never sending 40518 from the brew path remains correct for a reason that is now plain rather than cautious.
 
 ### C11 — Tea Pause Byte Encoding `RESOLVED on hardware`
 - **HomoLand (tea.py):** Pause bytes split as `((-remainder)&0xFF, (minutes*32)&0xFF)`.
@@ -510,17 +544,62 @@ Command 11510, Type 2 packet:
 ```
 **Flags byte:**
 - Bit 4 (0x10): Scale ON
-- Bits 0–3: Grinder — `0x02`=ON, `0x04`=OFF
-- Common values: `0x02`=scale-off+grind-on, `0x04`=scale-off+grind-off, `0x12`=scale-on+grind-on, `0x14`=scale-on+grind-off
+- Bits 0–3: claimed to be the grinder — `0x02`=ON, `0x04`=OFF. **It is not.** See below.
 
-Janczykkkko's implementation uses `SLOT_FLAG_SCALE_ON = 0x12`, `SLOT_FLAG_SCALE_OFF = 0x02` — note these both have grinder-ON in the lower nibble (0x02). `inferred` — may conflict with brAzzi64's `SLOT_GRINDER_OFF = 0x04`.
+Janczykkkko's implementation uses `SLOT_FLAG_SCALE_ON = 0x12`, `SLOT_FLAG_SCALE_OFF = 0x02` — note these both have grinder-ON in the lower nibble (0x02). `inferred` — appeared to conflict with brAzzi64's `SLOT_GRINDER_OFF = 0x04`.
+
+> **Observed on hardware 2026-10-08 (V12.0D.500): `0x02` defers to the blob.**
+> Slot C went up grinder-**off** under `0x02` and displays the grinder off;
+> slots A and B went up grinder-**on** under the same `0x02` and both display
+> a grind size. So under `0x02` the `0xFE` grind byte inside the blob decides,
+> which is the field C5 already settled, and Janczykkkko's constants are safe.
+>
+> **`0x04` is not settled.** It was tried once, with a grinder-off blob, and
+> the slot showed the grinder off — which is equally consistent with `0x04`
+> forcing it off and with `0x04` deferring like `0x02` does. brAzzi64's
+> `SLOT_GRINDER_OFF = 0x04` therefore survives. Settling it needs one more
+> trial: a grinder-**on** blob under `0x04`. If the slot then shows a grind
+> size the nibble is inert outright; if it shows off, `0x04` is a real
+> override and the two constants genuinely disagree.
+>
+> **The working rule until then: send `0x02` (or `0x12` with the scale) and
+> let the blob carry the grinder.** That is the one combination proven in both
+> directions, and it is what a slot write built from the brew encoder produces
+> anyway, which is the argument for building it that way.
 
 ### Batch-Write Requirement `corroborated`
 All three slots (A, B, C) MUST be written in a single batch. Writing only one or two leaves the machine hung at state `0x43` (saving_slots) and it displays RETRY. There is no "commit" frame — the machine saves atomically once all three 11510 frames have been received. Sequence:
-1. Switch to PRO mode (11511, `"00000000"`) — slot writes are only accepted in PRO mode. In AUTO mode the machine sits at state `0x41` and rejects saves.
+1. ~~Switch to PRO mode (11511, `"00000000"`) — slot writes are only accepted in PRO mode. In AUTO mode the machine sits at state `0x41` and rejects saves.~~ **Not required.** On hardware 2026-10-08, V12.0D.500, the batch behaved identically with and without the mode switch. The switch is still acknowledged; it just is not a precondition. Sending it is harmless, and an implementation that skips it has one fewer way to leave a machine in a mode its owner did not ask for.
 2. Send 11510 × 3 (slots A, B, C in order).
 3. Machine ACKs each with a 11510 notification (status C2).
 4. Machine progresses: state `0x43` (saving) → `0x25` (saved) → `0x01` (idle), confirmed by an `0xF8` notify.
+
+> **Observed on hardware 2026-10-08 (V12.0D.500): the hang is recoverable, and
+> finishing the batch is the recovery.** Slot A alone put the machine into an
+> unresponsive state with a looping animation on its display. Slot B changed
+> nothing visible, which is what an atomic batch should look like from outside.
+> Slot C released it, and the slot it had written was correct. So a write
+> interrupted after one or two frames is not a brick and does not need a power
+> cycle: it needs the remaining frames.
+>
+> That is worth knowing before building this, because the obvious failure mode
+> is a BLE drop halfway through three frames. The repair is to send the rest,
+> which means an implementation should hold all three blobs before it sends the
+> first, and should retry the batch from where it stopped rather than from the
+> beginning.
+
+> **A slot write leaves the machine in EASY/Auto**, hardware 2026-10-08,
+> V12.0D.500. The session began in PRO, was explicitly sent the PRO switch, and
+> ended in EASY. Normal brewing from the app still worked afterwards, so this
+> is not a trap, but it is a visible change to somebody's machine that they did
+> not ask for and an implementation should say so before it writes.
+>
+> **The machine's slot display is a poor witness.** It shows the ratio and the
+> grind size and nothing else: no dose, no volume, no temperature. The three
+> recipes this was tested with were 15 g/225 ml, 18 g/270 ml and 20 g/300 ml,
+> which are all ratio 15, so the display agreed with all three and distinguished
+> none of them. A future check of what actually landed in a slot wants three
+> **different ratios**, and even then it can only confirm two fields.
 
 ### Sync Flow with 11512 `corroborated`
 After the 3 slot writes, the app sends command 11512 (Recipe Order). APK decompile confirms this is a real command (`BleCodeFactory.easyModeRecipesOrder`). Its exact payload is documented but not always implemented.
@@ -588,7 +667,7 @@ The following non-obvious implementation approaches are distinctive enough that 
 
 ## H. Gaps, Uncertainties, and Suggested Follow-Up
 
-1. **C4/C10 (40518 behavior)** is the most operationally dangerous gap. The command may start or un-start a brew depending on machine state and firmware. Hardware testing on the target device before shipping is mandatory.
+1. ~~**C4/C10 (40518 behavior)** is the most operationally dangerous gap.~~ **Settled on hardware 2026-10-08:** 40518 is Pause and 40524 is Resume, they are inert when they do not apply, and a resumed brew continues. The live hazard moved to `8019`, which reads like a pause in every source and actually abandons the recipe for a water pour.
 
 2. **C5/C6 (unit command payload values)** are a direct conflict with no hardware resolution. A simple test (send each value, observe machine display) would resolve in under a minute.
 
