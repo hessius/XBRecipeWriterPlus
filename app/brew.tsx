@@ -60,6 +60,7 @@ export const BREW_BAND_GAP = 13;
 /** Half a minute of rate in two dozen buckets. See FlowSparkline. */
 const FLOW_TAIL_SECONDS = 30;
 const FLOW_TAIL_BUCKETS = 24;
+const QUICK_EDIT_KEYS = ["dose", "ratio", "grind", "tempOffset"] as const;
 
 /** Where an export sources its record: the freshest brew in the store. */
 type ExportStore = Pick<HistoryStore, "all" | "samples">
@@ -73,27 +74,27 @@ function latestExport(store: ExportStore): BrewExportSource | null {
     return {record: latest, samples: store.samples(latest.id)};
 }
 
-function quickEditNumber(value: unknown, key: keyof QuickEditAdjustments): number | undefined {
-    if (value === undefined) return undefined;
-    if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
-        throw new Error(`Invalid quick edit ${key}.`);
-    }
-    return value;
-}
-
 function parseQuickEditParam(value: string | undefined): QuickEditAdjustments | undefined {
     if (value === undefined) return undefined;
-    const parsed: unknown = JSON.parse(value);
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(value);
+    } catch {
+        return undefined;
+    }
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-        throw new Error("Invalid quick edit adjustment payload.");
+        return undefined;
     }
     const source = parsed as Record<keyof QuickEditAdjustments, unknown>;
-    const adjustments: QuickEditAdjustments = {
-        dose: quickEditNumber(source.dose, "dose"),
-        ratio: quickEditNumber(source.ratio, "ratio"),
-        grind: quickEditNumber(source.grind, "grind"),
-        tempOffset: quickEditNumber(source.tempOffset, "tempOffset")
-    };
+    const adjustments: QuickEditAdjustments = {};
+    for (const key of QUICK_EDIT_KEYS) {
+        const entry = source[key];
+        if (entry === undefined) continue;
+        if (typeof entry !== "number" || !Number.isFinite(entry) || !Number.isInteger(entry)) {
+            return undefined;
+        }
+        adjustments[key] = entry;
+    }
     return Object.values(adjustments).some((entry) => entry !== undefined)
         ? adjustments
         : undefined;
@@ -103,11 +104,19 @@ function quickEditRecordFromRoute(
     recipe: Recipe,
     value: string | undefined
 ): QuickEditRecordAdjustments | undefined {
+    // The brew itself is the route's recipeJSON. These adjustments only
+    // decorate the history record, so losing the badge must never cost a brew.
     const adjustments = parseQuickEditParam(value);
     if (adjustments === undefined) return undefined;
-    const saved = new RecipeDatabase().getRecipe(recipe.uuid);
+    let saved: Recipe | null;
+    try {
+        saved = new RecipeDatabase().getRecipe(recipe.uuid);
+    } catch (error) {
+        console.warn("Brew: could not derive quick edit record metadata", error);
+        return undefined;
+    }
     if (saved === null) {
-        throw new Error("Cannot record a quick edit without the saved recipe baseline.");
+        return undefined;
     }
     return quickEditRecordAdjustments(saved, adjustments);
 }

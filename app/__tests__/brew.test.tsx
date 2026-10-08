@@ -67,6 +67,8 @@ const mockSwitchToProAndRetry = jest.fn();
 const mockStart = jest.fn();
 const mockStartInPro = jest.fn();
 let mockView: string | undefined = undefined;
+let mockQuickEditAdjustments: string | undefined = undefined;
+let mockSavedRecipe: Recipe | null = null;
 
 function namedPhase(name: BrewPhase["name"]): BrewPhase {
     if (name === "pouring") return {name: "pouring", pour: 1, pours: 1};
@@ -170,7 +172,7 @@ jest.mock("@/hooks/useSetting", () => {
 // and grind. Nothing here is about that lookup, and a real one would open
 // SQLite in every test in this file.
 jest.mock("@/library/RecipeDatabase", () => jest.fn(() => ({
-    getRecipe: jest.fn(() => null)
+    getRecipe: jest.fn(() => mockSavedRecipe)
 })));
 
 const mockPush = jest.fn();
@@ -180,7 +182,8 @@ jest.mock("expo-router", () => ({
     router: {back: (...a: unknown[]) => mockBack(...a), push: (...a: unknown[]) => mockPush(...a)},
     useLocalSearchParams: () => ({
         view: mockView,
-        recipeJSON: mockRecipeJSON
+        recipeJSON: mockRecipeJSON,
+        quickEditAdjustments: mockQuickEditAdjustments
     }),
     useNavigation: () => ({setOptions: jest.fn()})
 }));
@@ -188,6 +191,8 @@ jest.mock("expo-router", () => ({
 beforeEach(() => {
     mockUseKeepAwake.mockClear();
     mockView = undefined;
+    mockQuickEditAdjustments = undefined;
+    mockSavedRecipe = null;
     mockRecipeJSON = JSON.stringify({
         name: "Ethiopia Guji",
         pours: [{pourNumber: 1, volume: 40, temperature: 93,
@@ -312,6 +317,97 @@ describe("brew route", () => {
     it("asks for a brew when opened normally", async () => {
         await renderWithProviders(<Brew />);
         expect(mockStart).toHaveBeenCalled();
+    });
+
+    it.each([
+        ["malformed JSON", "{"],
+        ["a non-object payload", "1"],
+        ["an array", "[1]"],
+        ["a non-integer value", JSON.stringify({dose: 20, ratio: 18.5})],
+    ])("starts the adjusted recipe without record metadata for %s", async (_name, payload) => {
+        const saved = new Recipe();
+        saved.uuid = "quick-route";
+        saved.dosage = 18;
+        saved.ratio = 16;
+        saved.autoFixPourVolumes();
+        const adjusted = new Recipe();
+        adjusted.name = "Quick Ethiopia";
+        adjusted.uuid = "quick-route";
+        adjusted.dosage = 20;
+        adjusted.ratio = 18;
+        adjusted.autoFixPourVolumes();
+        mockRecipeJSON = JSON.stringify(adjusted);
+        mockQuickEditAdjustments = payload;
+        mockSavedRecipe = saved;
+
+        await renderWithProviders(<Brew />);
+
+        expect(mockStart).toHaveBeenCalled();
+        const [started, recordAdjustments] = mockStart.mock.calls[0];
+        expect(started).toBeInstanceOf(Recipe);
+        expect(started.name).toBe("Quick Ethiopia");
+        expect(started.dosage).toBe(20);
+        expect(started.ratio).toBe(18);
+        expect(recordAdjustments).toBeUndefined();
+    });
+
+    it("starts the adjusted recipe without record metadata when the saved recipe is missing", async () => {
+        const adjusted = new Recipe();
+        adjusted.name = "Quick Ethiopia";
+        adjusted.uuid = "deleted-recipe";
+        adjusted.dosage = 20;
+        adjusted.ratio = 18;
+        adjusted.autoFixPourVolumes();
+        mockRecipeJSON = JSON.stringify(adjusted);
+        mockQuickEditAdjustments = JSON.stringify({dose: 20});
+        mockSavedRecipe = null;
+
+        await renderWithProviders(<Brew />);
+
+        expect(mockStart).toHaveBeenCalled();
+        const [started, recordAdjustments] = mockStart.mock.calls[0];
+        expect(started).toBeInstanceOf(Recipe);
+        expect(started.name).toBe("Quick Ethiopia");
+        expect(started.dosage).toBe(20);
+        expect(recordAdjustments).toBeUndefined();
+    });
+
+    it("starts a valid quick edit with record metadata from the saved recipe", async () => {
+        const saved = new Recipe();
+        saved.name = "Quick Ethiopia";
+        saved.uuid = "saved-recipe";
+        saved.dosage = 18;
+        saved.ratio = 16;
+        saved.grindSize = 62;
+        saved.autoFixPourVolumes();
+        const adjusted = new Recipe(undefined, JSON.stringify(saved));
+        adjusted.dosage = 20;
+        adjusted.ratio = 18;
+        adjusted.grindSize = 68;
+        adjusted.autoFixPourVolumes();
+        mockRecipeJSON = JSON.stringify(adjusted);
+        mockQuickEditAdjustments = JSON.stringify({
+            dose: 20,
+            ratio: 18,
+            grind: 68,
+            tempOffset: 2
+        });
+        mockSavedRecipe = saved;
+
+        await renderWithProviders(<Brew />);
+
+        expect(mockStart).toHaveBeenCalled();
+        const [started, recordAdjustments] = mockStart.mock.calls[0];
+        expect(started).toBeInstanceOf(Recipe);
+        expect(started.dosage).toBe(20);
+        expect(started.ratio).toBe(18);
+        expect(started.grindSize).toBe(68);
+        expect(recordAdjustments).toEqual({
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: 2
+        });
     });
 
     it("asks for nothing when opened to watch a run that already exists", async () => {
