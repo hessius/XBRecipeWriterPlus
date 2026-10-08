@@ -494,8 +494,10 @@ describe("editRecipe autosave", () => {
 
         await fireEvent.press(screen.getByLabelText("Quick edit brew"));
         await fireEvent.press(screen.getByLabelText("Increase Quick edit dose"));
+        // The panel carries no BREW of its own: the action bar below it holds
+        // the single BREW and brews whatever the knobs currently say.
         await waitFor(async () => {
-            await fireEvent.press(screen.getByLabelText("Brew quick edit"));
+            await fireEvent.press(screen.getByLabelText("Brew"));
             expect(mockPush).toHaveBeenCalledTimes(1);
         }, {timeout: SHEET_PRESS_TIMEOUT});
 
@@ -513,8 +515,10 @@ describe("editRecipe autosave", () => {
 
         await fireEvent.press(screen.getByLabelText("Quick edit brew"));
         await fireEvent.press(screen.getByLabelText("Increase Quick edit dose"));
+        // The panel carries no BREW of its own: the action bar below it holds
+        // the single BREW and brews whatever the knobs currently say.
         await waitFor(async () => {
-            await fireEvent.press(screen.getByLabelText("Brew quick edit"));
+            await fireEvent.press(screen.getByLabelText("Brew"));
             expect(mockPush).toHaveBeenCalledTimes(1);
         }, {timeout: SHEET_PRESS_TIMEOUT});
 
@@ -528,8 +532,10 @@ describe("editRecipe autosave", () => {
 
         await fireEvent.press(screen.getByLabelText("Quick edit brew"));
         await fireEvent.press(screen.getByLabelText("Increase Quick edit dose"));
+        // The panel carries no BREW of its own: the action bar below it holds
+        // the single BREW and brews whatever the knobs currently say.
         await waitFor(async () => {
-            await fireEvent.press(screen.getByLabelText("Brew quick edit"));
+            await fireEvent.press(screen.getByLabelText("Brew"));
             expect(mockPush).toHaveBeenCalledTimes(1);
         }, {timeout: SHEET_PRESS_TIMEOUT});
 

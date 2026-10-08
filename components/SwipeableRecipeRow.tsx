@@ -229,19 +229,38 @@ export default function SwipeableRecipeRow({
     }, []);
 
     function runAfterClose() {
+        const pending = afterClose.current;
+        clearAfterClose();
+        pending?.();
+    }
+
+    function clearAfterClose() {
         if (afterCloseTimer.current !== null) {
             clearTimeout(afterCloseTimer.current);
             afterCloseTimer.current = null;
         }
-        const pending = afterClose.current;
         afterClose.current = null;
-        pending?.();
     }
 
     function closeThen(action: () => void) {
+        clearAfterClose();
         afterClose.current = action;
         afterCloseTimer.current = setTimeout(runAfterClose, TRAY_ACTION_FALLBACK);
         swipeableRef.current?.close();
+    }
+
+    /**
+     * Close the tray and act at once.
+     *
+     * Every tile but TUNE goes through here, and it drops any action TUNE left
+     * waiting. Without that, tapping TUNE and then BREW before the tray has
+     * finished closing performed both: the close report that BREW asked for
+     * would run the panel TUNE was still waiting on. One tap, one action.
+     */
+    function closeNow(action: () => void) {
+        clearAfterClose();
+        swipeableRef.current?.close();
+        action();
     }
 
     useEffect(() => {
@@ -308,17 +327,11 @@ export default function SwipeableRecipeRow({
                 <Tile icon="duplicate" caption="COPY" tone={palette.success}
                       testID="recipe-row-copy"
                       label={`Duplicate ${recipe.displayName()}`}
-                      onPress={() => {
-                          swipeableRef.current?.close();
-                          onDuplicate();
-                      }}/>
+                      onPress={() => closeNow(onDuplicate)}/>
                 <Tile icon="delete" caption="DELETE" tone={palette.danger}
                       testID="recipe-row-delete"
                       label={`Delete ${recipe.displayName()}`}
-                      onPress={() => {
-                          swipeableRef.current?.close();
-                          onDelete();
-                      }}/>
+                      onPress={() => closeNow(onDelete)}/>
                 {onToggleFavourite !== undefined && (
                     <Tile icon="favourite"
                           // Verbs, like the two beside it, and this one names
@@ -343,10 +356,7 @@ export default function SwipeableRecipeRow({
                               ? `Remove star from ${recipe.displayName()}`
                               : `Star ${recipe.displayName()}`}
                           testID="recipe-row-favourite"
-                          onPress={() => {
-                              swipeableRef.current?.close();
-                              onToggleFavourite();
-                          }}/>
+                          onPress={() => closeNow(onToggleFavourite)}/>
                 )}
             </XStack>
         );
@@ -374,10 +384,7 @@ export default function SwipeableRecipeRow({
                     <Tile icon="brew" caption="BREW" tone={resolveAccent(recipe)}
                           testID="recipe-row-brew"
                           label={`Brew ${recipe.displayName()}`}
-                          onPress={() => {
-                              swipeableRef.current?.close();
-                              onBrew();
-                          }}/>
+                          onPress={() => closeNow(onBrew)}/>
                 )}
                 {onQuickEdit !== undefined && (
                     // Temporary tuning is a frequent brew-side action, but it
@@ -400,10 +407,7 @@ export default function SwipeableRecipeRow({
                           label={writable
                               ? `Write ${recipe.displayName()} to a card`
                               : `${recipe.displayName()} cannot be written to a card`}
-                          onPress={() => {
-                              swipeableRef.current?.close();
-                              onWrite();
-                          }}/>
+                          onPress={() => closeNow(onWrite)}/>
                 )}
             </XStack>
         );

@@ -772,6 +772,25 @@ describe("SwipeableRecipeRow", () => {
         expect(onQuickEdit).toHaveBeenCalledTimes(1);
     });
 
+    it("drops a pending quick edit when another tile is pressed", async () => {
+        const onQuickEdit = jest.fn();
+        const onBrew = jest.fn();
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                onBrew={onBrew} onQuickEdit={onQuickEdit}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Quick edit Ethiopia Guji"));
+        await fireEvent.press(screen.getByLabelText("Brew Ethiopia Guji"));
+        expect(onBrew).toHaveBeenCalledTimes(1);
+
+        // The close BREW asked for must not run the panel TUNE was waiting on.
+        // One tap, one action.
+        await fireEvent.press(screen.getByTestId("simulate-close-end"));
+        expect(onQuickEdit).not.toHaveBeenCalled();
+    });
+
     it("opens quick edit anyway if the tray never reports its close", async () => {
         jest.useFakeTimers();
         const onQuickEdit = jest.fn();
