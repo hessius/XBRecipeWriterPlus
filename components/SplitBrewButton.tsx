@@ -35,8 +35,8 @@ export default function SplitBrewButton({
                        accessibilityState={{disabled: !enabled}}
                        onPress={() => enabled && onBrew()}
                        style={{flex: 1.55}}>
-                <YStack alignItems="center" paddingVertical="$3.5"
-                        backgroundColor={brewFill}>
+                <YStack flex={1} alignItems="center" justifyContent="center"
+                        paddingVertical="$3.5" backgroundColor={brewFill}>
                     <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
                                    color={enabled ? palette.base : palette.muted}>
                         BREW
@@ -54,8 +54,15 @@ export default function SplitBrewButton({
                     drawn at all. `base` is the ink the labels already use on
                     an accent fill, so the boundary reads as part of the
                     control rather than as a new colour. */}
+                {/* Both halves fill their pressable rather than sizing to
+                    their own glyph. The arrow is a shorter run of dots than
+                    BREW, so a content-sized half left a couple of points of
+                    the control's own backing showing under it: a stray dark
+                    line across the bottom of the arrow, with the hairline
+                    stopping short of it. */}
                 <YStack testID="split-brew-divider"
-                        alignItems="center" paddingVertical="$3.5"
+                        flex={1} alignItems="center" justifyContent="center"
+                        paddingVertical="$3.5"
                         borderLeftWidth={1} borderLeftColor={palette.base}
                         backgroundColor={accent}>
                     <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.6}

@@ -29,6 +29,19 @@ describe("SplitBrewButton", () => {
         expect(divider.borderLeftColor).not.toBe(divider.backgroundColor);
     });
 
+    it("fills the arrow half to the height of the control", async () => {
+        await renderWithProviders(
+            <SplitBrewButton enabled accent={ACCENT} flex={2} quickEditOpen={false}
+                             onBrew={jest.fn()} onToggleQuickEdit={jest.fn()}/>
+        );
+
+        // Sized to its own glyph, the arrow half is shorter than BREW and the
+        // control's dark backing shows through under it as a stray line.
+        const divider = flattenStyle("split-brew-divider");
+        expect(divider.flex).toBe(1);
+        expect(divider.justifyContent).toBe("center");
+    });
+
     it("still contrasts when BREW is disabled", async () => {
         await renderWithProviders(
             <SplitBrewButton enabled={false} accent={ACCENT} flex={2} quickEditOpen={false}

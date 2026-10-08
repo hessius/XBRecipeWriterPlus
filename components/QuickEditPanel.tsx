@@ -45,6 +45,7 @@ type QuickEditRowProps = {
     label: string;
     children: React.ReactNode;
     detail?: React.ReactNode;
+    fontScale: number;
 };
 
 function signed(value: number): string {
@@ -66,7 +67,17 @@ function updateAdjustment(
     return next;
 }
 
-function QuickEditRow({label, children, detail}: QuickEditRowProps) {
+/**
+ * The height one baseline line occupies, at the system font size.
+ *
+ * The slot is reserved whether or not the line is in it, because a knob grows
+ * its baseline the moment it is moved and a row that grew under the finger
+ * would shift every row below it mid-adjustment. `minHeight`, not `height`,
+ * so a wrapped line at a large font size still gets the room it asks for.
+ */
+const BASELINE_LINE_HEIGHT = 16;
+
+function QuickEditRow({label, children, detail, fontScale}: QuickEditRowProps) {
     return (
         <XStack alignItems="center" justifyContent="space-between" gap="$3"
                 paddingVertical="$2.5">
@@ -75,7 +86,11 @@ function QuickEditRow({label, children, detail}: QuickEditRowProps) {
                                color={palette.dim}>
                     {label}
                 </DotMatrixText>
-                {detail}
+                <YStack testID="quick-edit-baseline-slot"
+                        minHeight={Math.round(BASELINE_LINE_HEIGHT * fontScale)}
+                        justifyContent="center">
+                    {detail}
+                </YStack>
             </YStack>
             {children}
         </XStack>
@@ -153,7 +168,7 @@ export default function QuickEditPanel({
 
             <YStack gap="$1" borderTopWidth={1} borderBottomWidth={1}
                     borderColor={palette.line} paddingVertical="$1">
-                <QuickEditRow label="DOSE"
+                <QuickEditRow label="DOSE" fontScale={fontScale}
                               detail={baselineDetail(
                                   recipe, "dose", adjustments.dose !== undefined, fontScale
                               )}>
@@ -166,7 +181,7 @@ export default function QuickEditPanel({
                 </QuickEditRow>
 
                 {bounds.ratio !== null && (
-                    <QuickEditRow label="RATIO"
+                    <QuickEditRow label="RATIO" fontScale={fontScale}
                                   detail={baselineDetail(
                                       recipe, "ratio", adjustments.ratio !== undefined, fontScale
                                   )}>
@@ -180,7 +195,7 @@ export default function QuickEditPanel({
                 )}
 
                 {grindBounds !== null && (
-                    <QuickEditRow label="GRIND"
+                    <QuickEditRow label="GRIND" fontScale={fontScale}
                                   detail={baselineDetail(
                                       recipe, "grind", adjustments.grind !== undefined, fontScale
                                   )}>
@@ -194,7 +209,7 @@ export default function QuickEditPanel({
                     </QuickEditRow>
                 )}
 
-                <QuickEditRow label="TEMP OFFSET"
+                <QuickEditRow label="TEMP OFFSET" fontScale={fontScale}
                               detail={(
                                   <Text testID="quick-edit-temperature-baseline"
                                         fontSize={12} lineHeight={16}

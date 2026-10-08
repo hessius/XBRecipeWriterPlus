@@ -1,6 +1,6 @@
 import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
-import {Dimensions} from "react-native";
+import {Dimensions, StyleSheet} from "react-native";
 import {Text} from "tamagui";
 
 import QuickEditPanel from "@/components/QuickEditPanel";
@@ -215,6 +215,21 @@ describe("QuickEditPanel", () => {
         await fireEvent.press(screen.getByLabelText("Decrease Temperature offset"));
 
         expect(onChange).toHaveBeenCalledWith({tempOffset: -2});
+    });
+
+    it("reserves the baseline line on every row, adjusted or not", async () => {
+        await draw();
+
+        // Four knobs, four slots, with only TEMP OFFSET's line in one of them.
+        // The slot is held open so that moving a knob cannot shift the rows
+        // below it out from under the finger that moved it.
+        const slots = screen.getAllByTestId("quick-edit-baseline-slot");
+        expect(slots).toHaveLength(4);
+        for (const slot of slots) {
+            const style = StyleSheet.flatten(slot.props.style) ?? {};
+            expect((style as {minHeight?: number}).minHeight).toBe(16);
+        }
+        expect(screen.queryByTestId("quick-edit-dose-baseline")).toBeNull();
     });
 
     it("explains dose and ratio volume rescaling", async () => {
