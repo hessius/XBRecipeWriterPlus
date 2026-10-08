@@ -1,6 +1,6 @@
 import React from "react";
 import {Share, StyleSheet, TextInput} from "react-native";
-import {act, fireEvent, screen, within} from "@testing-library/react-native";
+import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 
 import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -223,6 +223,12 @@ async function renderEditor(overrides: Partial<Recipe> = {}) {
  */
 async function openAbout(): Promise<void> {
     await fireEvent.press(screen.getByLabelText("About this recipe"));
+}
+
+async function openTheQuickEditPanel(): Promise<void> {
+    mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+    await renderEditor();
+    await fireEvent.press(screen.getByLabelText("Quick edit brew"));
 }
 
 /**
@@ -562,18 +568,48 @@ describe("the editor", () => {
         expect(screen.queryByTestId("quick-edit-panel")).toBeNull();
     });
 
-    it("takes the editor away from TalkBack while quick edit covers it", async () => {
+    it("shows one BREW while the quick edit panel is open", async () => {
+        await openTheQuickEditPanel();
+
+        expect(await screen.findByTestId("quick-edit-panel")).toBeTruthy();
+        expect(screen.queryByLabelText("Brew quick edit")).toBeNull();
+        expect(screen.getAllByLabelText("Brew")).toHaveLength(1);
+    });
+
+    it("closes the panel from the arrow it opened with", async () => {
+        await openTheQuickEditPanel();
+        expect(await screen.findByTestId("quick-edit-panel")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Close quick edit"));
+        await waitFor(() => {
+            expect(screen.queryByTestId("quick-edit-panel")).toBeNull();
+        });
+    });
+
+    it("leaves the action bar reachable while the panel is open", async () => {
+        await openTheQuickEditPanel();
+
+        // The bar holds the only BREW now, so the guard that hides the screen
+        // behind a sheet must not hide the bar with it.
+        const content = screen.getByTestId("editor-content");
+        expect(content.props.accessibilityElementsHidden).toBeFalsy();
+        expect(screen.getByTestId("editor-actions")).toBeTruthy();
+    });
+
+    it("takes the deck away from TalkBack while quick edit covers it", async () => {
         mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
         await renderEditor();
-        const content = () =>
-            screen.getByTestId("editor-content", {includeHiddenElements: true});
+        const content = () => screen.getByTestId("editor-content");
+        const deck = () => screen.getByTestId("editor-deck", {includeHiddenElements: true});
 
         expect(content().props.accessibilityElementsHidden).toBe(false);
+        expect(deck().props.accessibilityElementsHidden).toBe(false);
 
         await fireEvent.press(screen.getByLabelText("Quick edit brew"));
 
-        expect(content().props.accessibilityElementsHidden).toBe(true);
-        expect(content().props.importantForAccessibility).toBe("no-hide-descendants");
+        expect(content().props.accessibilityElementsHidden).toBe(false);
+        expect(deck().props.accessibilityElementsHidden).toBe(true);
+        expect(deck().props.importantForAccessibility).toBe("no-hide-descendants");
     });
 
     it("disables the quick edit brew action when the adjusted recipe is refused", async () => {
@@ -582,7 +618,7 @@ describe("the editor", () => {
 
         await fireEvent.press(screen.getByLabelText("Quick edit brew"));
 
-        const action = screen.getByLabelText("Brew quick edit");
+        const action = screen.getByLabelText("Brew");
         expect(action.props.accessibilityState.disabled).toBe(true);
         await fireEvent.press(action);
         expect(mockPush).not.toHaveBeenCalled();

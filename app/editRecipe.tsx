@@ -737,13 +737,12 @@ type QuickEditLayerProps = {
     actionBarHeight: number;
     onChange: (adjustments: QuickEditAdjustments) => void;
     onClose: () => void;
-    onBrew: () => void;
 };
 
 const QUICK_EDIT_HORIZONTAL_PADDING = 16;
 
 function QuickEditLayer({
-    open, recipe, adjustments, accent, temperatureUnit, actionBarHeight, onChange, onClose, onBrew
+    open, recipe, adjustments, accent, temperatureUnit, actionBarHeight, onChange, onClose
 }: QuickEditLayerProps) {
     const {reduced, resolved} = useReducedMotionState();
     if (!open) return null;
@@ -758,7 +757,13 @@ function QuickEditLayer({
         : SlideOutDown.duration(duration).easing(EASING.in);
 
     return (
-        <View pointerEvents="box-none" accessibilityViewIsModal aria-label="Quick edit"
+        // Deliberately not `accessibilityViewIsModal`. The panel carries no
+        // BREW of its own: the action bar below the scrim holds the single
+        // BREW and brews whatever the panel currently says, so a modal flag
+        // here would hide the one control this panel exists to modify. The
+        // deck behind the scrim is hidden instead, on both platforms, by the
+        // wrapper in the screen.
+        <View pointerEvents="box-none" aria-label="Quick edit"
               style={{
             position: "absolute",
             top:      0,
@@ -772,7 +777,9 @@ function QuickEditLayer({
                            style={{position: "absolute", top: 0, right: 0, bottom: 0, left: 0}}>
                 <Pressable testID="quick-edit-backdrop"
                            accessibilityRole="button"
-                           accessibilityLabel="Close quick edit"
+                           // Same outcome as the arrow, but a screen reader
+                           // needs distinct names for distinct controls.
+                           accessibilityLabel="Close quick edit panel"
                            onPress={onClose}
                            style={{
                                flex:            1,
@@ -790,15 +797,7 @@ function QuickEditLayer({
                                 adjustments={adjustments}
                                 accent={accent}
                                 temperatureUnit={temperatureUnit}
-                                onChange={onChange}
-                                renderBrewAction={(brewability) => (
-                                    <BarButton label="BREW"
-                                               accessibilityLabel="Brew quick edit"
-                                               enabled={brewability.brewable}
-                                               accent={accent}
-                                               flex={1}
-                                               onPress={onBrew}/>
-                                )}/>
+                                onChange={onChange}/>
             </Animated.View>
         </View>
     );
@@ -1020,6 +1019,21 @@ export default function EditRecipe(
 
     if (!recipe) return null;
 
+    // While the panel is open the bar's BREW is the panel's BREW: it brews
+    // what the knobs currently say, and refuses for the same reasons the panel
+    // reports. A combination the machine would reject must not be reachable
+    // from a control sitting below the notice explaining why.
+    const quickEditBlocked = quickEditOpen
+        && quickEditProblems(recipe, quickEditAdjustments, temperatureUnit).length > 0;
+
+    function closeQuickEdit() {
+        setQuickEditOpen(false);
+        // Closing discards. The adjustment is only visible while the panel is,
+        // so keeping it would leave the bar's BREW quietly brewing something
+        // the screen no longer shows.
+        setQuickEditAdjustments({});
+    }
+
     // Every edit republishes the recipe: the model is mutated in place, so a key
     // bump is what repaints the steppers and the derived total. Several of the
     // hook's field updaters do not bump the key themselves, so the screen does.
@@ -1235,7 +1249,10 @@ export default function EditRecipe(
     // `accessibilityViewIsModal` does on iOS.
     const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
         || bypassWriteOpen || renameOpen || beanProfileOpen || leavePrompt !== null
-        || ratingNoteOpen || quickEditOpen;
+        || ratingNoteOpen;
+    // The quick edit panel covers the deck but not the action bar, which holds
+    // the BREW it adjusts. So it hides the deck rather than the screen.
+    const deckCovered = screenCovered || quickEditOpen;
 
     return (
         <>
@@ -1248,6 +1265,9 @@ export default function EditRecipe(
             <YStack testID="editor-content" flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
+            <YStack testID="editor-deck" flex={1}
+                    accessibilityElementsHidden={deckCovered}
+                    importantForAccessibility={deckCovered ? "no-hide-descendants" : "auto"}>
             {/* Outside the scroll view, so it is the screen's header rather
                 than its first row. It collapses itself on scroll instead of
                 scrolling away: it stays mounted and animates its height,
@@ -1368,13 +1388,14 @@ export default function EditRecipe(
                     </View>
                 )}
             </ScrollView>
+            </YStack>
 
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
                        canBrewAtAll={rememberedMachine !== ""}
-                       canBrew={canBrew}
+                       canBrew={canBrew && !quickEditBlocked}
                        quickEditOpen={quickEditOpen}
-                       onBrew={onBrewPress}
-                       onQuickEdit={onQuickEditOpen}
+                       onBrew={quickEditOpen ? onQuickEditBrewPress : onBrewPress}
+                       onQuickEdit={quickEditOpen ? closeQuickEdit : onQuickEditOpen}
                        onWrite={onWritePress}
                        onSave={async () => {
                            await flushDrafts();
@@ -1398,8 +1419,7 @@ export default function EditRecipe(
                             temperatureUnit={temperatureUnit}
                             actionBarHeight={actionBarHeight}
                             onChange={setQuickEditAdjustments}
-                            onClose={() => setQuickEditOpen(false)}
-                            onBrew={onQuickEditBrewPress}/>
+                            onClose={closeQuickEdit}/>
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
                                  recipeUuid={recipe.uuid}
