@@ -568,6 +568,22 @@ describe("the editor", () => {
         expect(screen.queryByTestId("quick-edit-panel")).toBeNull();
     });
 
+    it("enables BREW once quick edit repairs an unbrewable recipe", async () => {
+        // 18 g at 17 with 288 ml of stages: the machine refuses the mismatch,
+        // so the saved recipe cannot be brewed. Taking the ratio back to 16
+        // rescales the stages and the combination is brewable again, which the
+        // bar's BREW is now the only control able to say.
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor({ratio: 17});
+
+        expect(screen.getByLabelText("Brew").props.accessibilityState.disabled).toBe(true);
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+        await fireEvent.press(screen.getByLabelText("Decrease Quick edit ratio"));
+
+        expect(screen.getByLabelText("Brew").props.accessibilityState.disabled).toBe(false);
+    });
+
     it("shows one BREW while the quick edit panel is open", async () => {
         await openTheQuickEditPanel();
 

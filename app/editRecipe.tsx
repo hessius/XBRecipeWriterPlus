@@ -918,7 +918,7 @@ export default function EditRecipe(
     const {collapsed, onScroll} = useCollapsibleHeader();
 
     const {
-        recipe, balance, canBrew, canWrite, canSave, revertSources,
+        recipe, balance, canBrew, canWrite, canSave, revertSources, inputError,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, saveMetadata,
         hasPendingEdits, recipeInLibrary, toggleFavourite, editTags,
         editInputComplete, setVolumeError, setInputError, editStage,
@@ -1025,6 +1025,17 @@ export default function EditRecipe(
     // from a control sitting below the notice explaining why.
     const quickEditBlocked = quickEditOpen
         && quickEditProblems(recipe, quickEditAdjustments, temperatureUnit).length > 0;
+    /**
+     * While the panel is open the knobs are the recipe, so they are what is
+     * judged. `canBrew` reads the *saved* recipe, and an adjustment can repair
+     * one the machine would have refused: a 18 g recipe carrying 288 ml of
+     * stages at a ratio of 17 is a mismatch, and taking the ratio to 16
+     * rescales it into agreement. Gating the bar on the saved verdict left
+     * that brew with no enabled control anywhere, now that the panel has no
+     * BREW of its own. `inputError` still counts, because a half-typed field
+     * on the deck behind the panel is not something to brew over.
+     */
+    const canBrewNow = quickEditOpen ? !quickEditBlocked && !inputError : canBrew;
 
     function closeQuickEdit() {
         setQuickEditOpen(false);
@@ -1392,7 +1403,7 @@ export default function EditRecipe(
 
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
                        canBrewAtAll={rememberedMachine !== ""}
-                       canBrew={canBrew && !quickEditBlocked}
+                       canBrew={canBrewNow}
                        quickEditOpen={quickEditOpen}
                        onBrew={quickEditOpen ? onQuickEditBrewPress : onBrewPress}
                        onQuickEdit={quickEditOpen ? closeQuickEdit : onQuickEditOpen}
