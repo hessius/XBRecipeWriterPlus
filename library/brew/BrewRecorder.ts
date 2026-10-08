@@ -69,6 +69,10 @@ export default class BrewRecorder {
     private startedAt = 0;
     /** Wall clock of the first water that moved, or 0 before it. The samples' zero. */
     private pouringAt = 0;
+    /** Wall clock when the current pause opened, or null when none is open. */
+    private pausedAt: number | null = null;
+    /** Milliseconds held across every pause so far. */
+    private pausedMs = 0;
     /** True once the pour phase has opened, so the backstop knows a brew began. */
     private pourOpened = false;
     /** Wall clock when the pour phase opened — the fallback zero if water never moves. */
@@ -249,6 +253,18 @@ export default class BrewRecorder {
 
     private observe(phase: BrewPhase): void {
         this.noteDial(phase);
+        // The pause clock. Opened on the phase and closed by whatever phase
+        // follows it, so a brew paused three times is the sum of three spans
+        // rather than the last one.
+        if (phase.name === "paused") {
+            if (this.pausedAt === null) this.pausedAt = this.clock();
+            return;
+        }
+        // Here rather than beside `summarise`, and that is load-bearing: a
+        // brew cancelled out of a pause is the case where the span is longest,
+        // and the terminal phase arrives through this same line, so closing it
+        // here closes it for the record too.
+        this.closePause();
         if (phase.name === "pouring") {
             this.pour = phase.pour;
             this.pours = phase.pours;
@@ -294,6 +310,13 @@ export default class BrewRecorder {
             return;
         }
         this.emit(phase);
+    }
+
+    /** Shut an open pause span, adding it to the total. */
+    private closePause(): void {
+        if (this.pausedAt === null) return;
+        this.pausedMs += Math.max(0, this.clock() - this.pausedAt);
+        this.pausedAt = null;
     }
 
     private beginSettle(): void {
@@ -380,7 +403,9 @@ export default class BrewRecorder {
         const plannedWater = recipe.pours.reduce(
             (sum, pour) => sum + Math.max(pour.volume, 0), 0
         );
-        const figures = summarise(this.collected, plannedSeconds(recipe.pours));
+        const figures = summarise(
+            this.collected, plannedSeconds(recipe.pours), this.pausedMs / 1000
+        );
         const failure: BrewFailure | null =
             phase.name === "failed" ? phase.reason : null;
         const stages = this.pours > 0 ? this.pours : recipe.pours.length;
@@ -473,7 +498,13 @@ export default class BrewRecorder {
             // leaves the key off the row entirely and reads back exactly like
             // a record written before this field existed.
             ...(cupAtDrawdown === null ? {} : {cupAtDrawdown}),
-            ...figures
+            waterTotal: figures.waterTotal,
+            cupTotal: figures.cupTotal,
+            heldSeconds: figures.heldSeconds,
+            // Omitted when nobody paused, so an ordinary brew's record is what
+            // it was before the pause existed. The storage column has the same
+            // rule, and the backup round trip depends on the two agreeing.
+            ...(figures.pausedSeconds > 0 ? {pausedSeconds: figures.pausedSeconds} : {})
         };
         // The machine hands a phase to every listener in turn, and this is one
         // of them. If the write throws — a full disk is the realistic way —

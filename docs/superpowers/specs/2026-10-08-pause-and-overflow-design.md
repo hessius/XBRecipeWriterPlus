@@ -87,6 +87,17 @@ holding water back on its own judgement; paused time is a person stopping it.
 A record that could not distinguish them would be unable to answer the only
 question worth asking of the pair, which is whose decision made this brew long.
 
+**And it has to be subtracted from `heldSeconds`, not merely kept beside it.**
+`summarise` derives held time as `elapsed - plannedSeconds`: it is not measured
+at all, it is whatever the brew took beyond its plan. So a two-minute pause
+lands in `heldSeconds` on its own, without anybody writing a line of code, and
+the finished brew reports two minutes of the machine holding water back that
+the machine never held. `summarise` therefore takes the paused seconds and
+removes them, and `heldSeconds` goes back to meaning what it says.
+
+This is the one place in either package where doing nothing produces a wrong
+answer rather than a missing one.
+
 ### 4. Package 9 is a safety feature built on an untested assumption
 
 Custom overflow protection means: for a cup type the machine does not protect,

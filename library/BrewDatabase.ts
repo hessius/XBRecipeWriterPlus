@@ -108,6 +108,7 @@ type BrewRow = {
     waterTotal: number;
     cupTotal: number;
     heldSeconds: number;
+    pausedSeconds: number | null;
     /** JSON, one list of stalls per stage. `[]` on rows written before it. */
     stalls: string | null;
     /** JSON, the plan as it stood. `[]` on rows written before it. */
@@ -193,6 +194,7 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 waterTotal REAL NOT NULL,
                 cupTotal REAL NOT NULL,
                 heldSeconds INTEGER NOT NULL,
+                pausedSeconds INTEGER NOT NULL DEFAULT 0,
                 stalls TEXT NOT NULL DEFAULT '[]',
                 plan TEXT NOT NULL DEFAULT '[]',
                 stageWater TEXT NOT NULL DEFAULT '[]',
@@ -243,6 +245,15 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     // versions Expo ships, so the failure is caught instead.
     try {
         db.execSync("ALTER TABLE brews ADD COLUMN pouringAt INTEGER NOT NULL DEFAULT 0;");
+    } catch {
+        // Already there.
+    }
+    // 0 means nobody paused, which is also what every row written before the
+    // pause existed should say. The sentinel and the truth coincide here, so
+    // unlike `cupAtDrawdown` there is nothing for `hydrate` to translate back
+    // into absence beyond omitting the key.
+    try {
+        db.execSync("ALTER TABLE brews ADD COLUMN pausedSeconds INTEGER NOT NULL DEFAULT 0;");
     } catch {
         // Already there.
     }
@@ -507,7 +518,7 @@ class BrewDatabase {
             `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                 drawdownAt, cupAtDrawdown,
                                 endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                heldSeconds, stalls, plan, stageWater, bypass,
+                                heldSeconds, pausedSeconds, stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched,
                                 adjustedFromDose, adjustedFromRatio,
                                 adjustedFromGrind, adjustedTempOffset,
@@ -516,7 +527,7 @@ class BrewDatabase {
                                 dialBefore, dialAfter, coffee, recipeUrl,
                                 origin, roast, process, fermentation, sentAt, hasStream)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
                 record.startedAt, record.pouringAt ?? 0, record.drawdownAt ?? 0,
@@ -527,6 +538,7 @@ class BrewDatabase {
                 record.cupAtDrawdown ?? 0,
                 record.endedAt, record.outcome, record.failure,
                 record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
+                record.pausedSeconds ?? 0,
                 JSON.stringify(record.stalls ?? []),
                 JSON.stringify(record.plan ?? []),
                 JSON.stringify(record.stageWater ?? []),
@@ -1184,6 +1196,9 @@ function hydrate(row: BrewRow): StoredBrew {
         waterTotal: row.waterTotal,
         cupTotal: row.cupTotal,
         heldSeconds: row.heldSeconds,
+        // Emitted only when somebody paused, so an ordinary brew serialises
+        // byte for byte the way it did before this column existed.
+        ...((row.pausedSeconds ?? 0) > 0 ? {pausedSeconds: row.pausedSeconds ?? 0} : {}),
         ...(stalls.length > 0 ? {stalls} : {}),
         ...(plan.length > 0 ? {plan} : {}),
         ...(stageWater.length > 0 ? {stageWater} : {}),

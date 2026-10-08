@@ -1124,3 +1124,78 @@ describe("the bypass", () => {
         expect(saved?.outcome).toBe("endedOnMachine");
     });
 });
+
+describe("the pause clock", () => {
+    function paused(pour = 1): BrewPhase {
+        return {name: "paused", pour, pours: 2, was: {name: "pouring", pour, pours: 2}};
+    }
+
+    it("records nothing when nobody paused", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        time.advance(60_000);
+        fake.phase({name: "done"});
+
+        expect(records[0].record.pausedSeconds).toBeUndefined();
+    });
+
+    it("measures a pause from the phase to the one that follows it", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        time.advance(30_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.phase({name: "done"});
+
+        expect(records[0].record.pausedSeconds).toBe(30);
+    });
+
+    it("sums every pause rather than keeping the last", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        time.advance(20_000);
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.phase(paused());
+        time.advance(15_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.phase({name: "done"});
+
+        expect(records[0].record.pausedSeconds).toBe(35);
+    });
+
+    it("keeps a pause that was still open when the brew ended", () => {
+        // Cancelling from a pause is the realistic way a pause ends, and it is
+        // the case where the span is longest. Closing it only on the next
+        // phase would throw exactly that one away.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        time.advance(45_000);
+        fake.phase({name: "cancelled"});
+
+        expect(records[0].record.pausedSeconds).toBe(45);
+    });
+
+    it("does not report a pause as the machine holding water back", () => {
+        // Held time is `elapsed - planned`, so without the subtraction the
+        // pause arrives in it untouched. The plan here is 20 s of pause plus
+        // two pours; a 40 s pause inside a brew that otherwise ran to plan is
+        // not the machine holding anything.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        time.advance(40_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.water(200);
+        fake.phase({name: "done"});
+
+        expect(records[0].record.heldSeconds).toBe(0);
+        expect(records[0].record.pausedSeconds).toBe(40);
+    });
+});
