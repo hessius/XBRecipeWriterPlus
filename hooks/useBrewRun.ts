@@ -200,12 +200,22 @@ export function useBrewRun(
     }, [over, runId]);
 
     const pours = recipe?.pours ?? [];
+    // Where the brew is standing, which is not always what it is doing. A
+    // pause is the one phase that reports neither: read off `phase` alone it
+    // is neither pouring nor over, so the whole ladder would drop to the
+    // un-started look the moment the user pressed PAUSE, and the bypass rung
+    // with it. The pause remembers what it interrupted; that is what the
+    // picture is of.
+    const standing = phase.name === "paused" ? phase.was : phase;
+    const standingPouring = standing.name === "pouring";
+    const standingSettling = standing.name === "settling";
+    const standingOver = OVER.has(standing.name);
     // Settling is treated like `over` here: every stage has physically poured,
     // so the ladder must stay fully lit rather than dropping to the un-started
     // look while the coffee drains.
-    const activeIndex = pouring
-        ? (phase as {name: "pouring"; pour: number; pours: number}).pour - 1
-        : over || settling ? pours.length : null;
+    const activeIndex = standingPouring
+        ? (standing as {name: "pouring"; pour: number; pours: number}).pour - 1
+        : standingOver || standingSettling ? pours.length : null;
 
     // Where this stage was *planned* to begin. Still plan-relative, and still
     // only a time source: nothing that is persisted or exported passes through
@@ -269,9 +279,9 @@ export function useBrewRun(
             delivered: bypassDelivered,
             startedAt: bypassSample === undefined ? null : bypassSample.at / 1000,
             state: bypassRungState({
-                phaseName: phase.name,
-                over,
-                settling,
+                phaseName: standing.name,
+                over: standingOver,
+                settling: standingSettling,
                 activeIndex,
                 stages: pours.length,
                 lastPauseDone: lastPour !== undefined

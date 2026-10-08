@@ -299,7 +299,11 @@ export default class BrewRecorder {
             // `pouringAt` is 0 if water never moved; `ensurePouringAt` is what
             // the terminal path uses, and the same fallback applies here.
             this.ensurePouringAt();
-            this.bypassAt = this.clock() - this.pouringAt;
+            // Once only. Leaving a pause restores the phase it interrupted,
+            // so a brew paused during the bypass arrives here a second time,
+            // and stamping it again would place the bypass wherever the user
+            // happened to press RESUME: shorter than it was, and slid right.
+            if (this.bypassAt === null) this.bypassAt = this.clock() - this.pouringAt;
             return;
         }
         // Non-terminal: water is done but coffee is still draining onto the
