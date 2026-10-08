@@ -1,4 +1,5 @@
 import React, {useState} from "react";
+import {Pressable} from "react-native";
 import {act, fireEvent, screen, within} from "@testing-library/react-native";
 import {renderWithProviders} from "@/test-utils/render";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
@@ -134,6 +135,10 @@ function props(overrides = {}) {
         onDuplicate: jest.fn(),
         ...overrides
     };
+}
+
+function MockDismissButton({onPress}: {onPress: () => void}) {
+    return <Pressable testID="dismiss-hint" onPress={onPress}/>;
 }
 
 beforeEach(() => {
@@ -311,6 +316,53 @@ describe("SwipeableRecipeRow", () => {
         await fireEvent.press(screen.getByTestId("simulate-drag"));
 
         expect(onManualOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not close over the user's drag when their swipe retires the hint", async () => {
+        function Owner() {
+            const [hintTray, setHintTray] = useState<"action" | null>("action");
+            return (
+                <SwipeableRecipeRow {...props({
+                    hintTray,
+                    onManualOpen: () => setHintTray(null)
+                })}/>
+            );
+        }
+
+        await renderWithProviders(<Owner/>);
+
+        await fireEvent.press(screen.getByTestId("simulate-drag"));
+
+        expect(mockClose).not.toHaveBeenCalled();
+    });
+
+    it("still closes when a hinted row is dismissed without a drag", async () => {
+        function Owner() {
+            const [hintTray, setHintTray] = useState<"action" | null>("action");
+            return (
+                <>
+                    <SwipeableRecipeRow {...props({hintTray})}/>
+                    <MockDismissButton onPress={() => setHintTray(null)}/>
+                </>
+            );
+        }
+
+        await renderWithProviders(<Owner/>);
+
+        await fireEvent.press(screen.getByTestId("dismiss-hint"));
+
+        expect(mockClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("still closes when a hinted row unmounts before its timers fire", async () => {
+        jest.useFakeTimers();
+        const {unmount} = await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action"
+        })}/>);
+
+        await act(async () => { unmount(); });
+
+        expect(mockClose).toHaveBeenCalledTimes(1);
     });
 
     it("closes both staggered hint trays even after the first row reports completion", async () => {

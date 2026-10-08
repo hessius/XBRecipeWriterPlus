@@ -194,7 +194,9 @@ export default function SwipeableRecipeRow({
     const bouncedRef = useRef(onBounced);
     const shownRef = useRef(onShown);
     const manualOpenRef = useRef(onManualOpen);
+    const manualDragInProgressRef = useRef(false);
     const [handleManualOpenStartDrag] = useState(() => () => {
+        manualDragInProgressRef.current = true;
         manualOpenRef.current?.();
     });
 
@@ -208,6 +210,7 @@ export default function SwipeableRecipeRow({
         if (hintTray === null || hintTray === undefined) {
             return;
         }
+        manualDragInProgressRef.current = false;
         const swipeable = swipeableRef.current;
         // The hint may now teach both trays, but never by wobbling one card
         // both ways. The owner assigns one tray to one row and the other tray
@@ -244,7 +247,9 @@ export default function SwipeableRecipeRow({
             clearTimeout(close);
             // If the owner suppresses the hint mid-lesson, cleanup must restore
             // the row instead of leaving an already opened tray stranded.
-            swipeable?.close();
+            if (!manualDragInProgressRef.current) {
+                swipeable?.close();
+            }
         };
     }, [hintTray, hintDelayMs]);
 
