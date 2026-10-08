@@ -5,6 +5,7 @@ import {
     BREW_FIGURE_GRIND_FLEX,
     brewFigureAdjustmentColumns,
     brewFigureAdjustmentColumnWidth,
+    brewFigureAdjustmentLayout,
     brewFigureBadgeWidth,
     brewFigureColumnWidths,
     brewFigureTextGeometry,
@@ -19,7 +20,7 @@ import {
 } from "@/library/dotoMetrics";
 
 const CAPTURE_PADDING = SCREEN_PADDING + 12;
-const ADJUSTMENT_BADGES = ["RECIPE 31", "RECIPE 100", "RECIPE OFF", "RECIPE 80 to 90"];
+const ADJUSTMENT_BADGES = ["RECIPE 31", "RECIPE 100", "RECIPE OFF", "OFFSET"];
 
 function labelWidth(text: string, fontScale: number): number {
     const geometry = brewFigureTextGeometry();
@@ -118,10 +119,14 @@ describe("detail row columns", () => {
         }
     });
 
-    it("keeps two quick-edit columns when the badges fit and falls back when they do not", () => {
-        expect(brewFigureAdjustmentColumns(contentWidth(430), 1, ADJUSTMENT_BADGES))
-            .toBe(2);
-        expect(brewFigureAdjustmentColumns(contentWidth(375), DOTO_MAX_FONT_SCALE, ADJUSTMENT_BADGES))
-            .toBe(1);
+    it("keeps two quick-edit columns at common capture widths and the font cap", () => {
+        for (const width of [375, 393, 402, 430]) {
+            expect(brewFigureAdjustmentColumns(
+                contentWidth(width), DOTO_MAX_FONT_SCALE, ADJUSTMENT_BADGES
+            )).toBe(2);
+            expect(brewFigureAdjustmentLayout(
+                contentWidth(width), DOTO_MAX_FONT_SCALE, ADJUSTMENT_BADGES
+            )).toMatchObject({columns: 2, rows: 2});
+        }
     });
 });

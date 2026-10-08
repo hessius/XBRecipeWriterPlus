@@ -163,21 +163,47 @@ export function brewFigureAdjustmentColumns(
         : 1;
 }
 
-/** The adjustment row wraps to one column when a baseline badge needs it. */
+export type BrewFigureAdjustmentLayout = {
+    columns: 1 | 2;
+    columnWidth: number;
+    rows: number;
+};
+
+/** The adjustment row wraps to one column when a badge needs it. */
+export function brewFigureAdjustmentLayout(
+    contentWidth: number,
+    fontScale: number,
+    badges: string[],
+    scale = 1
+): BrewFigureAdjustmentLayout {
+    const columns = brewFigureAdjustmentColumns(contentWidth, fontScale, badges, scale);
+    if (columns === 1) {
+        return {
+            columns,
+            columnWidth: Math.max(0, contentWidth),
+            rows:        badges.length
+        };
+    }
+    const geometry = brewFigureTextGeometry(scale);
+    return {
+        columns,
+        columnWidth: Math.max(
+            0,
+            (
+                contentWidth
+                - geometry.columnGap * (columns - 1)
+            ) / columns
+        ),
+        rows: Math.ceil(badges.length / columns)
+    };
+}
+
+/** The adjustment row wraps to one column when a badge needs it. */
 export function brewFigureAdjustmentColumnWidth(
     contentWidth: number,
     fontScale: number,
     badges: string[],
     scale = 1
 ): number {
-    const columns = brewFigureAdjustmentColumns(contentWidth, fontScale, badges, scale);
-    if (columns === 1) return Math.max(0, contentWidth);
-    const geometry = brewFigureTextGeometry(scale);
-    return Math.max(
-        0,
-        (
-            contentWidth
-            - geometry.columnGap * (columns - 1)
-        ) / columns
-    );
+    return brewFigureAdjustmentLayout(contentWidth, fontScale, badges, scale).columnWidth;
 }

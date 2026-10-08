@@ -416,8 +416,57 @@ describe("brew record", () => {
             dose:        {value: 20, from: 18},
             ratio:       {value: 18, from: 16},
             grind:       {value: 61, from: 50},
-            temperature: {offset: 2, baseline: [88, 90]}
+            temperature: {offset: 2}
         });
+    });
+
+    it("hands a saturating temperature quick edit to the summary as an offset only", async () => {
+        mockOpened = {
+            record: {
+                ...record,
+                adjustedTempOffset: 3,
+                plan: [
+                    {pourNumber: 1, volume: 40, temperature: 99, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 20},
+                    {pourNumber: 2, volume: 70, temperature: 98, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 20},
+                    {pourNumber: 3, volume: 90, temperature: 93, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 0}
+                ]
+            },
+            samples: []
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(summaryProps.adjustments).toEqual({temperature: {offset: 3}});
+        expect(screen.getByText("OFFSET")).toBeTruthy();
+        expect(screen.queryByText("RECIPE 96, 95, 90")).toBeNull();
+        expect(screen.queryByText("RECIPE 94")).toBeNull();
+    });
+
+    it("uses the adjusted grind row alone when the dial reading was not confirmed", async () => {
+        mockOpened = {
+            record: {
+                ...record,
+                dose: 20,
+                ratio: 18,
+                grindSize: 61,
+                adjustedFromGrind: 50,
+                grinderUsed: true,
+                dialAfter: undefined
+            },
+            samples: []
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(summaryProps.grind).toBeNull();
+        expect(summaryProps.adjustments).toEqual({
+            grind: {value: 61, from: 50, confirmed: false}
+        });
+        expect(screen.getByTestId("figures-adjusted-grind-outline")).toBeTruthy();
+        expect(screen.queryByTestId("figures-grind")).toBeNull();
     });
 
     it("says the trace has expired rather than drawing an empty chart", async () => {

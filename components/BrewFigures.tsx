@@ -15,7 +15,7 @@ import {
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
-    brewFigureAdjustmentColumnWidth,
+    brewFigureAdjustmentLayout,
     brewFigureBadgeGeometry,
     brewFigureColumnFlex,
     brewFigureUsesFourColumns,
@@ -23,7 +23,6 @@ import {
 } from "@/library/brew/figureGeometry";
 import {formatFlowRate} from "@/library/brew/flowRate";
 import {DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
-import {describeTemperatureBaseline} from "@/library/quickEdit";
 import {GRINDER_OFF_VALUE} from "@/library/Recipe";
 
 const DOTO_LINE_HEIGHT = 1.35;
@@ -128,8 +127,8 @@ type Props = {
 export type BrewFigureAdjustments = {
     dose?: {value: number; from: number};
     ratio?: {value: number; from: number};
-    grind?: {value: number; from: number};
-    temperature?: {offset: number; baseline: number[]};
+    grind?: {value: number; from: number; confirmed?: boolean};
+    temperature?: {offset: number};
 };
 
 function FigureBadge({children, testID, textScale = 1}: {
@@ -237,6 +236,7 @@ type AdjustmentFigure = {
     value: string;
     badge: string;
     accessibilityLabel: string;
+    outlined?: boolean;
 };
 
 function signed(value: number): string {
@@ -248,8 +248,7 @@ function grindText(value: number): string {
 }
 
 function adjustmentFigures(
-    adjustments: BrewFigureAdjustments | undefined,
-    fontScale: number
+    adjustments: BrewFigureAdjustments | undefined
 ): AdjustmentFigure[] {
     if (adjustments === undefined) return [];
     const figures: AdjustmentFigure[] = [];
@@ -277,16 +276,13 @@ function adjustmentFigures(
         });
     }
     if (adjustments.temperature !== undefined) {
-        const baseline = describeTemperatureBaseline({
-            pours: adjustments.temperature.baseline.map((temperature) => ({temperature}))
-        }, fontScale);
         const offset = signed(adjustments.temperature.offset);
         figures.push({
             key:                "temperature",
             label:              "TEMP",
             value:              offset,
-            badge:              baseline.toUpperCase(),
-            accessibilityLabel: `Temperature offset, ${offset} degrees, ${baseline}`
+            badge:              "OFFSET",
+            accessibilityLabel: `Temperature offset, ${offset} degrees`
         });
     }
     if (adjustments.grind !== undefined) {
@@ -297,11 +293,18 @@ function adjustmentFigures(
             badge:              `RECIPE ${grindText(adjustments.grind.from)}`,
             accessibilityLabel: `Grind, ${grindText(adjustments.grind.value)}, recipe ${
                 grindText(adjustments.grind.from)
-            }`
+            }${adjustments.grind.confirmed === false ? ", not confirmed by the machine" : ""}`,
+            outlined:           adjustments.grind.confirmed === false
         });
     }
 
     return figures;
+}
+
+export function brewFigureAdjustmentBadges(
+    adjustments: BrewFigureAdjustments | undefined
+): string[] {
+    return adjustmentFigures(adjustments).map((figure) => figure.badge);
 }
 
 /**
@@ -381,11 +384,11 @@ export default function BrewFigures(
     const hasQuietLine = fourColumns && recipeBadgeText !== null;
     const rateColumn = fourColumns ? drawdownRateText : null;
     const rateInDrawdown = fourColumns ? null : drawdownRateText;
-    const adjusted = adjustmentFigures(adjustments, fontScale);
-    const adjustmentColumnWidth = brewFigureAdjustmentColumnWidth(
+    const adjusted = adjustmentFigures(adjustments);
+    const adjustmentLayout = brewFigureAdjustmentLayout(
         contentWidth,
         fontScale,
-        adjusted.map((figure) => figure.badge),
+        brewFigureAdjustmentBadges(adjustments),
         textScale
     );
 
@@ -581,13 +584,14 @@ export default function BrewFigures(
                             labelTracking={figureText.labelTracking}
                             valueTracking={figureText.valueTracking}
                             accessibilityLabel={figure.accessibilityLabel}
+                            outlined={figure.outlined}
                             quiet={(
                                 <FigureBadge testID={`figures-adjusted-${figure.key}-recipe`}
                                              textScale={textScale}>
                                     {figure.badge}
                                 </FigureBadge>
                             )}
-                            width={adjustmentColumnWidth}
+                            width={adjustmentLayout.columnWidth}
                         />
                     ))}
                 </XStack>

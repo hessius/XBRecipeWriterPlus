@@ -5,7 +5,7 @@ import {PixelRatio, Pressable, ScrollView, useWindowDimensions} from "react-nati
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
-import type {BrewFigureAdjustments} from "@/components/BrewFigures";
+import {brewFigureAdjustmentBadges, type BrewFigureAdjustments} from "@/components/BrewFigures";
 import BrewStoryCard from "@/components/BrewStoryCard";
 import BrewStorySheet from "@/components/BrewStorySheet";
 import BrewSummary from "@/components/BrewSummary";
@@ -42,10 +42,12 @@ import {
     storyHiddenFromSetting,
     storyHiddenToSetting,
     storySummaryBudget,
+    storyTextContentWidth,
     storyTextScale,
     type StoryContentKey
 } from "@/library/brew/storyCard";
 import {plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
+import {brewFigureAdjustmentLayout} from "@/library/brew/figureGeometry";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {RECORD_ACTION_GAP, SCREEN_PADDING} from "@/constants/layout";
@@ -61,25 +63,27 @@ const JUDGEMENT_ACTION_GAP = "$4";
 
 function quickEditFigures(
     record: StoredBrew,
-    stages: {temperature: number}[]
+    grind: GrindFigure | null
 ): BrewFigureAdjustments | undefined {
     const adjustments: BrewFigureAdjustments = {};
 
     if (record.adjustedFromDose !== undefined && record.dose !== undefined) {
         adjustments.dose = {value: record.dose, from: record.adjustedFromDose};
     }
+
     if (record.adjustedFromRatio !== undefined && record.ratio !== undefined) {
         adjustments.ratio = {value: record.ratio, from: record.adjustedFromRatio};
     }
     if (record.adjustedFromGrind !== undefined && record.grindSize !== undefined) {
-        adjustments.grind = {value: record.grindSize, from: record.adjustedFromGrind};
+        adjustments.grind = {
+            value:     record.grindSize,
+            from:      record.adjustedFromGrind,
+            confirmed: grind?.kind === "recipe" ? false : undefined
+        };
     }
     const tempOffset = record.adjustedTempOffset;
-    if (tempOffset !== undefined && stages.length > 0) {
-        adjustments.temperature = {
-            offset:   tempOffset,
-            baseline: stages.map((stage) => stage.temperature - tempOffset)
-        };
+    if (tempOffset !== undefined) {
+        adjustments.temperature = {offset: tempOffset};
     }
 
     return Object.keys(adjustments).length === 0 ? undefined : adjustments;
@@ -333,6 +337,9 @@ export default function BrewRecord({recipeLookup}: Props) {
     );
     const figures = brewFigures(record);
     const drawdown = drawdownFigures(record);
+    const grind = dialNote(record);
+    const adjustments = quickEditFigures(record, grind);
+    const summaryGrind = adjustments?.grind?.confirmed === false ? null : grind;
 
     function openComparisonPicker(): void {
         const candidates = sharedBrewDatabase()
@@ -394,8 +401,8 @@ export default function BrewRecord({recipeLookup}: Props) {
             drawdown?.seconds ?? null,
             plannedSecs
         ),
-        grind:             dialNote(record),
-        adjustments:       quickEditFigures(record, stages)
+        grind:             summaryGrind,
+        adjustments
     };
     const hasStoryRateChart = hasDrawableRateRun(summary.rateSeries);
     const hasStoryDetails = [
@@ -404,9 +411,8 @@ export default function BrewRecord({recipeLookup}: Props) {
         summary.grind !== null,
         summary.adjustments !== undefined
     ].some(Boolean);
-    const storyDetailRows = ([
-        summary.drawdown !== null || summary.delay !== null || summary.grind !== null,
-        summary.adjustments !== undefined
+    const storyFigureDetailRows = ([
+        summary.drawdown !== null || summary.delay !== null || summary.grind !== null
     ].filter(Boolean)).length;
     const storyFacts = storyContentFacts({
         hasRateChart:   hasStoryRateChart,
@@ -414,7 +420,8 @@ export default function BrewRecord({recipeLookup}: Props) {
         hasRating:      judgement.rating > 0,
         tags:           record.tags ?? [],
         hasSummaryNote: summary.note !== undefined,
-        figureExtraRows: storyDetailRows
+        figureExtraRows: storyFigureDetailRows,
+        figureAdjustmentRows: summary.adjustments === undefined ? 0 : 1
     });
     const storyHidden = storyHiddenFromSetting(storyCardHidden);
     function storyContentRequested(key: StoryContentKey): boolean {
@@ -641,6 +648,15 @@ export default function BrewRecord({recipeLookup}: Props) {
                             shotRef={story.shotRef} busy={story.busy}
                             onShare={() => void story.shareImage()}
                             layout={(cardWidth) => {
+                                const storyFontScale = PixelRatio.getFontScale();
+                                const storyAdjustmentRows = summary.adjustments === undefined
+                                    ? 0
+                                    : brewFigureAdjustmentLayout(
+                                        storyTextContentWidth(cardWidth),
+                                        storyFontScale,
+                                        brewFigureAdjustmentBadges(summary.adjustments),
+                                        storyTextScale(cardWidth)
+                                    ).rows;
                                 const budget = storySummaryBudget({
                                     width: cardWidth,
                                     stages: stages.length,
@@ -655,8 +671,9 @@ export default function BrewRecord({recipeLookup}: Props) {
                                     drawdownRate: storyHasDetails ? summary.drawdownRate : null,
                                     hasSummaryNote: storyHasNote,
                                     stagesUnavailable: summary.stagesUnavailable,
-                                    figureExtraRows: storyHasDetails ? storyDetailRows : 0,
-                                    fontScale: PixelRatio.getFontScale()
+                                    figureExtraRows: storyHasDetails ? storyFigureDetailRows : 0,
+                                    figureAdjustmentRows: storyHasDetails ? storyAdjustmentRows : 0,
+                                    fontScale: storyFontScale
                                 });
                                 const toggles = offeredStoryContent(storyFacts).map((key) => ({
                                     key,

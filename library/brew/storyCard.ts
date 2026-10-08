@@ -98,6 +98,7 @@ export type StorySummaryBudgetInput = {
     hasGrindRecipeBadge?: boolean;
     drawdownRate?: number | null;
     figureExtraRows?: number;
+    figureAdjustmentRows?: number;
     hasSummaryNote?: boolean;
     stagesUnavailable?: boolean;
     fontScale?: number;
@@ -115,18 +116,19 @@ const STORY_CONTENT_SET = new Set<string>(STORY_CONTENT_KEYS);
 
 export function storyContentFacts({
     hasRateChart, hasCoffee, hasRating, tags = [], tagCount = tags.length,
-    figureExtraRows = 0, hasSummaryNote = false
+    figureExtraRows = 0, figureAdjustmentRows = 0, hasSummaryNote = false
 }: Pick<
     StorySummaryBudgetInput,
     "hasRateChart" | "hasCoffee" | "hasRating" | "tags" | "tagCount" |
-    "figureExtraRows" | "hasSummaryNote"
+    "figureExtraRows" | "figureAdjustmentRows" | "hasSummaryNote"
 >): StoryContentFacts {
+    const totalFigureRows = figureExtraRows + figureAdjustmentRows;
     return {
         coffee:  hasCoffee,
         rating:  hasRating,
         tags:    tagCount > 0,
         note:    hasSummaryNote,
-        details: figureExtraRows > 0,
+        details: totalFigureRows > 0,
         flow:    hasRateChart
     };
 }
@@ -833,8 +835,8 @@ export function storySummaryBudget(
     {
         width, stages, hasRateChart, hasCoffee, hasRating, tags = [],
         tagCount = tags.length, hasBypass = false, hasGrindRecipeBadge = undefined,
-        drawdownRate = undefined, figureExtraRows = 0, hasSummaryNote = false,
-        stagesUnavailable = false,
+        drawdownRate = undefined, figureExtraRows = 0, figureAdjustmentRows = 0,
+        hasSummaryNote = false, stagesUnavailable = false,
         fontScale = 1
     }: StorySummaryBudgetInput
 ): StorySummaryBudget {
@@ -852,7 +854,7 @@ export function storySummaryBudget(
         rating:  hasRating,
         tags:    tagCount > 0,
         note:    hasSummaryNote,
-        details: figureExtraRows > 0,
+        details: figureExtraRows + figureAdjustmentRows > 0,
         flow:    hasRateChart
     };
     const traceFull = scaledFloor(STORY_TRACE_HEIGHT, width, STORY_TRACE_MIN_FLOOR);
@@ -908,12 +910,18 @@ export function storySummaryBudget(
         const detailsUseFourColumns = storyDetailUsesFourColumns(width, fontScale);
         const hasQuietLine = canShowGrindRecipeBadge
             || (canShowDrawdownRateBadge && (!detailsUseFourColumns || canShowGrindRecipeBadge));
+        const detailFigureRows = Math.max(0, figureExtraRows);
+        const adjustmentRows = Math.max(0, figureAdjustmentRows);
         const figureBlock = rows.figures
-            + (showDetails ? Math.max(0, figureExtraRows) * (
+            + (showDetails ? detailFigureRows * (
                 BREW_FIGURE_ROW_GAP
                 + figureRowHeight(
                     BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale, width, hasQuietLine
                 )
+            ) : 0)
+            + (showDetails ? adjustmentRows * (
+                BREW_FIGURE_ROW_GAP
+                + figureRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, fontScale, width, true)
             ) : 0)
             + (showNote ? dotoRowHeight(scaledSize(11, width), fontScale) + 8 : 0);
         const summary = STORY_CAPTURE_PADDING * 2
@@ -939,8 +947,8 @@ export function storySummaryBudget(
                 {
                     width, stages, hasRateChart: showRate, hasCoffee: showCoffee,
                     hasRating: showRating, tags, tagCount, hasBypass, hasGrindRecipeBadge,
-                    figureExtraRows, hasSummaryNote: showNote, stagesUnavailable, fontScale,
-                    drawdownRate
+                    figureExtraRows: figureExtraRows + figureAdjustmentRows,
+                    hasSummaryNote: showNote, stagesUnavailable, fontScale, drawdownRate
                 },
                 budgetForFit
             )

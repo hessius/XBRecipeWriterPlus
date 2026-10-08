@@ -97,6 +97,20 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
             + quietLineHeight
         )
         : 0;
+    const adjustmentFigures = budget.showFigureDetails !== false
+        ? Math.max(0, input.figureAdjustmentRows ?? 0) * (
+            BREW_FIGURE_ROW_GAP
+            + dotoRowHeight(BREW_FIGURE_LABEL_SIZE * textScale, fontScale)
+            + BREW_FIGURE_INTERNAL_GAP
+            + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE * textScale, fontScale)
+            + BREW_FIGURE_INTERNAL_GAP
+            + Math.max(
+                dotoRowHeight(11 * textScale, fontScale, 11 * textScale)
+                    + (1 * textScale + 1 * textScale) * 2,
+                dotoRowHeight(11 * textScale, fontScale)
+            )
+        )
+        : 0;
     const noteHeight = budget.showSummaryNote !== false && input.hasSummaryNote === true
         ? dotoRowHeight(11 * textScale, fontScale) + 8
         : 0;
@@ -120,6 +134,7 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
         + rateHeight
         + baseFigures
         + detailFigures
+        + adjustmentFigures
         + noteHeight
         + ladderHeight;
 }
@@ -753,6 +768,37 @@ describe("the frame", () => {
                 + dotoRowHeight(BREW_FIGURE_LABEL_SIZE, 1)
                 + BREW_FIGURE_INTERNAL_GAP
                 + dotoRowHeight(BREW_FIGURE_DETAIL_VALUE_SIZE, 1));
+    });
+
+    it("counts wrapped adjustment rows before keeping story details", () => {
+        const base = {
+            width:               240,
+            stages:              1,
+            fontScale:           1.2,
+            hasRateChart:        true,
+            hasCoffee:           false,
+            hasRating:           false,
+            tags:                [],
+            hasSummaryNote:      false,
+            hasBypass:           true,
+            hasGrindRecipeBadge: true,
+            drawdownRate:        2.1
+        };
+        const oldOneBlockCount = storySummaryBudget({
+            ...base,
+            figureExtraRows: 2
+        });
+        const measuredRows = storySummaryBudget({
+            ...base,
+            figureExtraRows:     1,
+            figureAdjustmentRows: 2
+        });
+
+        expect(oldOneBlockCount.showFigureDetails).toBe(true);
+        expect(oldOneBlockCount.declinedContent.details).toBe(false);
+        expect(measuredRows.showFigureDetails).toBe(false);
+        expect(measuredRows.declinedContent.details).toBe(true);
+        expect(measuredRows.requiredHeight).toBeLessThanOrEqual(measuredRows.contentHeight);
     });
 });
 
