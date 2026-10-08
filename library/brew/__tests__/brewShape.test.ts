@@ -46,6 +46,18 @@ describe("plannedSeconds", () => {
         it("says nothing when there is no plan to compare with", () => {
             expect(pourEndDelaySeconds(132, 32, 0)).toBeNull();
         });
+
+        it("does not charge the machine for a pause the user asked for", () => {
+            // The same 132 second brew, 40 seconds of which the user held it
+            // paused. The pour section ran 35 seconds under the plan, not five
+            // seconds over it, so there is no delay to report at all.
+            expect(pourEndDelaySeconds(132, 32, 95, 40)).toBeNull();
+        });
+
+        it("still reports the part of a delay the pause does not explain", () => {
+            // Ten seconds paused out of a brew that ran 25 seconds late.
+            expect(pourEndDelaySeconds(152, 32, 95, 10)).toBe(15);
+        });
     });
 
     it("is zero for a recipe with no pours", () => {

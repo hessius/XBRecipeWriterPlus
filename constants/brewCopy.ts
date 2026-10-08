@@ -133,6 +133,22 @@ export const PRO_MODE_PROMPT =
 export const ENDED_ON_MACHINE_NOTE = "ENDED ON THE MACHINE";
 
 /**
+ * The note shown on a brew the user held paused.
+ *
+ * A paused brew's clock runs long and its trace holds a flat stretch, and
+ * without this nothing on the record says why. The seconds are rounded and
+ * stated plainly rather than framed as an overrun, because the delay was the
+ * user's own.
+ *
+ * Null below a second: a pause that short is a mis-tap, and a record claiming
+ * "PAUSED FOR 0 S" says less than nothing.
+ */
+export function pausedNote(seconds: number | undefined): string | undefined {
+    if (seconds === undefined || seconds < 1) return undefined;
+    return `PAUSED FOR ${Math.round(seconds)} S`;
+}
+
+/**
  * The phases from which PAUSE is worth offering.
  *
  * Narrower than "active", and deliberately so. 40518 is inert outside a

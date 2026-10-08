@@ -298,7 +298,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const doneDrawdown = phase.name === "done" ? doneDrawdownFigures?.seconds ?? null : null;
     const doneDrawdownRate = phase.name === "done" ? doneDrawdownFigures?.rate ?? null : null;
     const doneDelay = phase.name === "done"
-        ? pourEndDelaySeconds(elapsed, doneDrawdown, plannedSecs)
+        ? pourEndDelaySeconds(elapsed, doneDrawdown, plannedSecs,
+                              run?.record?.pausedSeconds ?? 0)
         : null;
     const liveDelay = pourEndDelaySeconds(
         elapsed,
