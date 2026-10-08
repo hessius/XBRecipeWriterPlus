@@ -102,7 +102,8 @@ export const SPIKE_FRAMES: SpikeFrame[] = [
         label: "Switch to PRO (11511)",
         watch: "Acknowledged, and makes no difference. The batch behaved the "
             + "same with and without it, so PRO is not a precondition for a "
-            + "slot write after all.",
+            + "slot write after all. Note that a completed batch leaves the "
+            + "machine in EASY whatever this said.",
         build: () => buildType2(11511, ascii("00000000"))
     },
     {
@@ -138,7 +139,9 @@ export const SPIKE_FRAMES: SpikeFrame[] = [
         watch: "Releases the hang too, and shows the grinder off as well. So the "
             + "nibble is not what carries the grinder; the blob's own FE byte "
             + "is, and the two constants in the catalogue were never in "
-            + "disagreement about anything.",
+            + "disagreement about anything. Slots A and B went up grinder on "
+            + "with the same nibble and display a grind size, which is the "
+            + "other direction.",
         build: () => slotFrame(2, 0x02)
     }
 ];

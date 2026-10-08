@@ -556,6 +556,10 @@ Janczykkkko's implementation uses `SLOT_FLAG_SCALE_ON = 0x12`, `SLOT_FLAG_SCALE_
 > which is the field C5 already settled. Janczykkkko and brAzzi64 can both be
 > right about their constants because neither constant was doing anything.
 >
+> It holds in both directions. Slots A and B went up grinder **on**, also with
+> flags `0x02`, and both display a grind size. So the blob decides and the
+> nibble is inert, rather than `0x02` happening to mean whatever the blob said.
+>
 > This is why a slot write should be built from the same encoder as a brew:
 > the blob is the single place the grinder is expressed, and the flags byte is
 > at most the scale bit.
@@ -580,6 +584,19 @@ All three slots (A, B, C) MUST be written in a single batch. Writing only one or
 > which means an implementation should hold all three blobs before it sends the
 > first, and should retry the batch from where it stopped rather than from the
 > beginning.
+
+> **A slot write leaves the machine in EASY/Auto**, hardware 2026-10-08,
+> V12.0D.500. The session began in PRO, was explicitly sent the PRO switch, and
+> ended in EASY. Normal brewing from the app still worked afterwards, so this
+> is not a trap, but it is a visible change to somebody's machine that they did
+> not ask for and an implementation should say so before it writes.
+>
+> **The machine's slot display is a poor witness.** It shows the ratio and the
+> grind size and nothing else: no dose, no volume, no temperature. The three
+> recipes this was tested with were 15 g/225 ml, 18 g/270 ml and 20 g/300 ml,
+> which are all ratio 15, so the display agreed with all three and distinguished
+> none of them. A future check of what actually landed in a slot wants three
+> **different ratios**, and even then it can only confirm two fields.
 
 ### Sync Flow with 11512 `corroborated`
 After the 3 slot writes, the app sends command 11512 (Recipe Order). APK decompile confirms this is a real command (`BleCodeFactory.easyModeRecipesOrder`). Its exact payload is documented but not always implemented.
