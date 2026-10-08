@@ -12,7 +12,7 @@ import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
 import {canWriteToCard} from "@/library/cardLimits";
 import {resolveAccent} from "@/library/accent";
-import {BOUNCE_CLOSE_DELAY, BOUNCE_OPEN_DELAY} from "@/constants/motion";
+import {BOUNCE_CLOSE_DELAY, BOUNCE_OPEN_DELAY, TRAY_ACTION_FALLBACK} from "@/constants/motion";
 
 type Props = {
     recipe: Recipe;
@@ -185,6 +185,21 @@ export default function SwipeableRecipeRow({
                                                onHistory
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
+    /**
+     * An action waiting for the tray to finish closing.
+     *
+     * Quick edit opens a panel over a row that stays on screen, so its mount
+     * used to land on top of the tray's own close animation and both stuttered.
+     * The tray reports when it has actually closed, which is a better clock
+     * than any duration guessed here. The timer is only a safety net: if that
+     * report never arrives the tile must still act.
+     *
+     * Deliberately not applied to the other tiles. A deferred action is one
+     * that can be lost if the row unmounts first, which for a delete or a star
+     * would lose what the user asked for.
+     */
+    const afterClose = useRef<(() => void) | null>(null);
+    const afterCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // The same authority as the editor's WRITE gate. Asking only whether the
     // volumes summed marked a recipe with a 3100 ml stage as writable.
@@ -208,6 +223,45 @@ export default function SwipeableRecipeRow({
         shownRef.current = onShown;
         manualOpenRef.current = onManualOpen;
     });
+
+    useEffect(() => () => {
+        if (afterCloseTimer.current !== null) clearTimeout(afterCloseTimer.current);
+    }, []);
+
+    function runAfterClose() {
+        const pending = afterClose.current;
+        clearAfterClose();
+        pending?.();
+    }
+
+    function clearAfterClose() {
+        if (afterCloseTimer.current !== null) {
+            clearTimeout(afterCloseTimer.current);
+            afterCloseTimer.current = null;
+        }
+        afterClose.current = null;
+    }
+
+    function closeThen(action: () => void) {
+        clearAfterClose();
+        afterClose.current = action;
+        afterCloseTimer.current = setTimeout(runAfterClose, TRAY_ACTION_FALLBACK);
+        swipeableRef.current?.close();
+    }
+
+    /**
+     * Close the tray and act at once.
+     *
+     * Every tile but TUNE goes through here, and it drops any action TUNE left
+     * waiting. Without that, tapping TUNE and then BREW before the tray has
+     * finished closing performed both: the close report that BREW asked for
+     * would run the panel TUNE was still waiting on. One tap, one action.
+     */
+    function closeNow(action: () => void) {
+        clearAfterClose();
+        swipeableRef.current?.close();
+        action();
+    }
 
     useEffect(() => {
         if (hintTray === null || hintTray === undefined) {
@@ -273,17 +327,11 @@ export default function SwipeableRecipeRow({
                 <Tile icon="duplicate" caption="COPY" tone={palette.success}
                       testID="recipe-row-copy"
                       label={`Duplicate ${recipe.displayName()}`}
-                      onPress={() => {
-                          swipeableRef.current?.close();
-                          onDuplicate();
-                      }}/>
+                      onPress={() => closeNow(onDuplicate)}/>
                 <Tile icon="delete" caption="DELETE" tone={palette.danger}
                       testID="recipe-row-delete"
                       label={`Delete ${recipe.displayName()}`}
-                      onPress={() => {
-                          swipeableRef.current?.close();
-                          onDelete();
-                      }}/>
+                      onPress={() => closeNow(onDelete)}/>
                 {onToggleFavourite !== undefined && (
                     <Tile icon="favourite"
                           // Verbs, like the two beside it, and this one names
@@ -308,10 +356,7 @@ export default function SwipeableRecipeRow({
                               ? `Remove star from ${recipe.displayName()}`
                               : `Star ${recipe.displayName()}`}
                           testID="recipe-row-favourite"
-                          onPress={() => {
-                              swipeableRef.current?.close();
-                              onToggleFavourite();
-                          }}/>
+                          onPress={() => closeNow(onToggleFavourite)}/>
                 )}
             </XStack>
         );
@@ -339,10 +384,7 @@ export default function SwipeableRecipeRow({
                     <Tile icon="brew" caption="BREW" tone={resolveAccent(recipe)}
                           testID="recipe-row-brew"
                           label={`Brew ${recipe.displayName()}`}
-                          onPress={() => {
-                              swipeableRef.current?.close();
-                              onBrew();
-                          }}/>
+                          onPress={() => closeNow(onBrew)}/>
                 )}
                 {onQuickEdit !== undefined && (
                     // Temporary tuning is a frequent brew-side action, but it
@@ -350,10 +392,7 @@ export default function SwipeableRecipeRow({
                     <Tile icon="settings" caption="TUNE" tone={palette.info}
                           testID="recipe-row-quick-edit"
                           label={`Quick edit ${recipe.displayName()}`}
-                          onPress={() => {
-                              swipeableRef.current?.close();
-                              onQuickEdit();
-                          }}/>
+                          onPress={() => closeThen(onQuickEdit)}/>
                 )}
                 {onWrite !== undefined && (
                     // The one tile that can be present and still refuse. A
@@ -368,10 +407,7 @@ export default function SwipeableRecipeRow({
                           label={writable
                               ? `Write ${recipe.displayName()} to a card`
                               : `${recipe.displayName()} cannot be written to a card`}
-                          onPress={() => {
-                              swipeableRef.current?.close();
-                              onWrite();
-                          }}/>
+                          onPress={() => closeNow(onWrite)}/>
                 )}
             </XStack>
         );
@@ -397,6 +433,7 @@ export default function SwipeableRecipeRow({
                 overshootLeft={false}
                 overshootRight={false}
                 onSwipeableOpenStartDrag={handleManualOpenStartDrag}
+                onSwipeableClose={runAfterClose}
                 renderLeftActions={hasLeftActions ? renderLeftActions : undefined}
                 renderRightActions={renderRightActions}>
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}

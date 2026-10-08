@@ -20,11 +20,28 @@ const mockClose = jest.fn();
 
 jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
     const {forwardRef, useImperativeHandle} = jest.requireActual("react");
+    const {Pressable: MockPressable, View: MockView} =
+        jest.requireActual<typeof import("react-native")>("react-native");
     return {
         __esModule: true,
-        default: forwardRef((props: {children?: React.ReactNode}, ref: unknown) => {
+        default: forwardRef((props: {
+            children?: React.ReactNode;
+            onSwipeableOpenStartDrag?: (direction: "left" | "right") => void;
+            onSwipeableClose?: (direction: "left" | "right") => void;
+        }, ref: unknown) => {
             useImperativeHandle(ref, () => ({openLeft: mockOpenLeft, openRight: mockOpenRight, close: mockClose}));
-            return props.children ?? null;
+            return (
+                <MockView>
+                    <MockPressable testID="simulate-drag"
+                                   onPress={() => props.onSwipeableOpenStartDrag?.("left")}/>
+                    {/* The real Swipeable reports a close when the animation
+                        ends, which is a frame the renderer has no notion of.
+                        The test drives that moment itself. */}
+                    <MockPressable testID="simulate-close-end"
+                                   onPress={() => props.onSwipeableClose?.("left")}/>
+                    {props.children ?? null}
+                </MockView>
+            );
         })
     };
 });

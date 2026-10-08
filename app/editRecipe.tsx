@@ -22,6 +22,7 @@ import RenameSheet from "@/components/RenameSheet";
 import RevertSheet from "@/components/RevertSheet";
 import QuickEditPanel from "@/components/QuickEditPanel";
 import SegmentedRow from "@/components/SegmentedRow";
+import SplitBrewButton from "@/components/SplitBrewButton";
 import StageProfile from "@/components/StageProfile";
 import StageTile, {type StageField} from "@/components/StageTile";
 import Stepper from "@/components/Stepper";
@@ -603,6 +604,7 @@ type ActionBarProps = {
     /** Only true once a machine has been remembered. */
     canBrewAtAll: boolean;
     canBrew: boolean;
+    quickEditOpen: boolean;
     onBrew: () => void;
     onQuickEdit: () => void;
     canWrite: boolean;
@@ -635,14 +637,6 @@ type BarButtonProps = {
     accent?: string;
     flex: number;
     onPress: () => void;
-};
-
-type SplitBrewButtonProps = {
-    enabled: boolean;
-    accent: string;
-    flex: number;
-    onBrew: () => void;
-    onQuickEdit: () => void;
 };
 
 /**
@@ -690,48 +684,12 @@ function BarButton({label, accessibilityLabel, enabled, accent, flex, onPress}: 
     );
 }
 
-function SplitBrewButton({enabled, accent, flex, onBrew, onQuickEdit}: SplitBrewButtonProps) {
-    const fill = palette.none;
-    const brewFill = enabled ? accent : fill;
-    const quickFill = accent;
-
-    return (
-        <XStack flex={flex} borderRadius="$4" overflow="hidden"
-                borderWidth={1} borderColor={accent} backgroundColor={palette.none}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Brew"
-                       accessibilityState={{disabled: !enabled}}
-                       onPress={() => enabled && onBrew()}
-                       style={{flex: 1.55}}>
-                <YStack alignItems="center" paddingVertical="$3.5"
-                        backgroundColor={brewFill}>
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={2}
-                                   color={enabled ? palette.base : palette.muted}>
-                        BREW
-                    </DotMatrixText>
-                </YStack>
-            </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Quick edit brew"
-                       onPress={onQuickEdit}
-                       style={{flex: 0.45}}>
-                <YStack alignItems="center" paddingVertical="$3.5"
-                        borderLeftWidth={1} borderLeftColor={accent}
-                        backgroundColor={quickFill}>
-                    <DotMatrixText fontSize={12} weight="bold" letterSpacing={1.6}
-                                   color={palette.base}>
-                        ▲
-                    </DotMatrixText>
-                </YStack>
-            </Pressable>
-        </XStack>
-    );
-}
-
 function readKnownTags(database: RecipeDatabase): string[] {
     return database.countRecipesByTag().map(({tag}) => tag);
 }
 
 function ActionBar({
-    accent, canBrewAtAll, canBrew, onBrew, onQuickEdit, canWrite, canSave,
+    accent, canBrewAtAll, canBrew, quickEditOpen, onBrew, onQuickEdit, canWrite, canSave,
     onWrite, onSave, onHeight
 }: ActionBarProps) {
     const insets = useSafeAreaInsets();
@@ -755,8 +713,9 @@ function ActionBar({
                 putting a recipe on a card is then the primary act. */}
             {canBrewAtAll && (
                 <SplitBrewButton enabled={canBrew} accent={accent} flex={2}
+                                 quickEditOpen={quickEditOpen}
                                  onBrew={onBrew}
-                                 onQuickEdit={onQuickEdit}/>
+                                 onToggleQuickEdit={onQuickEdit}/>
             )}
             <BarButton label="WRITE" accessibilityLabel="Write card"
                        enabled={canWrite}
@@ -778,13 +737,12 @@ type QuickEditLayerProps = {
     actionBarHeight: number;
     onChange: (adjustments: QuickEditAdjustments) => void;
     onClose: () => void;
-    onBrew: () => void;
 };
 
 const QUICK_EDIT_HORIZONTAL_PADDING = 16;
 
 function QuickEditLayer({
-    open, recipe, adjustments, accent, temperatureUnit, actionBarHeight, onChange, onClose, onBrew
+    open, recipe, adjustments, accent, temperatureUnit, actionBarHeight, onChange, onClose
 }: QuickEditLayerProps) {
     const {reduced, resolved} = useReducedMotionState();
     if (!open) return null;
@@ -799,7 +757,13 @@ function QuickEditLayer({
         : SlideOutDown.duration(duration).easing(EASING.in);
 
     return (
-        <View pointerEvents="box-none" accessibilityViewIsModal aria-label="Quick edit"
+        // Deliberately not `accessibilityViewIsModal`. The panel carries no
+        // BREW of its own: the action bar below the scrim holds the single
+        // BREW and brews whatever the panel currently says, so a modal flag
+        // here would hide the one control this panel exists to modify. The
+        // deck behind the scrim is hidden instead, on both platforms, by the
+        // wrapper in the screen.
+        <View pointerEvents="box-none" aria-label="Quick edit"
               style={{
             position: "absolute",
             top:      0,
@@ -813,7 +777,9 @@ function QuickEditLayer({
                            style={{position: "absolute", top: 0, right: 0, bottom: 0, left: 0}}>
                 <Pressable testID="quick-edit-backdrop"
                            accessibilityRole="button"
-                           accessibilityLabel="Close quick edit"
+                           // Same outcome as the arrow, but a screen reader
+                           // needs distinct names for distinct controls.
+                           accessibilityLabel="Close quick edit panel"
                            onPress={onClose}
                            style={{
                                flex:            1,
@@ -831,15 +797,7 @@ function QuickEditLayer({
                                 adjustments={adjustments}
                                 accent={accent}
                                 temperatureUnit={temperatureUnit}
-                                onChange={onChange}
-                                renderBrewAction={(brewability) => (
-                                    <BarButton label="BREW"
-                                               accessibilityLabel="Brew quick edit"
-                                               enabled={brewability.brewable}
-                                               accent={accent}
-                                               flex={1}
-                                               onPress={onBrew}/>
-                                )}/>
+                                onChange={onChange}/>
             </Animated.View>
         </View>
     );
@@ -960,7 +918,7 @@ export default function EditRecipe(
     const {collapsed, onScroll} = useCollapsibleHeader();
 
     const {
-        recipe, balance, canBrew, canWrite, canSave, revertSources,
+        recipe, balance, canBrew, canWrite, canSave, revertSources, inputError,
         bumpKey, handleReloadTitlePress, persistRecipe, saveRecipe, saveMetadata,
         hasPendingEdits, recipeInLibrary, toggleFavourite, editTags,
         editInputComplete, setVolumeError, setInputError, editStage,
@@ -1060,6 +1018,32 @@ export default function EditRecipe(
     );
 
     if (!recipe) return null;
+
+    // While the panel is open the bar's BREW is the panel's BREW: it brews
+    // what the knobs currently say, and refuses for the same reasons the panel
+    // reports. A combination the machine would reject must not be reachable
+    // from a control sitting below the notice explaining why.
+    const quickEditBlocked = quickEditOpen
+        && quickEditProblems(recipe, quickEditAdjustments, temperatureUnit).length > 0;
+    /**
+     * While the panel is open the knobs are the recipe, so they are what is
+     * judged. `canBrew` reads the *saved* recipe, and an adjustment can repair
+     * one the machine would have refused: a 18 g recipe carrying 288 ml of
+     * stages at a ratio of 17 is a mismatch, and taking the ratio to 16
+     * rescales it into agreement. Gating the bar on the saved verdict left
+     * that brew with no enabled control anywhere, now that the panel has no
+     * BREW of its own. `inputError` still counts, because a half-typed field
+     * on the deck behind the panel is not something to brew over.
+     */
+    const canBrewNow = quickEditOpen ? !quickEditBlocked && !inputError : canBrew;
+
+    function closeQuickEdit() {
+        setQuickEditOpen(false);
+        // Closing discards. The adjustment is only visible while the panel is,
+        // so keeping it would leave the bar's BREW quietly brewing something
+        // the screen no longer shows.
+        setQuickEditAdjustments({});
+    }
 
     // Every edit republishes the recipe: the model is mutated in place, so a key
     // bump is what repaints the steppers and the derived total. Several of the
@@ -1276,7 +1260,10 @@ export default function EditRecipe(
     // `accessibilityViewIsModal` does on iOS.
     const screenCovered = showNfcOverlay || overflowOpen || revertOpen || helpOpen
         || bypassWriteOpen || renameOpen || beanProfileOpen || leavePrompt !== null
-        || ratingNoteOpen || quickEditOpen;
+        || ratingNoteOpen;
+    // The quick edit panel covers the deck but not the action bar, which holds
+    // the BREW it adjusts. So it hides the deck rather than the screen.
+    const deckCovered = screenCovered || quickEditOpen;
 
     return (
         <>
@@ -1289,6 +1276,9 @@ export default function EditRecipe(
             <YStack testID="editor-content" flex={1} backgroundColor={palette.base}
                     accessibilityElementsHidden={screenCovered}
                     importantForAccessibility={screenCovered ? "no-hide-descendants" : "auto"}>
+            <YStack testID="editor-deck" flex={1}
+                    accessibilityElementsHidden={deckCovered}
+                    importantForAccessibility={deckCovered ? "no-hide-descendants" : "auto"}>
             {/* Outside the scroll view, so it is the screen's header rather
                 than its first row. It collapses itself on scroll instead of
                 scrolling away: it stays mounted and animates its height,
@@ -1409,12 +1399,14 @@ export default function EditRecipe(
                     </View>
                 )}
             </ScrollView>
+            </YStack>
 
             <ActionBar accent={accent} canWrite={canWrite} canSave={canSave}
                        canBrewAtAll={rememberedMachine !== ""}
-                       canBrew={canBrew}
-                       onBrew={onBrewPress}
-                       onQuickEdit={onQuickEditOpen}
+                       canBrew={canBrewNow}
+                       quickEditOpen={quickEditOpen}
+                       onBrew={quickEditOpen ? onQuickEditBrewPress : onBrewPress}
+                       onQuickEdit={quickEditOpen ? closeQuickEdit : onQuickEditOpen}
                        onWrite={onWritePress}
                        onSave={async () => {
                            await flushDrafts();
@@ -1438,8 +1430,7 @@ export default function EditRecipe(
                             temperatureUnit={temperatureUnit}
                             actionBarHeight={actionBarHeight}
                             onChange={setQuickEditAdjustments}
-                            onClose={() => setQuickEditOpen(false)}
-                            onBrew={onQuickEditBrewPress}/>
+                            onClose={closeQuickEdit}/>
 
             <RecipeOverflowSheet open={overflowOpen} canRefreshName={recipe.xid.trim().length > 0}
                                  recipeUuid={recipe.uuid}

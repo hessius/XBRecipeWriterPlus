@@ -1,5 +1,6 @@
 import React from "react";
 import {fireEvent, screen} from "@testing-library/react-native";
+import {Dimensions, StyleSheet} from "react-native";
 import {Text} from "tamagui";
 
 import QuickEditPanel from "@/components/QuickEditPanel";
@@ -10,13 +11,27 @@ import type {QuickEditAdjustments} from "@/library/quickEdit";
 import type {TemperatureUnit} from "@/library/units";
 import {renderWithProviders} from "@/test-utils/render";
 
-function coffeeRecipe(): Recipe {
+const DEFAULT_WINDOW = {fontScale: 1, height: 852, scale: 3, width: 393};
+
+function mockWindowFontScale(fontScale: number): void {
+    const window = {...DEFAULT_WINDOW, fontScale};
+    Dimensions.set({screen: window, window});
+}
+
+type CoffeeRecipeOptions = {
+    dosage?: number;
+    ratio?: number;
+    grindSize?: number;
+    grinder?: boolean;
+};
+
+function coffeeRecipe(options: CoffeeRecipeOptions = {}): Recipe {
     const recipe = new Recipe();
     recipe.cupType = CUP_TYPE.XPOD;
-    recipe.dosage = 20;
-    recipe.ratio = 16;
-    recipe.grindSize = 65;
-    recipe.grinder = true;
+    recipe.dosage = options.dosage ?? 20;
+    recipe.ratio = options.ratio ?? 16;
+    recipe.grindSize = options.grindSize ?? 65;
+    recipe.grinder = options.grinder ?? true;
     recipe.pours = [
         new Pour(1, 80, 88, 30, 0, 0, 20),
         new Pour(2, 120, 88, 30, 0, 0, 10),
@@ -49,6 +64,10 @@ async function draw(
 }
 
 describe("QuickEditPanel", () => {
+    beforeEach(() => {
+        mockWindowFontScale(1);
+    });
+
     it("reports dose changes as deviations from the saved recipe", async () => {
         const {onChange} = await draw();
 
@@ -156,6 +175,26 @@ describe("QuickEditPanel", () => {
             .toHaveTextContent(/88, 88, 90 °C/);
     });
 
+    it("says nothing about the recipe's dose until the dose is adjusted", async () => {
+        await draw({}, coffeeRecipe({dosage: 18}));
+
+        expect(screen.queryByTestId("quick-edit-dose-baseline")).toBeNull();
+    });
+
+    it("says what the recipe's dose was once it has been adjusted", async () => {
+        await draw({dose: 20}, coffeeRecipe({dosage: 18}));
+
+        expect(screen.getByTestId("quick-edit-dose-baseline"))
+            .toHaveTextContent("recipe 18 g");
+    });
+
+    it("says what the recipe's grind was once it has been adjusted", async () => {
+        await draw({grind: 70}, coffeeRecipe({grinder: true, grindSize: 65}));
+
+        expect(screen.getByTestId("quick-edit-grind-baseline"))
+            .toHaveTextContent("recipe 65");
+    });
+
     it("shows Fahrenheit temperatures and stores the canonical positive offset", async () => {
         const {onChange} = await draw({tempOffset: 1}, coffeeRecipe(), jest.fn(), "F");
 
@@ -176,6 +215,21 @@ describe("QuickEditPanel", () => {
         await fireEvent.press(screen.getByLabelText("Decrease Temperature offset"));
 
         expect(onChange).toHaveBeenCalledWith({tempOffset: -2});
+    });
+
+    it("reserves the baseline line on every row, adjusted or not", async () => {
+        await draw();
+
+        // Four knobs, four slots, with only TEMP OFFSET's line in one of them.
+        // The slot is held open so that moving a knob cannot shift the rows
+        // below it out from under the finger that moved it.
+        const slots = screen.getAllByTestId("quick-edit-baseline-slot");
+        expect(slots).toHaveLength(4);
+        for (const slot of slots) {
+            const style = StyleSheet.flatten(slot.props.style) ?? {};
+            expect((style as {minHeight?: number}).minHeight).toBe(16);
+        }
+        expect(screen.queryByTestId("quick-edit-dose-baseline")).toBeNull();
     });
 
     it("explains dose and ratio volume rescaling", async () => {

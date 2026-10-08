@@ -51,6 +51,17 @@ export const BOUNCE_OPEN_DELAY = 300;
 export const BOUNCE_CLOSE_DELAY = 800;
 
 /**
+ * How long a tray action waits for the tray's own close animation before it
+ * runs anyway.
+ *
+ * The tray reports its own close, so this is a safety net rather than the
+ * clock: if that report never arrives the tile must still act, because a
+ * control that silently does nothing is worse than one that acts a frame late.
+ * Comfortably longer than the spring the tray closes with.
+ */
+export const TRAY_ACTION_FALLBACK = 400;
+
+/**
  * How long the connection dot goes on flashing amber about a low tank.
  *
  * It was two flashes, which is the right length for something the user is
