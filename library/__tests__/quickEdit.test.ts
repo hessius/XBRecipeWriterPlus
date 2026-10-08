@@ -113,6 +113,12 @@ describe("applyQuickEdit", () => {
         expect(edited.pours.map((pour) => pour.temperature)).toEqual([99, 99, 99]);
     });
 
+    it("moves stages that can still move when other stages saturate", () => {
+        const edited = applyQuickEdit(coffeeRecipe([80, 80, 80], [97, 95, 90]), {tempOffset: 3});
+
+        expect(edited.pours.map((pour) => pour.temperature)).toEqual([99, 98, 93]);
+    });
+
     it("saturates a negative temperature offset at the lower bound", () => {
         const edited = applyQuickEdit(coffeeRecipe([80, 80, 80], [39, 40, 41]), {tempOffset: -5});
 
@@ -159,7 +165,7 @@ describe("applyQuickEdit", () => {
 });
 
 describe("quickEditBounds", () => {
-    it("returns the card-derived quick edit bounds for coffee", () => {
+    it("lets temperature offsets travel while at least one stage can still move", () => {
         expect(quickEditBounds(coffeeRecipe())).toEqual({
             dose: DOSE,
             ratio: RATIO,

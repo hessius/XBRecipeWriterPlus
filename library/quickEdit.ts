@@ -78,6 +78,9 @@ export function quickEditBounds(recipe: Recipe): QuickEditBounds {
             ...GRIND_SIZE,
             off: GRINDER_OFF_VALUE,
         },
+        // Deliberately the range where moving the knob still changes at least
+        // one stage. Partial saturation inside that range is intended; the
+        // tighter shape-preserving range was considered and rejected.
         tempOffset: {
             min: TEMPERATURE.min - maxTemperature,
             max: TEMPERATURE.max - minTemperature,

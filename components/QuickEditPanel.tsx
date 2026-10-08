@@ -162,7 +162,7 @@ export default function QuickEditPanel({
                               )}>
                     <Stepper label="Temperature offset" value={tempOffset}
                              min={bounds.tempOffset.min} max={bounds.tempOffset.max} step={1}
-                             unit="°C" accent={accent} formatValue={signed}
+                             unit="°C" accent={accent} formatValue={signed} signedInput
                              onChange={(value) => onChange(updateAdjustment(
                                  adjustments, "tempOffset", value, 0
                              ))}/>

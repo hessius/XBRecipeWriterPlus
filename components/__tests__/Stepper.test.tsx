@@ -117,6 +117,22 @@ describe("Stepper", () => {
         expect(group.props.accessibilityValue).toEqual({min: 5, max: 100, now: 16});
     });
 
+    it("announces the formatted value when one is shown", async () => {
+        await renderWithProviders(
+            <Stepper label="Grind" value={81} min={40} max={81} step={1}
+                     formatValue={(next) => next === 81 ? "OFF" : String(next)}
+                     onChange={jest.fn()}/>
+        );
+
+        const group = screen.getByLabelText("Grind, OFF");
+        expect(group.props.accessibilityValue).toEqual({
+            min: 40,
+            max: 81,
+            now: 81,
+            text: "OFF",
+        });
+    });
+
     it("answers an accessibility adjust action", async () => {
         const onChange = jest.fn();
         await renderWithProviders(
@@ -289,6 +305,37 @@ describe("the keyboard it asks for", () => {
         // path this control advertises could not enter a stage flow rate of
         // 3.2 at all — and flow rate is the one field that steps by a tenth.
         expect((await openTheField(0.1)).props.inputMode).toBe("decimal");
+    });
+
+    it("uses text entry for a signed value", async () => {
+        await renderWithProviders(
+            <Stepper label="Temperature offset" value={0} min={-51} max={11} step={1}
+                     signedInput onChange={jest.fn()}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Edit Temperature offset"));
+
+        expect(screen.getByTestId("stepper-input").props.inputMode).toBe("text");
+    });
+
+    it("keeps a lone minus visible until a signed value is complete", async () => {
+        const onChange = jest.fn();
+        await renderWithProviders(
+            <Stepper label="Temperature offset" value={0} min={-51} max={11} step={1}
+                     signedInput onChange={onChange}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Edit Temperature offset"));
+        const input = screen.getByTestId("stepper-input");
+        await fireEvent.changeText(input, "-");
+
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByTestId("stepper-input").props.value).toBe("-");
+
+        await fireEvent.changeText(input, "-10");
+        await fireEvent(input, "submitEditing");
+
+        expect(onChange).toHaveBeenCalledWith(-10);
     });
 });
 

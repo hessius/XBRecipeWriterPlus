@@ -85,6 +85,31 @@ describe("QuickEditPanel", () => {
         expect(onChange).toHaveBeenCalledWith({tempOffset: 1});
     });
 
+    it.each([
+        ["dose", {dose: 21}, "Increase Quick edit dose", "Decrease Quick edit dose"],
+        ["ratio", {ratio: 17}, "Increase Quick edit ratio", "Decrease Quick edit ratio"],
+        ["grind", {grind: 66}, "Increase Quick edit grind", "Decrease Quick edit grind"],
+        ["tempOffset", {tempOffset: 1}, "Increase Temperature offset", "Decrease Temperature offset"],
+    ] as const)("removes %s when it returns to the saved value", async (
+        key, adjustments, action, restoreAction
+    ) => {
+        const recipe = coffeeRecipe();
+        const {onChange, rerender} = await draw({}, recipe);
+
+        await fireEvent.press(screen.getByLabelText(action));
+        expect(onChange).toHaveBeenCalledWith(adjustments);
+
+        await rerender(
+            <QuickEditPanel recipe={recipe} adjustments={adjustments}
+                            accent={palette.brand} onChange={onChange}/>
+        );
+        await fireEvent.press(screen.getByLabelText(restoreAction));
+        await fireEvent.press(screen.getByLabelText(restoreAction));
+
+        const emitted = onChange.mock.calls.at(-1)?.[0] ?? {};
+        expect(Object.keys(emitted)).not.toContain(key);
+    });
+
     it("hides ratio for tea and shows it for coffee", async () => {
         const {rerender} = await draw({}, teaRecipe());
 

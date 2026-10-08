@@ -92,6 +92,8 @@ type Props = {
     unit?: string;
     /** How the committed value is shown when it is not being typed. */
     formatValue?: (value: number) => string;
+    /** Let text entry include a leading minus sign. */
+    signedInput?: boolean;
     onChange: (value: number) => void;
 };
 
@@ -109,7 +111,7 @@ type Props = {
  * must not become "9" the moment it is entered.
  */
 export default function Stepper({
-    label, value, min, max, step, values, accent, unit, formatValue, onChange
+    label, value, min, max, step, values, accent, unit, formatValue, signedInput, onChange
 }: Props) {
     // null means the Doto readout is showing; a string means the field is
     // open and holds the in-progress text.
@@ -181,12 +183,15 @@ export default function Stepper({
     const editing = draft !== null;
     const shownValue = formatValue ? formatValue(value) : String(value);
     const spokenUnit = unit && shownValue !== unit ? ` ${unit}` : "";
+    const accessibilityValue = formatValue
+        ? {min, max, now: value, text: `${shownValue}${spokenUnit}`}
+        : {min, max, now: value};
 
     return (
         <XStack alignItems="center" gap="$2"
                 accessibilityRole="adjustable"
                 accessibilityLabel={`${label}, ${shownValue}${spokenUnit}`}
-                accessibilityValue={{min, max, now: value}}
+                accessibilityValue={accessibilityValue}
                 accessibilityActions={[{name: "increment"}, {name: "decrement"}]}
                 onAccessibilityAction={(event) => {
                     if (event.nativeEvent.actionName === "increment") {
@@ -217,13 +222,17 @@ export default function Stepper({
                 a text field that is not on screen. */}
             <XStack alignItems="center" justifyContent="center" minWidth={54}>
                 {editing ? (
-                    // A whole-number step gets the numeric pad; a fractional
-                    // one gets the decimal pad, which is the only one with a
-                    // separator on it. Stage flow rate steps by 0.1, so under
-                    // a plain numeric keyboard the tap-to-type path this
-                    // control advertises could not enter 3.2 at all.
+                    // A signed value uses the text keyboard: React Native's
+                    // numeric input modes do not promise a minus key on both
+                    // platforms, and the signed iOS keyboardType is iOS-only.
+                    // Otherwise a whole-number step gets the numeric pad; a
+                    // fractional one gets the decimal pad, which is the only
+                    // one with a separator on it.
                     <Input unstyled autoFocus accessibilityLabel={label}
-                           inputMode={Number.isInteger(step) ? "numeric" : "decimal"}
+                           inputMode={
+                               signedInput ? "text" :
+                                   Number.isInteger(step) ? "numeric" : "decimal"
+                           }
                            testID="stepper-input"
                            value={draft ?? ""}
                            onChangeText={setDraft}
