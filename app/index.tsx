@@ -425,14 +425,15 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // `readCard` was awaiting, hiding the ceremony while the request lived on.
     const [nfc] = useState(() => new NFC());
 
-    // The action tray on each row can write a recipe to a card and share a link
-    // to it, the same two acts the editor offers — so they come from the same
-    // two hooks rather than a second implementation. `useCardWriter` brings its
-    // own `NFC` transport, its own overlay state and the `getIsClosed()` handling
-    // for a cancelled Android scan, so hosting WRITE here is wiring, not a new
-    // NFC path. Its volume-error report has no field to land in on this screen,
-    // so it becomes a toast; a library recipe that will not write already shows
-    // the card's own "will not write" mark.
+    // Home can write a recipe to a card from the row tray and share a link from
+    // the card's reader path or actions sheet, the same two acts the editor
+    // offers, so they come from the same two hooks rather than a second
+    // implementation. `useCardWriter` brings its own `NFC` transport, its own
+    // overlay state and the `getIsClosed()` handling for a cancelled Android
+    // scan, so hosting WRITE here is wiring, not a new NFC path. Its
+    // volume-error report has no field to land in on this screen, so it becomes
+    // a toast; a library recipe that will not write already shows the card's
+    // own "will not write" mark.
     const {writeCard, onNFCDialogClose, showNfcOverlay, writeProgress, nfcUnavailable} =
         useCardWriter((message) => {
             if (message !== null) notify({tone: "error", message});
