@@ -20,7 +20,7 @@ export const WATER_VOLUME_CODE = 40523;
 
 const STATE_NAMES = new Map<number, string>([
     [MACHINE_STATE.IDLE, "idle"],
-    [MACHINE_STATE.PAUSED, "paused"],
+    [MACHINE_STATE.DISPENSING, "dispensing (FreeSolo)"],
     [MACHINE_STATE.NO_WATER, "no_water"],
     [MACHINE_STATE.NO_BEANS, "no_beans"],
     [MACHINE_STATE.BREWING, "brewing"],

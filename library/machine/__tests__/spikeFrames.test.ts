@@ -10,18 +10,35 @@ function frameFor(id: string): string {
 
 describe("the Appendix A spike frames", () => {
     /*
-     * Both of these are transcribed from a real session on 2026-10-08, V12.0D.500:
-     * each was acknowledged by an event notification carrying its own code, and
-     * each moved the machine. They are the reason this section exists -- the
-     * same two commands typed by hand went out as `80 19` and `80 21`, two bytes
-     * that are not a frame at all, and the machine answered with an error.
+     * All four are transcribed from real sessions on 2026-10-08, V12.0D.500,
+     * where each was acknowledged by an event notification carrying its own
+     * code and each moved the machine. They are the reason this section
+     * exists: the same commands typed by hand went out as `80 19` and `80 21`,
+     * two bytes that are not a frame at all.
      */
     it("sends the pause the machine acknowledged on hardware", () => {
-        expect(frameFor("pause-8019")).toBe("58 01 01 53 1F 0C 00 00 00 01 63 E5");
+        expect(frameFor("pause-40518"))
+            .toBe("58 01 01 46 9E 10 00 00 00 01 01 00 00 00 65 DB");
     });
 
     it("sends the resume the machine acknowledged on hardware", () => {
+        expect(frameFor("resume-40524"))
+            .toBe("58 01 01 4C 9E 10 00 00 00 01 01 00 00 00 ED CC");
+    });
+
+    /*
+     * Named Brewer Pause / Brewer Resume by every source there is, and neither
+     * one is. 8019 abandons the recipe and pours water. The frames are kept
+     * because they are what was sent when that was established.
+     */
+    it("sends the FreeSolo pair that is not a pause", () => {
+        expect(frameFor("pause-8019")).toBe("58 01 01 53 1F 0C 00 00 00 01 63 E5");
         expect(frameFor("resume-8021")).toBe("58 01 01 55 1F 0C 00 00 00 01 AE BD");
+    });
+
+    it("warns that 8019 is destructive, under whatever name", () => {
+        const freeSolo = SPIKE_FRAMES.find((spike) => spike.id === "pause-8019");
+        expect(freeSolo?.hazard).toMatch(/abandons a running recipe/i);
     });
 
     it("gives every frame a question and something to watch", () => {
@@ -50,6 +67,6 @@ describe("the Appendix A spike frames", () => {
 
     it("warns where a frame costs something", () => {
         const hazards = SPIKE_FRAMES.filter((spike) => spike.hazard !== undefined);
-        expect(hazards.map((spike) => spike.id)).toEqual(["pause-40518", "slot-a"]);
+        expect(hazards.map((spike) => spike.id)).toEqual(["pause-8019", "slot-a"]);
     });
 });

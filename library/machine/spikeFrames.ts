@@ -60,40 +60,41 @@ function slotFrame(index: number, flags: number): Uint8Array {
 
 export const SPIKE_FRAMES: SpikeFrame[] = [
     {
+        id: "pause-40518",
+        question: "Q1, Q2 and Q3, settled 2026-10-08",
+        label: "Pause this brew (40518)",
+        watch: "Acknowledged, then 40515 with the volume so far, then state 0x1f. "
+            + "That is armed, the same code as a loaded brew, so the log cannot "
+            + "tell you it is paused and only the fact you sent this can.",
+        build: () => buildType1(40518, [1])
+    },
+    {
+        id: "resume-40524",
+        question: "Q1, Q2 and Q3, settled 2026-10-08",
+        label: "Resume this brew (40524)",
+        watch: "Acknowledged, then 40516, then back to 0x23. The brew continues "
+            + "from where it stopped: stage indices carry on rather than repeat. "
+            + "Both commands are inert when they do not apply.",
+        build: () => buildType1(40524, [1])
+    },
+    {
         id: "pause-8019",
-        question: "Q2",
-        label: "Pause this brew (8019)",
-        watch: "Does the water stop and stay stopped for ten seconds? Which state "
-            + "is reported after the 8019 acknowledgement?",
+        question: "Q2, settled 2026-10-08",
+        label: "FreeSolo pour (8019)",
+        watch: "State 0x03, water, then 9006 and 0x41 about thirteen seconds "
+            + "later. Kept only so the behaviour can be re-checked on another "
+            + "firmware, because every source still calls this a pause.",
+        hazard: "Destructive. This abandons a running recipe and pours water. It "
+            + "is not a pause, whatever its name says.",
         build: () => buildType1(8019)
     },
     {
         id: "resume-8021",
-        question: "Q2 and Q3",
-        label: "Resume this brew (8021)",
-        watch: "Does it continue the stage it stopped in, or start that stage "
-            + "again from zero? Turn telemetry on first: the cup reading is the "
-            + "only witness that cannot be misread.",
+        question: "Q2, settled 2026-10-08",
+        label: "FreeSolo stop (8021)",
+        watch: "Ends an 8019 pour. It reports 0x23, which looks like brewing, but "
+            + "the recipe it would have resumed is already gone.",
         build: () => buildType1(8021)
-    },
-    {
-        id: "resume-40524",
-        question: "Q3",
-        label: "Coffee resume (40524)",
-        watch: "Only worth sending if 8021 did not resume. Single-sourced, with "
-            + "no trusted pause to resume from.",
-        build: () => buildType1(40524, [1])
-    },
-    {
-        id: "pause-40518",
-        question: "Q1",
-        label: "Start / confirm / pause (40518)",
-        watch: "Which state follows: armed, loading, idle, or something not in "
-            + "the table? The two reports in the catalogue disagree, and the "
-            + "state this reports is what settles them.",
-        hazard: "Expect this to end the brew. Run it on a grinder-off recipe so "
-            + "it costs water and not a dose.",
-        build: () => buildType1(40518, [1])
     },
     {
         id: "pro-mode",

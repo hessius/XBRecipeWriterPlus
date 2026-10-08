@@ -129,14 +129,16 @@ export function ascii(text: string): Uint8Array {
 export const MACHINE_STATE = {
     IDLE:             0x01,
     /**
-     * Paused, mid-recipe.
+     * A standalone FreeSolo water pour.
      *
-     * Observed on hardware 2026-10-08, V12.0D.500, twice in one brew: `8019`
-     * into a running recipe was acknowledged and the machine moved from
-     * `0x23` to here, and `8021` moved it back to `0x23`. `8019` and `8021`
-     * were documented as FreeSolo standalone dispense only; they are not.
+     * Observed on hardware 2026-10-08, V12.0D.500. `8019` into a *running
+     * recipe* is acknowledged, abandons the recipe and lands here pouring
+     * water; about thirteen seconds later `9006` arrives and the machine goes
+     * to `0x41`. Every source names `8019` "Brewer Pause" and it is not one.
+     *
+     * A recipe pause is `40518`, and it lands on `ARMED`. See `PAUSED_STATE`.
      */
-    PAUSED:           0x03,
+    DISPENSING:       0x03,
     NO_WATER:         0x0C,
     NO_BEANS:         0x0F,
     BREWING:          0x10,
@@ -157,6 +159,16 @@ export const MACHINE_STATE = {
     SAVING_SLOTS:     0x43,
     SLOTS_SAVED:      0x25
 } as const;
+
+/**
+ * Where a recipe paused by `40518` sits.
+ *
+ * It is `ARMED`, the same code the machine reports before anyone has
+ * confirmed the brew, so the state alone cannot tell a paused brew from a
+ * loaded one. Only the sender knows, which means a pause UI has to remember
+ * that it sent the pause. Hardware 2026-10-08, V12.0D.500.
+ */
+export const PAUSED_STATE = MACHINE_STATE.ARMED;
 
 /** Notification codes the brew state machine reacts to. */
 export const EVENT = {
