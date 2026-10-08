@@ -1,4 +1,5 @@
 import {useEffect, useRef, useState} from "react";
+import {AppState} from "react-native";
 
 import {STAGGER, useReducedMotion} from "@/constants/motion";
 import {
@@ -69,6 +70,19 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
         const next = {...decision.armed, lastSeenAt: decision.decidedAt};
         writeDrawerHintState(settings, next);
     }, [decision, settings]);
+
+    useEffect(() => {
+        const subscription = AppState.addEventListener("change", (next) => {
+            if (next !== "active") return;
+
+            // Foregrounding is a visit, but not a fresh chance to decide. A
+            // mid-session re-arm could pop trays open while the user is already
+            // reading the list, so only the dormancy timestamp moves here.
+            settings.set("drawerHintLastSeenAt", Date.now());
+        });
+
+        return () => subscription.remove();
+    }, [settings]);
 
     function trayFor(recipeIndex: number): "action" | "management" | null {
         if (!showing || reducedMotion || bouncedRows.has(recipeIndex)) return null;

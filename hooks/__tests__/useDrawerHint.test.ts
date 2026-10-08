@@ -1,4 +1,5 @@
 import {act, renderHook} from "@testing-library/react-native";
+import {AppState} from "react-native";
 
 import {STAGGER, useReducedMotion} from "@/constants/motion";
 import {useDrawerHint} from "@/hooks/useDrawerHint";
@@ -49,6 +50,15 @@ function sqliteSettings(
 
 async function renderDrawerHint(settings: Settings) {
     return renderHook(() => useDrawerHint(settings));
+}
+
+function captureAppStateHandler() {
+    let handler: ((state: string) => void) | undefined;
+    jest.spyOn(AppState, "addEventListener").mockImplementation((_event, listener) => {
+        handler = listener as unknown as (state: string) => void;
+        return {remove: jest.fn()} as never;
+    });
+    return () => handler;
 }
 
 describe("useDrawerHint", () => {
@@ -200,6 +210,31 @@ describe("useDrawerHint", () => {
 
         expect(result.current.trayFor(0)).toBeNull();
         expect(settings.get("drawerHintLastSeenAt")).toBe(NOW);
+
+        await act(async () => { unmount(); });
+    });
+
+    it("refreshes lastSeenAt on foreground without re-opening the lesson", async () => {
+        const handlerOf = captureAppStateHandler();
+        const {settings} = sqliteSettings();
+        const {result, unmount} = await renderDrawerHint(settings);
+
+        expect(result.current.trayFor(0)).toBe("action");
+
+        await act(async () => {
+            result.current.noteManualOpen();
+        });
+        expect(result.current.trayFor(0)).toBeNull();
+
+        const foregroundedAt = NOW + 5000;
+        jest.setSystemTime(foregroundedAt);
+        await act(async () => {
+            handlerOf()?.("active");
+        });
+
+        expect(settings.get("drawerHintLastSeenAt")).toBe(foregroundedAt);
+        expect(result.current.trayFor(0)).toBeNull();
+        expect(result.current.trayFor(1)).toBeNull();
 
         await act(async () => { unmount(); });
     });
