@@ -1,5 +1,6 @@
 import type {BrewFailure} from "@/library/machine/Machine";
 import type {PodCoffee} from "@/library/podCoffee";
+import type {QuickEditRecordAdjustments} from "@/library/quickEdit";
 import Pour from "@/library/Pour";
 import {grindBand} from "@/library/grindBands";
 
@@ -586,6 +587,7 @@ export function unobservedBrew(input: {
     /** Injected by tests; the wall clock otherwise. */
     at?: number;
     id?: string;
+    quickEdit?: QuickEditRecordAdjustments;
 }): BrewRecord {
     const at = input.at ?? Date.now();
     return {
@@ -606,6 +608,7 @@ export function unobservedBrew(input: {
         heldSeconds: 0,
         rating: input.rating,
         pinned: true,
-        watched: false
+        watched: false,
+        ...(input.quickEdit ?? {})
     };
 }

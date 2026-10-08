@@ -11,6 +11,11 @@ import {
 } from "@/library/brew/beanTags";
 import type {BrewPhase} from "@/library/machine/Machine";
 import Pour from "@/library/Pour";
+import {
+    applyQuickEdit,
+    quickEditRecordAdjustments,
+    type QuickEditRecordAdjustments
+} from "@/library/quickEdit";
 import Recipe from "@/library/Recipe";
 import {createTestDatabase, type FakeSQLiteDatabase} from "@/test-utils/sqlite";
 
@@ -287,7 +292,11 @@ const stream: BrewSample[] = [
  * rule the two layers express separately — BrewRecorder's `grindSize > 0` and
  * hydrate's — is checked against each other rather than against a fixture.
  */
-function recorderRecord(recipe: Recipe, id: string): BrewRecord {
+function recorderRecord(
+    recipe: Recipe,
+    id: string,
+    quickEdit?: QuickEditRecordAdjustments
+): BrewRecord {
     let phase: (p: BrewPhase) => void = () => {};
     let saved: BrewRecord | undefined;
     const machine: RecorderMachine = {
@@ -297,6 +306,7 @@ function recorderRecord(recipe: Recipe, id: string): BrewRecord {
     const recorder = new BrewRecorder({
         machine,
         recipe,
+        quickEdit,
         now: () => 1_000_000,
         newId: () => id,
         onRecord: (emitted) => { saved = emitted; }
@@ -935,6 +945,33 @@ describe("quick-edit adjustment metadata", () => {
         }), []);
 
         expect(db.get("brew-adjusted")).toMatchObject({
+            dose: 20,
+            ratio: 18,
+            grindSize: 68,
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: 2
+        });
+    });
+
+    it("round-trips all quick-edit metadata emitted by the recorder", () => {
+        const db = realBrewDatabase();
+        const saved = recorderRecipe();
+        saved.dosage = 18;
+        saved.ratio = 16;
+        saved.grindSize = 62;
+        const adjustments = {dose: 20, ratio: 18, grind: 68, tempOffset: 2};
+        const brewed = applyQuickEdit(saved, adjustments);
+        const emitted = recorderRecord(
+            brewed,
+            "brew-recorder-adjusted",
+            quickEditRecordAdjustments(saved, adjustments)
+        );
+
+        db.insert(emitted, []);
+
+        expect(db.get("brew-recorder-adjusted")).toMatchObject({
             dose: 20,
             ratio: 18,
             grindSize: 68,

@@ -1,6 +1,7 @@
 import {resolveAccent} from "@/library/accent";
 import type {BrewFailure, BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
+import type {QuickEditRecordAdjustments} from "@/library/quickEdit";
 import type Recipe from "@/library/Recipe";
 import {LIFT_DROP_G, SETTLE_CAP_MS, SETTLE_CEILING_MS, SETTLE_FLAT_MS}
     from "@/constants/machine";
@@ -43,6 +44,7 @@ export type RecorderMachine = {
 export type RecorderOptions = {
     machine: RecorderMachine;
     recipe: Recipe;
+    quickEdit?: QuickEditRecordAdjustments;
     onRecord: (record: BrewRecord, samples: BrewSample[], frames: string) => void;
     /** Injected so a test can advance time by hand rather than by waiting. */
     now?: () => number;
@@ -466,6 +468,7 @@ export default class BrewRecorder {
             // Spread rather than assigned, so a recipe with no bypass leaves
             // the key off the row entirely and reads back as an old record.
             ...(bypass === undefined ? {} : {bypass}),
+            ...(this.options.quickEdit ?? {}),
             // Spread rather than assigned, so a brew that never drew down
             // leaves the key off the row entirely and reads back exactly like
             // a record written before this field existed.

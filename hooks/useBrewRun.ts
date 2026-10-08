@@ -11,6 +11,7 @@ import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {stageOriginMl, stageWaterFrom, stalledNow, stallsInStage, type Stall}
     from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
+import type {QuickEditRecordAdjustments} from "@/library/quickEdit";
 import type Recipe from "@/library/Recipe";
 
 /** The part of `BrewDatabase` a run writes to. Injected, so tests need no SQLite. */
@@ -59,7 +60,12 @@ function reachedAt(samples: BrewSample[], stage: number, targetMl: number): numb
  * render when they no longer match — an effect cannot reset it, because
  * `react-hooks/set-state-in-effect` is an error here.
  */
-export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: number = 0) {
+export function useBrewRun(
+    recipe: Recipe | null,
+    store?: BrewStore,
+    runId: number = 0,
+    quickEdit?: QuickEditRecordAdjustments
+) {
     const brewer = useBrew();
     const {machine} = brewer;
     const [published, setPublished] = useState<
@@ -105,6 +111,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     // the start effect (keyed on machine) sees the right recipe without being
     // re-triggered by a new Recipe object on every render.
     const recipeRef = useRef(recipe);
+    const quickEditRef = useRef(quickEdit);
 
     // Opened once and lazily: constructing a BrewDatabase at module scope would
     // open SQLite in every test that imports this file, whether or not it
@@ -116,7 +123,8 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
     // the ref is set before the recorder reads it.
     useEffect(() => {
         recipeRef.current = recipe;
-    }, [recipe]);
+        quickEditRef.current = quickEdit;
+    }, [recipe, quickEdit]);
 
     useEffect(() => {
         const started = recipeRef.current;
@@ -124,6 +132,7 @@ export function useBrewRun(recipe: Recipe | null, store?: BrewStore, runId: numb
         const active = new BrewRecorder({
             machine,
             recipe: started,
+            quickEdit: quickEditRef.current,
             onRecord: (record, taken, frames) => {
                 setRecorded({runId, record});
                 database.current?.insert(record, taken, frames);

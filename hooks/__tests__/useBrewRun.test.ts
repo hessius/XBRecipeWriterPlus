@@ -5,6 +5,7 @@ import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
 import Pour from "@/library/Pour";
+import {applyQuickEdit, quickEditRecordAdjustments} from "@/library/quickEdit";
 import Recipe from "@/library/Recipe";
 
 jest.mock("@/hooks/useBrew", () => ({
@@ -298,6 +299,45 @@ describe("useBrewRun", () => {
         // carry the brew, not just its name.
         expect(h.written[0].samples).toHaveLength(1);
         expect(h.written[0].samples[0].water).toBe(40);
+    });
+
+    it("writes no quick-edit keys when the brew was not adjusted", async () => {
+        const h = harness();
+        await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(40);
+        await h.setPhase({name: "done"});
+
+        expect(h.written[0].record).not.toHaveProperty("adjustedFromDose");
+        expect(h.written[0].record).not.toHaveProperty("adjustedFromRatio");
+        expect(h.written[0].record).not.toHaveProperty("adjustedFromGrind");
+        expect(h.written[0].record).not.toHaveProperty("adjustedTempOffset");
+    });
+
+    it("writes the saved values a quick edit moved away from", async () => {
+        const h = harness();
+        const saved = recipe();
+        saved.dosage = 18;
+        saved.ratio = 16;
+        saved.grindSize = 62;
+        const adjustments = {dose: 20, ratio: 18, grind: 68, tempOffset: 2};
+        const brewed = applyQuickEdit(saved, adjustments);
+        await renderHook(() =>
+            useBrewRun(brewed, h.store, 0, quickEditRecordAdjustments(saved, adjustments))
+        );
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(40);
+        await h.setPhase({name: "done"});
+
+        expect(h.written[0].record).toMatchObject({
+            dose: 20,
+            ratio: 18,
+            grindSize: 68,
+            adjustedFromDose: 18,
+            adjustedFromRatio: 16,
+            adjustedFromGrind: 62,
+            adjustedTempOffset: 2
+        });
     });
 
     it("reads the machine's dial after the brew and keeps it", async () => {

@@ -46,7 +46,13 @@ import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {liveDrawdown} from "@/library/brew/liveDrawdown";
 import {pauseSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
+import {
+    quickEditRecordAdjustments,
+    type QuickEditAdjustments,
+    type QuickEditRecordAdjustments
+} from "@/library/quickEdit";
 import Recipe from "@/library/Recipe";
+import RecipeDatabase from "@/library/RecipeDatabase";
 import {SCREEN_PADDING} from "@/constants/layout";
 
 const WORKING = new Set(["idle", "waking", "sending"]);
@@ -67,6 +73,45 @@ function latestExport(store: ExportStore): BrewExportSource | null {
     return {record: latest, samples: store.samples(latest.id)};
 }
 
+function quickEditNumber(value: unknown, key: keyof QuickEditAdjustments): number | undefined {
+    if (value === undefined) return undefined;
+    if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+        throw new Error(`Invalid quick edit ${key}.`);
+    }
+    return value;
+}
+
+function parseQuickEditParam(value: string | undefined): QuickEditAdjustments | undefined {
+    if (value === undefined) return undefined;
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error("Invalid quick edit adjustment payload.");
+    }
+    const source = parsed as Record<keyof QuickEditAdjustments, unknown>;
+    const adjustments: QuickEditAdjustments = {
+        dose: quickEditNumber(source.dose, "dose"),
+        ratio: quickEditNumber(source.ratio, "ratio"),
+        grind: quickEditNumber(source.grind, "grind"),
+        tempOffset: quickEditNumber(source.tempOffset, "tempOffset")
+    };
+    return Object.values(adjustments).some((entry) => entry !== undefined)
+        ? adjustments
+        : undefined;
+}
+
+function quickEditRecordFromRoute(
+    recipe: Recipe,
+    value: string | undefined
+): QuickEditRecordAdjustments | undefined {
+    const adjustments = parseQuickEditParam(value);
+    if (adjustments === undefined) return undefined;
+    const saved = new RecipeDatabase().getRecipe(recipe.uuid);
+    if (saved === null) {
+        throw new Error("Cannot record a quick edit without the saved recipe baseline.");
+    }
+    return quickEditRecordAdjustments(saved, adjustments);
+}
+
 /** A bordered press. The screen has four of them and they differ only in colour. */
 function Action({label, color, onPress}: {label: string; color: string; onPress: () => void}) {
     return (
@@ -82,7 +127,8 @@ function Action({label, color, onPress}: {label: string; color: string; onPress:
 }
 
 export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) {
-    const {recipeJSON, view} = useLocalSearchParams<{recipeJSON: string; view: string}>();
+    const {recipeJSON, view, quickEditAdjustments} =
+        useLocalSearchParams<{recipeJSON: string; view: string; quickEditAdjustments?: string}>();
     // Opened to look at a run that already exists, from the mini bar, rather
     // than to start one. Without this, coming back to watch the brew you just
     // made would make it again: `start` replaces a finished run, and this
@@ -93,6 +139,9 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // A local recipe from the route params. Used for the first render (before
     // RunOwner in the provider has its first tick) and for `total` below.
     const [localRecipe] = useState(() => new Recipe(undefined, recipeJSON));
+    const [quickEditRecord] = useState(() =>
+        quickEditRecordFromRoute(localRecipe, quickEditAdjustments)
+    );
 
     const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
            error, watch, ratingNoteOpen} = useLiveBrew();
@@ -102,7 +151,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // re-mounting this screen while a brew is in flight never commands a second
     // brew (Finding 2).
     useEffect(() => {
-        if (!viewing) start(localRecipe);
+        if (!viewing) start(localRecipe, quickEditRecord);
         // localRecipe and viewing are stable for the life of this screen.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

@@ -16,6 +16,13 @@ export type QuickEditAdjustments = {
     tempOffset?: number;
 };
 
+export type QuickEditRecordAdjustments = {
+    adjustedFromDose?: number;
+    adjustedFromRatio?: number;
+    adjustedFromGrind?: number;
+    adjustedTempOffset?: number;
+};
+
 export type QuickEditBounds = {
     dose: Range;
     ratio: Range | null;
@@ -58,6 +65,28 @@ export function applyQuickEdit(recipe: Recipe, adjustments: QuickEditAdjustments
     }
 
     return edited;
+}
+
+export function quickEditRecordAdjustments(
+    saved: Recipe,
+    adjustments: QuickEditAdjustments
+): QuickEditRecordAdjustments | undefined {
+    const record: QuickEditRecordAdjustments = {};
+
+    if (adjustments.dose !== undefined && adjustments.dose !== saved.dosage) {
+        record.adjustedFromDose = saved.dosage;
+    }
+    if (adjustments.ratio !== undefined && !saved.isTea() && adjustments.ratio !== saved.ratio) {
+        record.adjustedFromRatio = saved.ratio;
+    }
+    if (adjustments.grind !== undefined && adjustments.grind !== saved.grindSize) {
+        record.adjustedFromGrind = saved.grindSize;
+    }
+    if (adjustments.tempOffset !== undefined && adjustments.tempOffset !== 0) {
+        record.adjustedTempOffset = adjustments.tempOffset;
+    }
+
+    return Object.keys(record).length === 0 ? undefined : record;
 }
 
 export function quickEditBounds(recipe: Recipe): QuickEditBounds {
