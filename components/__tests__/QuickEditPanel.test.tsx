@@ -7,6 +7,7 @@ import {palette} from "@/constants/colors";
 import Pour from "@/library/Pour";
 import Recipe, {CUP_TYPE, GRINDER_OFF_VALUE} from "@/library/Recipe";
 import type {QuickEditAdjustments} from "@/library/quickEdit";
+import type {TemperatureUnit} from "@/library/units";
 import {renderWithProviders} from "@/test-utils/render";
 
 function coffeeRecipe(): Recipe {
@@ -36,11 +37,13 @@ function teaRecipe(): Recipe {
 async function draw(
     adjustments: QuickEditAdjustments = {},
     recipe: Recipe = coffeeRecipe(),
-    onChange = jest.fn()
+    onChange = jest.fn(),
+    temperatureUnit: TemperatureUnit = "C"
 ) {
     const rendered = await renderWithProviders(
         <QuickEditPanel recipe={recipe} adjustments={adjustments}
-                        accent={palette.brand} onChange={onChange}/>
+                        accent={palette.brand} temperatureUnit={temperatureUnit}
+                        onChange={onChange}/>
     );
     return {onChange, ...rendered};
 }
@@ -71,7 +74,7 @@ describe("QuickEditPanel", () => {
 
         await rerender(
             <QuickEditPanel recipe={coffeeRecipe()} adjustments={{grind: GRINDER_OFF_VALUE}}
-                            accent={palette.brand} onChange={onChange}/>
+                            accent={palette.brand} temperatureUnit="C" onChange={onChange}/>
         );
 
         expect(screen.getByText("OFF")).toBeTruthy();
@@ -101,7 +104,7 @@ describe("QuickEditPanel", () => {
 
         await rerender(
             <QuickEditPanel recipe={recipe} adjustments={adjustments}
-                            accent={palette.brand} onChange={onChange}/>
+                            accent={palette.brand} temperatureUnit="C" onChange={onChange}/>
         );
         await fireEvent.press(screen.getByLabelText(restoreAction));
         await fireEvent.press(screen.getByLabelText(restoreAction));
@@ -117,10 +120,23 @@ describe("QuickEditPanel", () => {
 
         await rerender(
             <QuickEditPanel recipe={coffeeRecipe()} adjustments={{}}
-                            accent={palette.brand} onChange={jest.fn()}/>
+                            accent={palette.brand} temperatureUnit="C" onChange={jest.fn()}/>
         );
 
         expect(screen.getByLabelText("Quick edit ratio, 16")).toBeTruthy();
+    });
+
+    it("hides grind for tea and shows it for coffee", async () => {
+        const {rerender} = await draw({}, teaRecipe());
+
+        expect(screen.queryByLabelText(/Quick edit grind/)).toBeNull();
+
+        await rerender(
+            <QuickEditPanel recipe={coffeeRecipe()} adjustments={{}}
+                            accent={palette.brand} temperatureUnit="C" onChange={jest.fn()}/>
+        );
+
+        expect(screen.getByLabelText("Quick edit grind, 65")).toBeTruthy();
     });
 
     it.each([
@@ -137,7 +153,29 @@ describe("QuickEditPanel", () => {
         await draw();
 
         expect(screen.getByTestId("quick-edit-temperature-baseline"))
-            .toHaveTextContent(/88, 88, 90/);
+            .toHaveTextContent(/88, 88, 90 °C/);
+    });
+
+    it("shows Fahrenheit temperatures and stores the canonical positive offset", async () => {
+        const {onChange} = await draw({tempOffset: 1}, coffeeRecipe(), jest.fn(), "F");
+
+        expect(screen.getByTestId("quick-edit-temperature-baseline"))
+            .toHaveTextContent(/190, 190, 194 °F/);
+        expect(screen.getByLabelText("Temperature offset, +2 °F")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Increase Temperature offset"));
+
+        expect(onChange).toHaveBeenCalledWith({tempOffset: 2});
+    });
+
+    it("shows Fahrenheit negative offsets as differences, not absolute temperatures", async () => {
+        const {onChange} = await draw({tempOffset: -1}, coffeeRecipe(), jest.fn(), "F");
+
+        expect(screen.getByLabelText("Temperature offset, -2 °F")).toBeTruthy();
+
+        await fireEvent.press(screen.getByLabelText("Decrease Temperature offset"));
+
+        expect(onChange).toHaveBeenCalledWith({tempOffset: -2});
     });
 
     it("explains dose and ratio volume rescaling", async () => {
@@ -148,7 +186,7 @@ describe("QuickEditPanel", () => {
 
         await rerender(
             <QuickEditPanel recipe={coffeeRecipe()} adjustments={{ratio: 17}}
-                            accent={palette.brand} onChange={jest.fn()}/>
+                            accent={palette.brand} temperatureUnit="C" onChange={jest.fn()}/>
         );
 
         expect(screen.getByTestId("quick-edit-explainer"))
@@ -162,7 +200,7 @@ describe("QuickEditPanel", () => {
 
         await rerender(
             <QuickEditPanel recipe={coffeeRecipe()} adjustments={{tempOffset: 2}}
-                            accent={palette.brand} onChange={jest.fn()}/>
+                            accent={palette.brand} temperatureUnit="C" onChange={jest.fn()}/>
         );
 
         expect(screen.queryByTestId("quick-edit-explainer")).toBeNull();
@@ -171,7 +209,7 @@ describe("QuickEditPanel", () => {
     it("surfaces problems and reports brewability through the render prop", async () => {
         await renderWithProviders(
             <QuickEditPanel recipe={coffeeRecipe()} adjustments={{ratio: 100}}
-                            accent={palette.brand} onChange={jest.fn()}
+                            accent={palette.brand} temperatureUnit="C" onChange={jest.fn()}
                             renderBrewAction={({brewable}) => (
                                 <Text testID="host-brewable">
                                     {brewable ? "brewable" : "blocked"}
@@ -184,10 +222,20 @@ describe("QuickEditPanel", () => {
         expect(screen.getByTestId("host-brewable")).toHaveTextContent("blocked");
     });
 
+    it("shows quick edit problems in the selected temperature unit", async () => {
+        const recipe = coffeeRecipe();
+        recipe.pours[0].temperature = 38;
+
+        await draw({}, recipe, jest.fn(), "F");
+
+        expect(screen.getByTestId("quick-edit-problems"))
+            .toHaveTextContent(/Stage 1 brews at 100 F\. The range is 102-210 F\./);
+    });
+
     it("reports brewable when there are no problems", async () => {
         await renderWithProviders(
             <QuickEditPanel recipe={coffeeRecipe()} adjustments={{grind: 66}}
-                            accent={palette.brand} onChange={jest.fn()}
+                            accent={palette.brand} temperatureUnit="C" onChange={jest.fn()}
                             renderBrewAction={({brewable}) => (
                                 <Text testID="host-brewable">
                                     {brewable ? "brewable" : "blocked"}

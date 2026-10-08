@@ -774,6 +774,7 @@ type QuickEditLayerProps = {
     recipe: Recipe;
     adjustments: QuickEditAdjustments;
     accent: string;
+    temperatureUnit: TemperatureUnit;
     actionBarHeight: number;
     onChange: (adjustments: QuickEditAdjustments) => void;
     onClose: () => void;
@@ -783,7 +784,7 @@ type QuickEditLayerProps = {
 const QUICK_EDIT_HORIZONTAL_PADDING = 16;
 
 function QuickEditLayer({
-    open, recipe, adjustments, accent, actionBarHeight, onChange, onClose, onBrew
+    open, recipe, adjustments, accent, temperatureUnit, actionBarHeight, onChange, onClose, onBrew
 }: QuickEditLayerProps) {
     const {reduced, resolved} = useReducedMotionState();
     if (!open) return null;
@@ -829,6 +830,7 @@ function QuickEditLayer({
                 <QuickEditPanel recipe={recipe}
                                 adjustments={adjustments}
                                 accent={accent}
+                                temperatureUnit={temperatureUnit}
                                 onChange={onChange}
                                 renderBrewAction={(brewability) => (
                                     <BarButton label="BREW"
@@ -1433,6 +1435,7 @@ export default function EditRecipe(
                             recipe={recipe}
                             adjustments={quickEditAdjustments}
                             accent={accent}
+                            temperatureUnit={temperatureUnit}
                             actionBarHeight={actionBarHeight}
                             onChange={setQuickEditAdjustments}
                             onClose={() => setQuickEditOpen(false)}

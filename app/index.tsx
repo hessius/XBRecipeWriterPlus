@@ -88,6 +88,7 @@ import {
     quickEditProblems,
     type QuickEditAdjustments
 } from "@/library/quickEdit";
+import {asTemperatureUnit, type TemperatureUnit} from "@/library/units";
 import {tagKey} from "@/library/tagKey";
 import {shareBlockReason} from "@/library/shareLink";
 import {type Settings} from "@/library/Settings";
@@ -235,12 +236,14 @@ function HomeQuickEditSheet({
     state,
     onOpenChange,
     onChange,
-    onBrew
+    onBrew,
+    temperatureUnit
 }: {
     state: HomeQuickEditState | null;
     onOpenChange: (open: boolean) => void;
     onChange: (adjustments: QuickEditAdjustments) => void;
     onBrew: () => void;
+    temperatureUnit: TemperatureUnit;
 }) {
     const recipe = state?.recipe ?? null;
     const adjustments = state?.adjustments ?? {};
@@ -254,6 +257,7 @@ function HomeQuickEditSheet({
                     recipe={recipe}
                     adjustments={adjustments}
                     accent={accent}
+                    temperatureUnit={temperatureUnit}
                     onChange={onChange}
                     renderBrewAction={(brewability) => (
                         <Button
@@ -307,6 +311,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     const [dottedProfile] = useSetting("dotMatrixProfile", settings);
     const [invertAutoShelves] = useSetting("invertAutoShelves", settings);
     const [hiddenShelves, setHiddenShelves] = useSetting("hiddenShelves", settings);
+    const [rawTemperatureUnit] = useSetting("temperatureUnit", settings);
+    const temperatureUnit = asTemperatureUnit(rawTemperatureUnit);
     // Written from the card-read sink below, never read here. The setter is the
     // whole point: a diagnostic capture has to be persisted the instant it is
     // taken, before `parseData` gets a chance to crash on a bypass card.
@@ -1769,7 +1775,8 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                     if (!next) setQuickEdit(null);
                 }}
                 onChange={onQuickEditChange}
-                onBrew={brewQuickEdit}/>
+                onBrew={brewQuickEdit}
+                temperatureUnit={temperatureUnit}/>
 
             <ImportSheet
                 open={importOpen}

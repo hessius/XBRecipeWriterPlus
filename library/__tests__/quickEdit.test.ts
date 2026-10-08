@@ -6,8 +6,10 @@ import {
     cloneRecipe,
     describeAdjustment,
     describeTemperatureBaseline,
+    effectiveGrind,
     quickEditBounds,
     quickEditProblems,
+    quickEditRecordAdjustments,
 } from "@/library/quickEdit";
 
 function coffeeRecipe(
@@ -100,6 +102,13 @@ describe("applyQuickEdit", () => {
         expect(edited.grindSize).toBe(GRINDER_OFF_VALUE);
     });
 
+    it("ignores grind adjustments for tea because tea brews without the grinder", () => {
+        const edited = applyQuickEdit(teaRecipe(), {grind: 62});
+
+        expect(edited.grindSize).toBe(50);
+        expect(edited.grinder).toBe(true);
+    });
+
     it("applies a positive temperature offset to every stage", () => {
         const edited = applyQuickEdit(coffeeRecipe(), {tempOffset: 3});
 
@@ -181,6 +190,27 @@ describe("quickEditBounds", () => {
     it("marks ratio unavailable for tea", () => {
         expect(quickEditBounds(teaRecipe()).ratio).toBeNull();
     });
+
+    it("marks grind unavailable for tea", () => {
+        expect(quickEditBounds(teaRecipe()).grind).toBeNull();
+    });
+});
+
+describe("quickEditRecordAdjustments", () => {
+    it("stores the effective saved grind when the grinder was off", () => {
+        const saved = coffeeRecipe();
+        saved.grinder = false;
+        saved.grindSize = 50;
+
+        expect(effectiveGrind(saved)).toBe(GRINDER_OFF_VALUE);
+        expect(quickEditRecordAdjustments(saved, {grind: 50})).toEqual({
+            adjustedFromGrind: GRINDER_OFF_VALUE
+        });
+    });
+
+    it("ignores grind metadata for tea", () => {
+        expect(quickEditRecordAdjustments(teaRecipe(), {grind: 62})).toBeUndefined();
+    });
 });
 
 describe("quickEditProblems", () => {
@@ -239,36 +269,42 @@ describe("describeAdjustment", () => {
 
 describe("describeTemperatureBaseline", () => {
     it("lists a single stage with the recipe prefix below the font cap", () => {
-        expect(describeTemperatureBaseline(coffeeRecipe([240], [88]), 1.3)).toBe("recipe 88");
+        expect(describeTemperatureBaseline(coffeeRecipe([240], [88]), 1.3))
+            .toBe("recipe 88 °C");
     });
 
     it("lists three distinct stages from the short side of the boundary", () => {
         expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 90, 92]), 1.3))
-            .toBe("recipe 88, 90, 92");
+            .toBe("recipe 88, 90, 92 °C");
     });
 
     it("collapses an all-identical three-stage list", () => {
         expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 88, 88]), 1.3))
-            .toBe("recipe 88");
+            .toBe("recipe 88 °C");
     });
 
     it("keeps partially repeated values in a three-stage list", () => {
         expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 88, 90]), 1.3))
-            .toBe("recipe 88, 88, 90");
+            .toBe("recipe 88, 88, 90 °C");
     });
 
     it("drops the recipe prefix for a three-stage list at the font cap", () => {
         expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 88, 90]), 1.4))
-            .toBe("88, 88, 90");
+            .toBe("88, 88, 90 °C");
     });
 
     it("collapses four stages to a range from the long side of the boundary", () => {
         expect(describeTemperatureBaseline(coffeeRecipe([60, 60, 60, 60], [80, 85, 88, 90]), 1.4))
-            .toBe("recipe 80 to 90");
+            .toBe("recipe 80 to 90 °C");
     });
 
     it("uses one value when every stage shares a temperature", () => {
         expect(describeTemperatureBaseline(coffeeRecipe([60, 60, 60, 60], [88, 88, 88, 88]), 1.4))
-            .toBe("88");
+            .toBe("88 °C");
+    });
+
+    it("formats the baseline at the display boundary in Fahrenheit", () => {
+        expect(describeTemperatureBaseline(coffeeRecipe([80, 80, 80], [88, 90, 92]), 1.3, "F"))
+            .toBe("recipe 190, 194, 198 °F");
     });
 });

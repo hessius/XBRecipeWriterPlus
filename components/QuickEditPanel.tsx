@@ -8,11 +8,19 @@ import {palette} from "@/constants/colors";
 import {
     describeAdjustment,
     describeTemperatureBaseline,
+    effectiveGrind,
     quickEditBounds,
     quickEditProblems,
     type QuickEditAdjustments
 } from "@/library/quickEdit";
 import Recipe from "@/library/Recipe";
+import {
+    displayOffsetValues,
+    fromDisplayOffset,
+    toDisplayOffset,
+    unitSuffix,
+    type TemperatureUnit
+} from "@/library/units";
 
 export type QuickEditPanelBrewability = {
     brewable: boolean;
@@ -23,6 +31,7 @@ export type QuickEditPanelProps = {
     recipe: Recipe;
     adjustments: QuickEditAdjustments;
     accent: string;
+    temperatureUnit: TemperatureUnit;
     onChange: (adjustments: QuickEditAdjustments) => void;
     renderBrewAction?: (brewability: QuickEditPanelBrewability) => React.ReactNode;
 };
@@ -41,10 +50,6 @@ function signed(value: number): string {
 
 function grindValue(value: number, off: number): string {
     return value === off ? "OFF" : String(value);
-}
-
-function savedGrind(recipe: Recipe, off: number): number {
-    return recipe.grinder ? recipe.grindSize : off;
 }
 
 function updateAdjustment(
@@ -79,20 +84,22 @@ function QuickEditRow({label, children, detail}: QuickEditRowProps) {
 }
 
 export default function QuickEditPanel({
-    recipe, adjustments, accent, onChange, renderBrewAction
+    recipe, adjustments, accent, temperatureUnit, onChange, renderBrewAction
 }: QuickEditPanelProps) {
     const {fontScale} = useWindowDimensions();
     const bounds = quickEditBounds(recipe);
     const savedDose = recipe.dosage;
     const savedRatio = recipe.ratio;
-    const savedGrindValue = savedGrind(recipe, bounds.grind.off);
+    const savedGrindValue = effectiveGrind(recipe);
+    const grindBounds = bounds.grind;
     const dose = adjustments.dose ?? savedDose;
     const ratio = adjustments.ratio ?? savedRatio;
     const grind = adjustments.grind ?? savedGrindValue;
-    const tempOffset = adjustments.tempOffset ?? 0;
-    const temperatureBaseline = describeTemperatureBaseline(recipe, fontScale);
+    const tempOffset = toDisplayOffset(adjustments.tempOffset ?? 0, temperatureUnit);
+    const temperatureBaseline = describeTemperatureBaseline(recipe, fontScale, temperatureUnit);
+    const offsetValues = displayOffsetValues(bounds.tempOffset, temperatureUnit);
     const explainer = describeAdjustment(recipe, adjustments);
-    const problems = quickEditProblems(recipe, adjustments);
+    const problems = quickEditProblems(recipe, adjustments, temperatureUnit);
     const brewability: QuickEditPanelBrewability = {
         brewable: problems.length === 0,
         problems
@@ -142,15 +149,17 @@ export default function QuickEditPanel({
                     </QuickEditRow>
                 )}
 
-                <QuickEditRow label="GRIND">
-                    <Stepper label="Quick edit grind" value={grind}
-                             min={bounds.grind.min} max={bounds.grind.off} step={1}
-                             accent={accent}
-                             formatValue={(value) => grindValue(value, bounds.grind.off)}
-                             onChange={(value) => onChange(updateAdjustment(
-                                 adjustments, "grind", value, savedGrindValue
-                             ))}/>
-                </QuickEditRow>
+                {grindBounds !== null && (
+                    <QuickEditRow label="GRIND">
+                        <Stepper label="Quick edit grind" value={grind}
+                                 min={grindBounds.min} max={grindBounds.off} step={1}
+                                 accent={accent}
+                                 formatValue={(value) => grindValue(value, grindBounds.off)}
+                                 onChange={(value) => onChange(updateAdjustment(
+                                     adjustments, "grind", value, savedGrindValue
+                                 ))}/>
+                    </QuickEditRow>
+                )}
 
                 <QuickEditRow label="TEMP OFFSET"
                               detail={(
@@ -161,10 +170,17 @@ export default function QuickEditPanel({
                                   </Text>
                               )}>
                     <Stepper label="Temperature offset" value={tempOffset}
-                             min={bounds.tempOffset.min} max={bounds.tempOffset.max} step={1}
-                             unit="°C" accent={accent} formatValue={signed} signedInput
+                             min={offsetValues[0] ?? 0}
+                             max={offsetValues[offsetValues.length - 1] ?? 0}
+                             step={1}
+                             values={offsetValues}
+                             unit={unitSuffix(temperatureUnit)}
+                             accent={accent} formatValue={signed} signedInput
                              onChange={(value) => onChange(updateAdjustment(
-                                 adjustments, "tempOffset", value, 0
+                                 adjustments,
+                                 "tempOffset",
+                                 fromDisplayOffset(value, temperatureUnit),
+                                 0
                              ))}/>
                 </QuickEditRow>
             </YStack>

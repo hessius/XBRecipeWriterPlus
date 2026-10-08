@@ -7,7 +7,7 @@ import {
     type Range,
 } from "@/library/cardLimits";
 import Recipe, {GRINDER_OFF_VALUE} from "@/library/Recipe";
-import type {TemperatureUnit} from "@/library/units";
+import {toDisplay, unitSuffix, type TemperatureUnit} from "@/library/units";
 
 export type QuickEditAdjustments = {
     dose?: number;
@@ -26,7 +26,7 @@ export type QuickEditRecordAdjustments = {
 export type QuickEditBounds = {
     dose: Range;
     ratio: Range | null;
-    grind: Range & {off: typeof GRINDER_OFF_VALUE};
+    grind: (Range & {off: typeof GRINDER_OFF_VALUE}) | null;
     tempOffset: Range;
 };
 
@@ -43,7 +43,7 @@ function clamp(value: number, range: Range): number {
 export function applyQuickEdit(recipe: Recipe, adjustments: QuickEditAdjustments): Recipe {
     const edited = cloneRecipe(recipe);
 
-    if (adjustments.grind !== undefined) {
+    if (adjustments.grind !== undefined && !edited.isTea()) {
         edited.grindSize = adjustments.grind;
         edited.grinder = adjustments.grind !== GRINDER_OFF_VALUE;
     }
@@ -79,14 +79,19 @@ export function quickEditRecordAdjustments(
     if (adjustments.ratio !== undefined && !saved.isTea() && adjustments.ratio !== saved.ratio) {
         record.adjustedFromRatio = saved.ratio;
     }
-    if (adjustments.grind !== undefined && adjustments.grind !== saved.grindSize) {
-        record.adjustedFromGrind = saved.grindSize;
+    const savedGrind = effectiveGrind(saved);
+    if (adjustments.grind !== undefined && !saved.isTea() && adjustments.grind !== savedGrind) {
+        record.adjustedFromGrind = savedGrind;
     }
     if (adjustments.tempOffset !== undefined && adjustments.tempOffset !== 0) {
         record.adjustedTempOffset = adjustments.tempOffset;
     }
 
     return Object.keys(record).length === 0 ? undefined : record;
+}
+
+export function effectiveGrind(recipe: Recipe): number {
+    return recipe.grinder ? recipe.grindSize : GRINDER_OFF_VALUE;
 }
 
 export function quickEditBounds(recipe: Recipe): QuickEditBounds {
@@ -103,7 +108,7 @@ export function quickEditBounds(recipe: Recipe): QuickEditBounds {
             max: recipe.isTea() ? 10 : DOSE.max,
         },
         ratio: recipe.isTea() ? null : RATIO,
-        grind: {
+        grind: recipe.isTea() ? null : {
             ...GRIND_SIZE,
             off: GRINDER_OFF_VALUE,
         },
@@ -167,9 +172,10 @@ export function describeTemperatureList(temperatures: number[]): string {
 
 export function describeTemperatureBaseline(
     recipe: Recipe | TemperatureBaseline,
-    fontScale: number
+    fontScale: number,
+    temperatureUnit: TemperatureUnit = "C"
 ): string {
-    const temperatures = recipe.pours.map((pour) => pour.temperature);
+    const temperatures = recipe.pours.map((pour) => toDisplay(pour.temperature, temperatureUnit));
     if (temperatures.length === 0) {
         return "recipe";
     }
@@ -178,5 +184,6 @@ export function describeTemperatureBaseline(
     const minTemperature = Math.min(...temperatures);
     const maxTemperature = Math.max(...temperatures);
     const rangeSummary = temperatures.length >= 4 && minTemperature !== maxTemperature;
-    return fontScale >= 1.4 && !rangeSummary ? values : `recipe ${values}`;
+    const valueText = `${values} ${unitSuffix(temperatureUnit)}`;
+    return fontScale >= 1.4 && !rangeSummary ? valueText : `recipe ${valueText}`;
 }
