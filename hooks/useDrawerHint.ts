@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from "react";
 import {AppState} from "react-native";
 
-import {STAGGER, useReducedMotion} from "@/constants/motion";
+import {STAGGER, useReducedMotionState} from "@/constants/motion";
 import {
     DRAWER_ACTION_SIGNATURE,
     type DrawerHintState,
@@ -48,7 +48,7 @@ function writeDrawerHintState(settings: Settings, state: DrawerHintState) {
 }
 
 export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint {
-    const reducedMotion = useReducedMotion();
+    const reducedMotion = useReducedMotionState();
     const [decision] = useState<DrawerHintDecision>(() => {
         const now = Date.now();
         const armed = rearmDrawerHint(
@@ -85,7 +85,12 @@ export function useDrawerHint(settings: Settings = sharedSettings()): DrawerHint
     }, [settings]);
 
     function trayFor(recipeIndex: number): "action" | "management" | null {
-        if (!showing || reducedMotion || bouncedRows.has(recipeIndex)) return null;
+        // The first reduced-motion read is asynchronous. Until it resolves the
+        // safe failure mode is silence: if native never answers, the lesson
+        // never shows rather than spending an appearance on motion a user may
+        // have asked us not to play.
+        if (!showing || !reducedMotion.resolved || reducedMotion.reduced ||
+            bouncedRows.has(recipeIndex)) return null;
         if (recipeIndex === 0) return "action";
         if (recipeIndex === 1) return "management";
         return null;

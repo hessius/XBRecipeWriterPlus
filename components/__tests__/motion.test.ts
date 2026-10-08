@@ -1,7 +1,12 @@
 import {AccessibilityInfo} from "react-native";
 import {act, renderHook, waitFor} from "@testing-library/react-native";
 
-import {DURATION, useReducedMotion} from "@/constants/motion";
+import {
+    __resetReducedMotion,
+    DURATION,
+    useReducedMotion,
+    useReducedMotionState
+} from "@/constants/motion";
 
 describe("DURATION", () => {
     it("keeps every duration inside the band a user reads as movement", () => {
@@ -20,8 +25,13 @@ describe("DURATION", () => {
 });
 
 describe("useReducedMotion", () => {
+    beforeEach(() => {
+        __resetReducedMotion();
+    });
+
     afterEach(() => {
         jest.restoreAllMocks();
+        __resetReducedMotion();
     });
 
     // These two leave AccessibilityInfo.addEventListener alone, so the real
@@ -36,20 +46,42 @@ describe("useReducedMotion", () => {
         // renderHook is async in Testing Library v14, like render and fireEvent.
         // Without the await, destructuring yields undefined rather than failing
         // loudly.
-        const {result} = await renderHook(() => useReducedMotion());
+        const {result, unmount} = await renderHook(() => useReducedMotion());
 
         await waitFor(() => expect(read).toHaveBeenCalled());
         // Asserting the call matters: false is also the initial state, so
         // checking the value alone would pass against a hook that read nothing.
         expect(result.current).toBe(false);
+        await act(async () => { unmount(); });
     });
 
     it("reports true when the OS has motion reduced", async () => {
         jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
 
-        const {result} = await renderHook(() => useReducedMotion());
+        const {result, unmount} = await renderHook(() => useReducedMotion());
 
         await waitFor(() => expect(result.current).toBe(true));
+        await act(async () => { unmount(); });
+    });
+
+    it("reports whether the first OS read has resolved", async () => {
+        let settle: (enabled: boolean) => void = () => {};
+        jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockReturnValue(
+            new Promise((resolve) => {
+                settle = resolve;
+            })
+        );
+
+        const {result, unmount} = await renderHook(() => useReducedMotionState());
+
+        expect(result.current).toEqual({reduced: false, resolved: false});
+
+        await act(async () => {
+            settle(false);
+        });
+
+        expect(result.current).toEqual({reduced: false, resolved: true});
+        await act(async () => { unmount(); });
     });
 
     // The rest capture the change handler, which does require stubbing
@@ -74,12 +106,13 @@ describe("useReducedMotion", () => {
         const handlerOf = captureHandler();
         jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(false);
 
-        const {result} = await renderHook(() => useReducedMotion());
+        const {result, unmount} = await renderHook(() => useReducedMotion());
         await waitFor(() => expect(result.current).toBe(false));
 
         await act(async () => handlerOf()?.(true));
 
         expect(result.current).toBe(true);
+        await act(async () => { unmount(); });
     });
 
     it("does not let the initial read overwrite a newer change event", async () => {
@@ -95,7 +128,7 @@ describe("useReducedMotion", () => {
             })
         );
 
-        const {result} = await renderHook(() => useReducedMotion());
+        const {result, unmount} = await renderHook(() => useReducedMotion());
 
         await act(async () => handlerOf()?.(true));
         await act(async () => {
@@ -103,6 +136,7 @@ describe("useReducedMotion", () => {
         });
 
         expect(result.current).toBe(true);
+        await act(async () => { unmount(); });
     });
 
     it("starts a later mount from the last known value", async () => {
@@ -113,7 +147,7 @@ describe("useReducedMotion", () => {
         jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockResolvedValue(true);
         const first = await renderHook(() => useReducedMotion());
         await waitFor(() => expect(first.result.current).toBe(true));
-        first.unmount();
+        await act(async () => { first.unmount(); });
 
         // Never resolves, so the cache is the only thing that can supply a value.
         jest.spyOn(AccessibilityInfo, "isReduceMotionEnabled").mockReturnValue(
@@ -122,5 +156,6 @@ describe("useReducedMotion", () => {
         const second = await renderHook(() => useReducedMotion());
 
         expect(second.result.current).toBe(true);
+        await act(async () => { second.unmount(); });
     });
 });

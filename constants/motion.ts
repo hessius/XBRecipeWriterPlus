@@ -221,9 +221,18 @@ export const ATTRACT = {
  * which is worse for a Reduce Motion user than either path alone.
  */
 let cachedReducedMotion = false;
+let cachedReducedMotionResolved = false;
 
-export function useReducedMotion(): boolean {
-    const [reduced, setReduced] = useState(cachedReducedMotion);
+export type ReducedMotionState = {
+    reduced: boolean;
+    resolved: boolean;
+};
+
+export function useReducedMotionState(): ReducedMotionState {
+    const [state, setState] = useState<ReducedMotionState>(() => ({
+        reduced:  cachedReducedMotion,
+        resolved: cachedReducedMotionResolved
+    }));
 
     useEffect(() => {
         let cancelled = false;
@@ -231,8 +240,9 @@ export function useReducedMotion(): boolean {
 
         const apply = (enabled: boolean) => {
             cachedReducedMotion = enabled;
+            cachedReducedMotionResolved = true;
             if (!cancelled) {
-                setReduced(enabled);
+                setState({reduced: enabled, resolved: true});
             }
         };
 
@@ -258,8 +268,11 @@ export function useReducedMotion(): boolean {
             })
             .catch(() => {
                 // An unavailable setting is not a reason to fail. Assume motion is
-                // fine. No state is written here, so `cancelled` has nothing to
-                // guard.
+                // fine, but mark the read resolved so callers waiting for the
+                // first authoritative answer do not wait forever on a rejection.
+                if (!superseded) {
+                    apply(false);
+                }
             });
 
         return () => {
@@ -268,5 +281,14 @@ export function useReducedMotion(): boolean {
         };
     }, []);
 
-    return reduced;
+    return state;
+}
+
+export function useReducedMotion(): boolean {
+    return useReducedMotionState().reduced;
+}
+
+export function __resetReducedMotion(): void {
+    cachedReducedMotion = false;
+    cachedReducedMotionResolved = false;
 }

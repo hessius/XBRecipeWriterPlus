@@ -1,7 +1,7 @@
 import {act, renderHook} from "@testing-library/react-native";
 import {AppState} from "react-native";
 
-import {STAGGER, useReducedMotion} from "@/constants/motion";
+import {STAGGER, useReducedMotionState} from "@/constants/motion";
 import {useDrawerHint} from "@/hooks/useDrawerHint";
 import {DRAWER_ACTION_SIGNATURE} from "@/library/drawerHint";
 import {Settings, type SettingKey, type SettingValue, type SettingsStorage} from "@/library/Settings";
@@ -9,10 +9,10 @@ import {createTestDatabase, type FakeSQLiteDatabase} from "@/test-utils/sqlite";
 
 jest.mock("@/constants/motion", () => ({
     ...jest.requireActual("@/constants/motion"),
-    useReducedMotion: jest.fn(() => false)
+    useReducedMotionState: jest.fn(() => ({reduced: false, resolved: true}))
 }));
 
-const mockReducedMotion = jest.mocked(useReducedMotion);
+const mockReducedMotion = jest.mocked(useReducedMotionState);
 const NOW = 1_000_000_000;
 
 function sqliteSettings(
@@ -64,7 +64,7 @@ function captureAppStateHandler() {
 describe("useDrawerHint", () => {
     beforeEach(() => {
         jest.useFakeTimers({now: NOW});
-        mockReducedMotion.mockReturnValue(false);
+        mockReducedMotion.mockReturnValue({reduced: false, resolved: true});
     });
 
     afterEach(() => {
@@ -155,7 +155,7 @@ describe("useDrawerHint", () => {
     });
 
     it("suppresses the animated lesson when reduced motion is enabled", async () => {
-        mockReducedMotion.mockReturnValue(true);
+        mockReducedMotion.mockReturnValue({reduced: true, resolved: true});
         const {settings} = sqliteSettings();
         const {result, unmount} = await renderDrawerHint(settings);
 
@@ -167,7 +167,9 @@ describe("useDrawerHint", () => {
     });
 
     it("suppresses a latched lesson when reduced motion arrives after the first render", async () => {
-        mockReducedMotion.mockReturnValueOnce(false).mockReturnValue(true);
+        mockReducedMotion
+            .mockReturnValueOnce({reduced: false, resolved: true})
+            .mockReturnValue({reduced: true, resolved: true});
         const {settings} = sqliteSettings();
         const {result, rerender, unmount} = await renderDrawerHint(settings);
 
@@ -177,6 +179,24 @@ describe("useDrawerHint", () => {
 
         expect(result.current.trayFor(0)).toBeNull();
         expect(result.current.trayFor(1)).toBeNull();
+        expect(settings.get("drawerHintShownCount")).toBe(0);
+
+        await act(async () => { unmount(); });
+    });
+
+    it("waits to deliver a latched lesson until reduced motion is known", async () => {
+        mockReducedMotion
+            .mockReturnValueOnce({reduced: false, resolved: false})
+            .mockReturnValue({reduced: false, resolved: true});
+        const {settings} = sqliteSettings();
+        const {result, rerender, unmount} = await renderDrawerHint(settings);
+
+        expect(result.current.trayFor(0)).toBeNull();
+        expect(settings.get("drawerHintShownCount")).toBe(0);
+
+        await act(async () => { rerender({}); });
+
+        expect(result.current.trayFor(0)).toBe("action");
         expect(settings.get("drawerHintShownCount")).toBe(0);
 
         await act(async () => { unmount(); });
