@@ -28,7 +28,11 @@ export default function ScrollFade({
     color?: string;
     testID?: string;
 }) {
-    const id = React.useId();
+    // React's id carries punctuation (`:r0:`), which is not valid in an SVG
+    // `url(#...)` reference, so the gradient silently fails to resolve and the
+    // fade draws as nothing. Every other SVG component here strips it the
+    // same way.
+    const id = React.useId().replace(/[^a-zA-Z0-9]/g, "");
     const fillId = `scroll-fade-${id}`;
 
     const style = useAnimatedStyle(() => ({opacity: progress.value}));

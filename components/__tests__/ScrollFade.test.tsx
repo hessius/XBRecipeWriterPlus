@@ -62,6 +62,24 @@ describe("ScrollFade", () => {
     });
 
     /**
+     * React's own id is punctuated (`:r0:`), and punctuation is not valid in
+     * an SVG `url(#...)` reference, so an unstripped id resolves to nothing
+     * and the fade draws as a transparent rectangle. It fails silently and it
+     * fails everywhere, which is why it is worth a test of its own rather
+     * than a look.
+     */
+    it("builds a gradient id an SVG reference can resolve", async () => {
+        const progress = makeMutable(1);
+        const {toJSON} = await renderWithProviders(
+            <ScrollFade progress={progress} testID="fade" />
+        );
+        const ids = JSON.stringify(toJSON())
+            .match(/scroll-fade-[^"\\)]*/g) ?? [];
+        expect(ids.length).toBeGreaterThan(0);
+        for (const id of ids) expect(id).toMatch(/^scroll-fade-[a-zA-Z0-9]*$/);
+    });
+
+    /**
      * Two fades on one screen must not share a gradient id. SVG resolves
      * `url(#id)` against the whole document, so a duplicate id means the
      * second fade silently paints with the first one's colour.

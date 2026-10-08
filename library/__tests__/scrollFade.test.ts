@@ -73,4 +73,16 @@ describe("the scroller's bottom fade", () => {
             offsetY: 0, viewportHeight: 0, contentHeight: 0
         })).toBe(0);
     });
+
+    /**
+     * The two measurements arrive separately and in no guaranteed order, so a
+     * content height can turn up while the viewport is still zero. Measured
+     * against nothing, any content overflows, and the fade would open fully
+     * on a summary that goes on to fit.
+     */
+    it("draws nothing for content measured against an unknown viewport", () => {
+        expect(scrollFadeOpacity({
+            offsetY: 0, viewportHeight: 0, contentHeight: 1400
+        })).toBe(0);
+    });
 });

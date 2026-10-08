@@ -39,6 +39,14 @@ export type ScrollFadeMetrics = {
 
 export function scrollFadeOpacity(metrics: ScrollFadeMetrics): number {
     const {offsetY, viewportHeight, contentHeight} = metrics;
+
+    // An unmeasured viewport is "we do not know yet", and the two arrive
+    // separately: a content height can land before the scroller has reported
+    // its own size. Measured against a viewport of zero, any content at all
+    // overflows, and the fade would open fully on a summary that turns out to
+    // fit.
+    if (viewportHeight <= 0) return 0;
+
     const overflow = contentHeight - viewportHeight;
     if (!(overflow > OVERFLOW_FLOOR)) return 0;
 

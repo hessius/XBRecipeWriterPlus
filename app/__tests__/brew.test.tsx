@@ -571,6 +571,27 @@ describe("brew route", () => {
         expect(getByTestId("done-scroll").props.scrollEventThrottle).toBe(16);
     });
 
+    /**
+     * And how big it is, from both ends. A scroll event is the only thing
+     * that carries every number the fade needs, so a fade fed by scrolling
+     * alone stays invisible until the reader has already scrolled, which is
+     * exactly the reader who did not need telling.
+     */
+    it("tells the fade how big the summary and its scroller are", async () => {
+        const {getByTestId} = await drawDone();
+        expect(typeof getByTestId("done-scroll").props.onContentSizeChange)
+            .toBe("function");
+
+        // The scroller's own height is measured for the summary as well, so
+        // this one has to stay hooked up to both.
+        await act(async () => {
+            fireEvent(getByTestId("done-scroll"), "layout", {
+                nativeEvent: {layout: {height: 640, width: 354, x: 0, y: 0}}
+            });
+        });
+        expect(summaryProps.availableHeight).toBe(640);
+    });
+
     it("draws the fade over the summary", async () => {
         const {getByTestId} = await drawDone();
         expect(getByTestId("done-fade", {includeHiddenElements: true})).toBeTruthy();

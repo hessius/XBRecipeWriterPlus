@@ -42,6 +42,48 @@ describe("useScrollFade", () => {
      * the screen re-measures as the brew finishes. So the handler has to read
      * the sizes out of each event rather than latching the first ones.
      */
+    /**
+     * The one the review caught. A scroll event is the only thing carrying
+     * all three numbers, so a fade that waits for one shows nothing until
+     * somebody has already scrolled, which is precisely the reader who did
+     * not need telling. Layout has to be enough.
+     */
+    it("opens on layout alone, before anybody has scrolled", async () => {
+        const {result} = await renderHook(() => useScrollFade());
+        result.current.onLayout({
+            nativeEvent: {layout: {height: 600, width: 390, x: 0, y: 0}}
+        } as never);
+        result.current.onContentSizeChange(390, 1400);
+        expect(result.current.progress.value).toBe(1);
+    });
+
+    /**
+     * And in the other order, because nothing guarantees which of the two
+     * arrives first.
+     */
+    it("opens whichever measurement arrives first", async () => {
+        const {result} = await renderHook(() => useScrollFade());
+        result.current.onContentSizeChange(390, 1400);
+        expect(result.current.progress.value).toBe(0);
+        result.current.onLayout({
+            nativeEvent: {layout: {height: 600, width: 390, x: 0, y: 0}}
+        } as never);
+        expect(result.current.progress.value).toBe(1);
+    });
+
+    /**
+     * The summary grows as the brew finishes and the stage detail opens, so
+     * a content height arriving after a scroll has to be taken against the
+     * offset already reached rather than against zero.
+     */
+    it("keeps the scroll position when the content is re-measured", async () => {
+        const {result} = await renderHook(() => useScrollFade());
+        result.current.onScroll(scrollEvent(800, 600, 1400));
+        expect(result.current.progress.value).toBe(0);
+        result.current.onContentSizeChange(390, 2000);
+        expect(result.current.progress.value).toBe(1);
+    });
+
     it("follows a scroller that changes size", async () => {
         const {result} = await renderHook(() => useScrollFade());
         result.current.onScroll(scrollEvent(0, 600, 1400));

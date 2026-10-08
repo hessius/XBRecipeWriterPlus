@@ -469,7 +469,11 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 // picture nobody can scroll.
                 <View style={{flex: 1}}>
                 <ScrollView testID="done-scroll" style={{flex: 1}}
-                            onLayout={(e) => setDoneHeight(e.nativeEvent.layout.height)}
+                            onLayout={(e) => {
+                                setDoneHeight(e.nativeEvent.layout.height);
+                                doneFade.onLayout(e);
+                            }}
+                            onContentSizeChange={doneFade.onContentSizeChange}
                             onScroll={doneFade.onScroll}
                             scrollEventThrottle={16}
                             contentContainerStyle={{flexGrow: 1}}>
