@@ -15,6 +15,7 @@ import {
     BREW_FIGURE_INTERNAL_GAP,
     BREW_FIGURE_LABEL_SIZE,
     BREW_FIGURE_ROW_GAP,
+    brewFigureAdjustmentColumnWidth,
     brewFigureBadgeGeometry,
     brewFigureColumnFlex,
     brewFigureUsesFourColumns,
@@ -22,6 +23,8 @@ import {
 } from "@/library/brew/figureGeometry";
 import {formatFlowRate} from "@/library/brew/flowRate";
 import {DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
+import {describeTemperatureBaseline} from "@/library/quickEdit";
+import {GRINDER_OFF_VALUE} from "@/library/Recipe";
 
 const DOTO_LINE_HEIGHT = 1.35;
 const FLOW_ROW_VERTICAL_ROOM = 4;
@@ -118,6 +121,15 @@ type Props = {
     contentWidth: number;
     /** Story cards shrink figures from the 430 pt reference width. */
     textScale?: number;
+    /** One-brew quick edits, where `from` is the saved recipe value. */
+    adjustments?: BrewFigureAdjustments;
+};
+
+export type BrewFigureAdjustments = {
+    dose?: {value: number; from: number};
+    ratio?: {value: number; from: number};
+    grind?: {value: number; from: number};
+    temperature?: {offset: number; baseline: number[]};
 };
 
 function FigureBadge({children, testID, textScale = 1}: {
@@ -145,7 +157,7 @@ function FigureBadge({children, testID, textScale = 1}: {
 
 function Figure({
     label, value, color, badge, badgeGap, fontSize, labelSize, labelTracking, valueTracking,
-    testID, accessibilityLabel, flex = 1, quiet, outlined = false, textScale = 1
+    testID, accessibilityLabel, flex = 1, width, quiet, outlined = false, textScale = 1
 }: {
     label: string;
     value: string;
@@ -160,6 +172,8 @@ function Figure({
     accessibilityLabel?: string;
     /** The column's share of the row. DRAWDOWN takes more; see `figureGeometry`. */
     flex?: number;
+    /** Fixed column width for wrapped rows. */
+    width?: number;
     /**
      * A third line under the value, in label colour.
      *
@@ -186,7 +200,7 @@ function Figure({
     );
     return (
         <YStack flex={flex} gap={BREW_FIGURE_INTERNAL_GAP} testID={testID}
-                minWidth={0}
+                minWidth={0} width={width}
                 accessible={accessibilityLabel !== undefined}
                 accessibilityLabel={accessibilityLabel}>
             <DotMatrixText fontSize={labelSize ?? BREW_FIGURE_LABEL_SIZE}
@@ -217,6 +231,79 @@ function FigurePlaceholder({testID, flex = 1}: {testID: string; flex?: number}) 
     return <YStack testID={testID} flex={flex} />;
 }
 
+type AdjustmentFigure = {
+    key: string;
+    label: string;
+    value: string;
+    badge: string;
+    accessibilityLabel: string;
+};
+
+function signed(value: number): string {
+    return value > 0 ? `+${value}` : String(value);
+}
+
+function grindText(value: number): string {
+    return value === GRINDER_OFF_VALUE ? "OFF" : String(value);
+}
+
+function adjustmentFigures(
+    adjustments: BrewFigureAdjustments | undefined,
+    fontScale: number
+): AdjustmentFigure[] {
+    if (adjustments === undefined) return [];
+    const figures: AdjustmentFigure[] = [];
+
+    if (adjustments.dose !== undefined) {
+        figures.push({
+            key:                "dose",
+            label:              "DOSE",
+            value:              String(adjustments.dose.value),
+            badge:              `RECIPE ${adjustments.dose.from}`,
+            accessibilityLabel: `Dose, ${adjustments.dose.value} grams, recipe ${
+                adjustments.dose.from
+            } grams`
+        });
+    }
+    if (adjustments.ratio !== undefined) {
+        figures.push({
+            key:                "ratio",
+            label:              "RATIO",
+            value:              `1:${adjustments.ratio.value}`,
+            badge:              `RECIPE ${adjustments.ratio.from}`,
+            accessibilityLabel: `Ratio, 1:${adjustments.ratio.value}, recipe 1:${
+                adjustments.ratio.from
+            }`
+        });
+    }
+    if (adjustments.temperature !== undefined) {
+        const baseline = describeTemperatureBaseline({
+            pours: adjustments.temperature.baseline.map((temperature) => ({temperature}))
+        }, fontScale);
+        const offset = signed(adjustments.temperature.offset);
+        figures.push({
+            key:                "temperature",
+            label:              "TEMP",
+            value:              offset,
+            badge:              baseline.toUpperCase(),
+            accessibilityLabel: `Temperature offset, ${offset} degrees, ${baseline}`
+        });
+    }
+    if (adjustments.grind !== undefined) {
+        figures.push({
+            key:                "grind",
+            label:              "GRIND",
+            value:              grindText(adjustments.grind.value),
+            badge:              `RECIPE ${grindText(adjustments.grind.from)}`,
+            accessibilityLabel: `Grind, ${grindText(adjustments.grind.value)}, recipe ${
+                grindText(adjustments.grind.from)
+            }`
+        });
+    }
+
+    return figures;
+}
+
 /**
  * The three numbers, at the app's machine-readout scale.
  *
@@ -227,7 +314,8 @@ export default function BrewFigures(
     {
         water, cup, seconds, accent, bypass, drawdown = null, flow = null,
         flowTail, pourRate = null, reserveFlow = false, reserveDrawdown = false,
-        drawdownRate = null, delay = null, grind = null, contentWidth, textScale = 1
+        drawdownRate = null, delay = null, grind = null, contentWidth, textScale = 1,
+        adjustments
     }: Props
 ) {
     const {fontScale = 1} = useWindowDimensions();
@@ -293,6 +381,13 @@ export default function BrewFigures(
     const hasQuietLine = fourColumns && recipeBadgeText !== null;
     const rateColumn = fourColumns ? drawdownRateText : null;
     const rateInDrawdown = fourColumns ? null : drawdownRateText;
+    const adjusted = adjustmentFigures(adjustments, fontScale);
+    const adjustmentColumnWidth = brewFigureAdjustmentColumnWidth(
+        contentWidth,
+        fontScale,
+        adjusted.map((figure) => figure.badge),
+        textScale
+    );
 
     return (
         <YStack testID="brew-figures" gap={BREW_FIGURE_ROW_GAP}>
@@ -467,6 +562,35 @@ export default function BrewFigures(
                         </XStack>
                     )}
                 </YStack>
+            )}
+            {adjusted.length > 0 && (
+                <XStack testID="figures-adjustments-row" gap={figureText.columnGap}
+                        flexWrap="wrap">
+                    {adjusted.map((figure) => (
+                        <Figure
+                            key={figure.key}
+                            testID={`figures-adjusted-${figure.key}`}
+                            flex={0}
+                            label={figure.label}
+                            value={figure.value}
+                            color={palette.text}
+                            fontSize={figureText.detailValueSize}
+                            badgeGap={badgeGeometry.gap}
+                            textScale={textScale}
+                            labelSize={figureText.labelSize}
+                            labelTracking={figureText.labelTracking}
+                            valueTracking={figureText.valueTracking}
+                            accessibilityLabel={figure.accessibilityLabel}
+                            quiet={(
+                                <FigureBadge testID={`figures-adjusted-${figure.key}-recipe`}
+                                             textScale={textScale}>
+                                    {figure.badge}
+                                </FigureBadge>
+                            )}
+                            width={adjustmentColumnWidth}
+                        />
+                    ))}
+                </XStack>
             )}
         </YStack>
     );

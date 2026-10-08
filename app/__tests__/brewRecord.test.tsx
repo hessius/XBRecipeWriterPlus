@@ -390,6 +390,36 @@ describe("brew record", () => {
         expect(pours[1].volume).toBe(160);
     });
 
+    it("hands quick-edit adjustments to the captured summary", async () => {
+        mockOpened = {
+            record: {
+                ...record,
+                dose: 20,
+                ratio: 18,
+                grindSize: 61,
+                adjustedFromDose: 18,
+                adjustedFromRatio: 16,
+                adjustedFromGrind: 50,
+                adjustedTempOffset: 2,
+                plan: [
+                    {pourNumber: 1, volume: 40, temperature: 90, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 20},
+                    {pourNumber: 2, volume: 160, temperature: 92, flowRate: 40,
+                     agitation: 0, pourPattern: 0, pauseTime: 0}
+                ]
+            },
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
+
+        expect(summaryProps.adjustments).toEqual({
+            dose:        {value: 20, from: 18},
+            ratio:       {value: 18, from: 16},
+            grind:       {value: 61, from: 50},
+            temperature: {offset: 2, baseline: [88, 90]}
+        });
+    });
+
     it("says the trace has expired rather than drawing an empty chart", async () => {
         mockOpened = {record: {...record, hasStream: false}, samples: []};
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);

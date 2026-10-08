@@ -144,7 +144,12 @@ export function describeAdjustment(
     return `Stage volumes rescale to ${target} ml to match the ${subject}.`;
 }
 
-export function describeTemperatureBaseline(recipe: Recipe, fontScale: number): string {
+type TemperatureBaseline = {pours: {temperature: number}[]};
+
+export function describeTemperatureBaseline(
+    recipe: Recipe | TemperatureBaseline,
+    fontScale: number
+): string {
     const temperatures = recipe.pours.map((pour) => pour.temperature);
     if (temperatures.length === 0) {
         return "recipe";

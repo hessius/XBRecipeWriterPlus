@@ -5,6 +5,7 @@ import {PixelRatio, Pressable, ScrollView, useWindowDimensions} from "react-nati
 import {Text, XStack, YStack} from "tamagui";
 
 import BrewJudgement from "@/components/BrewJudgement";
+import type {BrewFigureAdjustments} from "@/components/BrewFigures";
 import BrewStoryCard from "@/components/BrewStoryCard";
 import BrewStorySheet from "@/components/BrewStorySheet";
 import BrewSummary from "@/components/BrewSummary";
@@ -57,6 +58,32 @@ export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
 let sharedLookup: RecipeLookup | undefined;
 
 const JUDGEMENT_ACTION_GAP = "$4";
+
+function quickEditFigures(
+    record: StoredBrew,
+    stages: {temperature: number}[]
+): BrewFigureAdjustments | undefined {
+    const adjustments: BrewFigureAdjustments = {};
+
+    if (record.adjustedFromDose !== undefined && record.dose !== undefined) {
+        adjustments.dose = {value: record.dose, from: record.adjustedFromDose};
+    }
+    if (record.adjustedFromRatio !== undefined && record.ratio !== undefined) {
+        adjustments.ratio = {value: record.ratio, from: record.adjustedFromRatio};
+    }
+    if (record.adjustedFromGrind !== undefined && record.grindSize !== undefined) {
+        adjustments.grind = {value: record.grindSize, from: record.adjustedFromGrind};
+    }
+    const tempOffset = record.adjustedTempOffset;
+    if (tempOffset !== undefined && stages.length > 0) {
+        adjustments.temperature = {
+            offset:   tempOffset,
+            baseline: stages.map((stage) => stage.temperature - tempOffset)
+        };
+    }
+
+    return Object.keys(adjustments).length === 0 ? undefined : adjustments;
+}
 
 type RecordAction = {
     key: "handoff" | "export" | "compare" | "story";
@@ -367,21 +394,27 @@ export default function BrewRecord({recipeLookup}: Props) {
             drawdown?.seconds ?? null,
             plannedSecs
         ),
-        grind:             dialNote(record)
+        grind:             dialNote(record),
+        adjustments:       quickEditFigures(record, stages)
     };
     const hasStoryRateChart = hasDrawableRateRun(summary.rateSeries);
     const hasStoryDetails = [
         summary.drawdown !== null,
         summary.delay !== null,
-        summary.grind !== null
+        summary.grind !== null,
+        summary.adjustments !== undefined
     ].some(Boolean);
+    const storyDetailRows = ([
+        summary.drawdown !== null || summary.delay !== null || summary.grind !== null,
+        summary.adjustments !== undefined
+    ].filter(Boolean)).length;
     const storyFacts = storyContentFacts({
         hasRateChart:   hasStoryRateChart,
         hasCoffee:      storyCoffeeLine(record) !== null,
         hasRating:      judgement.rating > 0,
         tags:           record.tags ?? [],
         hasSummaryNote: summary.note !== undefined,
-        figureExtraRows: hasStoryDetails ? 1 : 0
+        figureExtraRows: storyDetailRows
     });
     const storyHidden = storyHiddenFromSetting(storyCardHidden);
     function storyContentRequested(key: StoryContentKey): boolean {
@@ -622,7 +655,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                                     drawdownRate: storyHasDetails ? summary.drawdownRate : null,
                                     hasSummaryNote: storyHasNote,
                                     stagesUnavailable: summary.stagesUnavailable,
-                                    figureExtraRows: storyHasDetails ? 1 : 0,
+                                    figureExtraRows: storyHasDetails ? storyDetailRows : 0,
                                     fontScale: PixelRatio.getFontScale()
                                 });
                                 const toggles = offeredStoryContent(storyFacts).map((key) => ({
@@ -659,6 +692,8 @@ export default function BrewRecord({recipeLookup}: Props) {
                                         summary.grind,
                                         budget.showGrindRecipeBadge
                                     ) : null}
+                                adjustments={storyHasDetails && budget.showFigureDetails
+                                    ? summary.adjustments : undefined}
                                 showBypassBadge={budget.showBypassBadge}
                                 width={cardWidth}
                                 testID="story-capture"

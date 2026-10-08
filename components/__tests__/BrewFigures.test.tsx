@@ -320,6 +320,51 @@ describe("BrewFigures", () => {
         expect(screen.queryByTestId("figures-detail-slot")).toBeNull();
     });
 
+    it("does not render adjustment badges for an unchanged record", async () => {
+        await renderWithProviders(
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH} water={120} cup={90} seconds={60} accent={TEST_ACCENT} />
+        );
+        expect(screen.queryByTestId("figures-adjustments-row")).toBeNull();
+        expect(screen.queryByText("DOSE")).toBeNull();
+        expect(screen.queryByText("RATIO")).toBeNull();
+        expect(screen.queryByText("TEMP")).toBeNull();
+    });
+
+    it("shows confirmed quick edits with saved recipe badges", async () => {
+        await renderWithProviders(
+            <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
+                         water={240} cup={200} seconds={140} accent={TEST_ACCENT}
+                         adjustments={{
+                             dose:        {value: 20, from: 18},
+                             ratio:       {value: 18, from: 16},
+                             grind:       {value: 61, from: 50},
+                             temperature: {offset: 2, baseline: [88, 90, 92]}
+                         }} />
+        );
+
+        expect(screen.getByTestId("figures-adjustments-row")).toBeTruthy();
+        expect(screen.getByTestId("figures-adjusted-dose-recipe"))
+            .toHaveStyle({borderStyle: "dashed"});
+        expect(screen.getByText("DOSE")).toBeTruthy();
+        expect(screen.getByText("20")).toBeTruthy();
+        expect(screen.getByText("RECIPE 18")).toBeTruthy();
+        expect(screen.getByText("RATIO")).toBeTruthy();
+        expect(screen.getByText("1:18")).toBeTruthy();
+        expect(screen.getByText("RECIPE 16")).toBeTruthy();
+        expect(screen.getByText("TEMP")).toBeTruthy();
+        expect(screen.getByText("+2")).toBeTruthy();
+        expect(screen.getByText("RECIPE 88, 90, 92")).toBeTruthy();
+        expect(screen.getByText("GRIND")).toBeTruthy();
+        expect(screen.getByText("61")).toBeTruthy();
+        expect(screen.getByText("RECIPE 50")).toBeTruthy();
+        expect(screen.getByLabelText("Dose, 20 grams, recipe 18 grams")).toBeTruthy();
+        expect(screen.getByLabelText("Ratio, 1:18, recipe 1:16")).toBeTruthy();
+        expect(screen.getByLabelText(
+            "Temperature offset, +2 degrees, recipe 88, 90, 92"
+        )).toBeTruthy();
+        expect(screen.getByLabelText("Grind, 61, recipe 50")).toBeTruthy();
+    });
+
     describe("the detail row's columns", () => {
         /** The three figures above are required props and say nothing here. */
         const detail = (props: Partial<React.ComponentProps<typeof BrewFigures>>) =>
