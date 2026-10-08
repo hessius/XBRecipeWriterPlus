@@ -38,6 +38,7 @@ import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore, type ShelfWriteOutcome}
     from "@/hooks/useRecipeLibrary";
 import {useSetting} from "@/hooks/useSetting";
+import {useDrawerHint} from "@/hooks/useDrawerHint";
 import {forgetLastMove, useSteadyRouter} from "@/hooks/steadyRouter";
 import {SHARE_FAILURE_MESSAGE, useShareRecipe} from "@/hooks/useShareRecipe";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
@@ -354,21 +355,11 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
     // Why a read has nothing to run, when it has not. Always null on iOS.
     const [readUnavailable, setReadUnavailable] =
         useState<Exclude<NfcAvailability, "ready"> | null>(null);
-    // Retired the moment the nudge has been given, not merely when the library
-    // is touched. "The first row" is whichever recipe the current query puts on
-    // top, so every sort, filter and search would otherwise hand the gate a
-    // fresh row and replay the lesson -- a card wobbling open on every chip tap.
-    const [bounceFirstRow, setBounceFirstRow] = useState(true);
-
-    // Named rather than written inline at the call site, because the call site
-    // is `renderItem`, which the list invokes outside this component's memoised
-    // render scope: an arrow built there is a fresh identity on every cell
-    // render, the row's nudge effect re-runs, and its timers restart. The peek
-    // cannot be left open by that -- the closing timer restarts too -- but it
-    // can replay while a cold start settles.
-    function retireBounce() {
-        setBounceFirstRow(false);
-    }
+    // The hint is retired for this launch once it has been given or the user
+    // acts on a row. "The first row" and "the second row" are positions in the
+    // current query, not fixed recipes, so sorting, filtering or searching must
+    // not replay the lesson on freshly promoted rows.
+    const drawerHint = useDrawerHint(settings);
 
     const {hasShareIntent, shareIntent, resetShareIntent} = useShareIntentContext();
     // Held for the screen's lifetime, not rebuilt per render. Starting a scan
@@ -1483,8 +1474,10 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 evidence={library.evidence[item.recipe.uuid]}
-                                bounceOnMount={item.recipeIndex === 0 && bounceFirstRow}
-                                onBounced={retireBounce}
+                                hintTray={drawerHint.trayFor(item.recipeIndex)}
+                                hintDelayMs={drawerHint.delayFor(item.recipeIndex)}
+                                onManualOpen={drawerHint.noteManualOpen}
+                                onBounced={drawerHint.dismiss}
                                 // Gated on a machine: a dead BREW in every row's
                                 // tray is worse than none. Share and write need
                                 // no machine, so they are always offered.
@@ -1501,15 +1494,15 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                                 onLongPress={() => setOverflowRecipe(item.recipe)}
                                 onHistory={() => openHistory(item.recipe)}
                                 onDelete={() => {
-                                    setBounceFirstRow(false);
+                                    drawerHint.dismiss();
                                     library.deleteRecipe(item.recipe);
                                 }}
                                 onDuplicate={() => {
-                                    setBounceFirstRow(false);
+                                    drawerHint.dismiss();
                                     library.duplicateRecipe(item.recipe);
                                 }}
                                 onToggleFavourite={() => {
-                                    setBounceFirstRow(false);
+                                    drawerHint.dismiss();
                                     library.toggleFavourite(item.recipe);
                                 }}/>
                         )}/>
