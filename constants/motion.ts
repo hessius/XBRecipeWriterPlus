@@ -38,6 +38,19 @@ export const DURATION = {
 export const TYPING_DEBOUNCE_MS = 600;
 
 /**
+ * How long the drawer hint waits before opening a tray, and before closing it
+ * again.
+ *
+ * The close delay is measured from the same instant as the open delay, not from
+ * the open, so the tray is visible for the difference between them: 500 ms.
+ *
+ * These were local constants in `SwipeableRecipeRow.tsx` and were exempt from
+ * the "all timing lives here" rule by accident rather than by argument.
+ */
+export const BOUNCE_OPEN_DELAY = 300;
+export const BOUNCE_CLOSE_DELAY = 800;
+
+/**
  * How long the connection dot goes on flashing amber about a low tank.
  *
  * It was two flashes, which is the right length for something the user is
@@ -82,7 +95,15 @@ export const LOW_WATER_FLASH_MS = 30_000;
  */
 export const STAGGER = {
     /** Between consecutive dots of a `DotIcon` lighting up. */
-    dot: 12
+    dot: 12,
+    /**
+     * Between the two rows of the drawer hint.
+     *
+     * Applied to opening *and* closing, so each row is revealed for the same
+     * span. Revealing both at once reads as the list coming apart rather than
+     * as two trays.
+     */
+    drawerHint: 180
 } as const;
 
 /**
@@ -200,9 +221,18 @@ export const ATTRACT = {
  * which is worse for a Reduce Motion user than either path alone.
  */
 let cachedReducedMotion = false;
+let cachedReducedMotionResolved = false;
 
-export function useReducedMotion(): boolean {
-    const [reduced, setReduced] = useState(cachedReducedMotion);
+export type ReducedMotionState = {
+    reduced: boolean;
+    resolved: boolean;
+};
+
+export function useReducedMotionState(): ReducedMotionState {
+    const [state, setState] = useState<ReducedMotionState>(() => ({
+        reduced:  cachedReducedMotion,
+        resolved: cachedReducedMotionResolved
+    }));
 
     useEffect(() => {
         let cancelled = false;
@@ -210,8 +240,9 @@ export function useReducedMotion(): boolean {
 
         const apply = (enabled: boolean) => {
             cachedReducedMotion = enabled;
+            cachedReducedMotionResolved = true;
             if (!cancelled) {
-                setReduced(enabled);
+                setState({reduced: enabled, resolved: true});
             }
         };
 
@@ -237,8 +268,11 @@ export function useReducedMotion(): boolean {
             })
             .catch(() => {
                 // An unavailable setting is not a reason to fail. Assume motion is
-                // fine. No state is written here, so `cancelled` has nothing to
-                // guard.
+                // fine, but mark the read resolved so callers waiting for the
+                // first authoritative answer do not wait forever on a rejection.
+                if (!superseded) {
+                    apply(false);
+                }
             });
 
         return () => {
@@ -247,5 +281,14 @@ export function useReducedMotion(): boolean {
         };
     }, []);
 
-    return reduced;
+    return state;
+}
+
+export function useReducedMotion(): boolean {
+    return useReducedMotionState().reduced;
+}
+
+export function __resetReducedMotion(): void {
+    cachedReducedMotion = false;
+    cachedReducedMotionResolved = false;
 }

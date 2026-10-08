@@ -1,5 +1,6 @@
-import React from "react";
-import {fireEvent, screen, within} from "@testing-library/react-native";
+import React, {useState} from "react";
+import {Pressable} from "react-native";
+import {act, fireEvent, screen, within} from "@testing-library/react-native";
 import {renderWithProviders} from "@/test-utils/render";
 import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
@@ -7,6 +8,57 @@ import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {palette} from "@/constants/colors";
 import {DOT_ICONS, litCells} from "@/constants/dotIcons";
 import {resolveAccent} from "@/library/accent";
+import {BOUNCE_CLOSE_DELAY, BOUNCE_OPEN_DELAY, STAGGER} from "@/constants/motion";
+import {DRAWER_ACTIONS} from "@/library/drawerHint";
+
+const mockOpenLeft = jest.fn();
+const mockOpenRight = jest.fn();
+const mockClose = jest.fn();
+
+jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
+    const ReactActual = jest.requireActual<typeof import("react")>("react");
+    const {Pressable: MockPressable, View: MockView} =
+        jest.requireActual<typeof import("react-native")>("react-native");
+
+    return {
+        __esModule: true,
+        default: ReactActual.forwardRef((props: {
+            children?: React.ReactNode;
+            renderLeftActions?: () => React.ReactNode;
+            renderRightActions?: () => React.ReactNode;
+            onSwipeableOpenStartDrag?: (direction: "left" | "right") => void;
+        }, ref: React.Ref<unknown>) => {
+            const [openTray, setOpenTray] = ReactActual.useState<"left" | "right" | null>(null);
+            ReactActual.useImperativeHandle(ref, () => ({
+                openLeft: () => {
+                    mockOpenLeft();
+                    setOpenTray("left");
+                },
+                openRight: () => {
+                    mockOpenRight();
+                    setOpenTray("right");
+                },
+                close: () => {
+                    mockClose();
+                    setOpenTray(null);
+                },
+                reset: () => setOpenTray(null)
+            }));
+
+            return (
+                <MockView>
+                    <MockPressable testID="simulate-drag"
+                                   onPress={() => props.onSwipeableOpenStartDrag?.("left")}/>
+                    {openTray === "left" && <MockView testID="swipeable-open-left"/>}
+                    {openTray === "right" && <MockView testID="swipeable-open-right"/>}
+                    {props.renderLeftActions?.()}
+                    {props.children}
+                    {props.renderRightActions?.()}
+                </MockView>
+            );
+        })
+    };
+});
 
 /** The colour a dot icon's dots are drawn in. */
 function dotColourOf(testID: string): string {
@@ -85,7 +137,291 @@ function props(overrides = {}) {
     };
 }
 
+function MockDismissButton({onPress}: {onPress: () => void}) {
+    return <Pressable testID="dismiss-hint" onPress={onPress}/>;
+}
+
+beforeEach(() => {
+    mockOpenLeft.mockClear();
+    mockOpenRight.mockClear();
+    mockClose.mockClear();
+});
+
+afterEach(() => {
+    jest.useRealTimers();
+});
+
 describe("SwipeableRecipeRow", () => {
+    it("opens the action tray for the hint and closes it again", async () => {
+        jest.useFakeTimers();
+        const onBounced = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action",
+            onBounced,
+            onBrew: jest.fn(),
+            onShare: jest.fn(),
+            onWrite: jest.fn()
+        })}/>);
+
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY); });
+
+        expect(screen.getByTestId("swipeable-open-left")).toBeTruthy();
+        expect(screen.getByLabelText("Brew Ethiopia Guji", {includeHiddenElements: true}))
+            .toBeTruthy();
+        expect(mockOpenLeft).toHaveBeenCalledTimes(1);
+        expect(mockOpenRight).not.toHaveBeenCalled();
+        expect(onBounced).not.toHaveBeenCalled();
+
+        await act(async () => {
+            jest.advanceTimersByTime(BOUNCE_CLOSE_DELAY - BOUNCE_OPEN_DELAY);
+        });
+
+        expect(screen.queryByTestId("swipeable-open-left")).toBeNull();
+        expect(mockClose).toHaveBeenCalledTimes(1);
+        expect(onBounced).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not report the hint as shown before the opening timer fires", async () => {
+        jest.useFakeTimers();
+        const onShown = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action",
+            onShown,
+            onBrew: jest.fn(),
+            onShare: jest.fn(),
+            onWrite: jest.fn()
+        })}/>);
+
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY - 1); });
+
+        expect(screen.queryByTestId("swipeable-open-left")).toBeNull();
+        expect(mockOpenLeft).not.toHaveBeenCalled();
+        expect(onShown).not.toHaveBeenCalled();
+    });
+
+    it("reports the hint as shown exactly once when the tray opens", async () => {
+        jest.useFakeTimers();
+        const onShown = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action",
+            onShown,
+            onBrew: jest.fn(),
+            onShare: jest.fn(),
+            onWrite: jest.fn()
+        })}/>);
+
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY); });
+
+        expect(screen.getByTestId("swipeable-open-left")).toBeTruthy();
+        expect(onShown).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+            jest.advanceTimersByTime(BOUNCE_CLOSE_DELAY - BOUNCE_OPEN_DELAY);
+        });
+
+        expect(onShown).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not report the hint as shown when cancelled before opening", async () => {
+        jest.useFakeTimers();
+        const onShown = jest.fn();
+        const {unmount} = await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action",
+            onShown,
+            onBrew: jest.fn(),
+            onShare: jest.fn(),
+            onWrite: jest.fn()
+        })}/>);
+
+        await act(async () => { unmount(); });
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY); });
+
+        expect(mockOpenLeft).not.toHaveBeenCalled();
+        expect(onShown).not.toHaveBeenCalled();
+    });
+
+    it("opens the management tray for the management hint", async () => {
+        jest.useFakeTimers();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "management"
+        })}/>);
+
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY); });
+
+        expect(screen.getByTestId("swipeable-open-right")).toBeTruthy();
+        expect(screen.getByLabelText("Duplicate Ethiopia Guji", {includeHiddenElements: true}))
+            .toBeTruthy();
+        expect(mockOpenRight).toHaveBeenCalledTimes(1);
+        expect(mockOpenLeft).not.toHaveBeenCalled();
+    });
+
+    it("stagger delays a hinted row", async () => {
+        jest.useFakeTimers();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "management",
+            hintDelayMs: STAGGER.drawerHint
+        })}/>);
+
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_OPEN_DELAY); });
+
+        expect(screen.queryByTestId("swipeable-open-right")).toBeNull();
+        expect(mockOpenRight).not.toHaveBeenCalled();
+
+        await act(async () => { jest.advanceTimersByTime(STAGGER.drawerHint); });
+
+        expect(screen.getByTestId("swipeable-open-right")).toBeTruthy();
+        expect(mockOpenRight).toHaveBeenCalledTimes(1);
+    });
+
+    it("stays still when hintTray is null", async () => {
+        jest.useFakeTimers();
+        const onBounced = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: null,
+            onBounced
+        })}/>);
+
+        await act(async () => {
+            jest.advanceTimersByTime(BOUNCE_CLOSE_DELAY + STAGGER.drawerHint);
+        });
+
+        expect(screen.queryByTestId("swipeable-open-left")).toBeNull();
+        expect(screen.queryByTestId("swipeable-open-right")).toBeNull();
+        expect(mockOpenLeft).not.toHaveBeenCalled();
+        expect(mockOpenRight).not.toHaveBeenCalled();
+        expect(mockClose).not.toHaveBeenCalled();
+        expect(onBounced).not.toHaveBeenCalled();
+    });
+
+    it("does not report a manual open for the hint's programmatic open", async () => {
+        jest.useFakeTimers();
+        const onManualOpen = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action",
+            onManualOpen,
+            onBrew: jest.fn()
+        })}/>);
+
+        await act(async () => { jest.advanceTimersByTime(BOUNCE_CLOSE_DELAY); });
+
+        expect(mockOpenLeft).toHaveBeenCalledTimes(1);
+        expect(mockClose).toHaveBeenCalledTimes(1);
+        expect(onManualOpen).not.toHaveBeenCalled();
+    });
+
+    it("reports a manual open when the user starts dragging a tray", async () => {
+        const onManualOpen = jest.fn();
+        await renderWithProviders(<SwipeableRecipeRow {...props({onManualOpen})}/>);
+
+        await fireEvent.press(screen.getByTestId("simulate-drag"));
+
+        expect(onManualOpen).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not close over the user's drag when their swipe retires the hint", async () => {
+        function Owner() {
+            const [hintTray, setHintTray] = useState<"action" | null>("action");
+            return (
+                <SwipeableRecipeRow {...props({
+                    hintTray,
+                    onManualOpen: () => setHintTray(null)
+                })}/>
+            );
+        }
+
+        await renderWithProviders(<Owner/>);
+
+        await fireEvent.press(screen.getByTestId("simulate-drag"));
+
+        expect(mockClose).not.toHaveBeenCalled();
+    });
+
+    it("still closes when a hinted row is dismissed without a drag", async () => {
+        function Owner() {
+            const [hintTray, setHintTray] = useState<"action" | null>("action");
+            return (
+                <>
+                    <SwipeableRecipeRow {...props({hintTray})}/>
+                    <MockDismissButton onPress={() => setHintTray(null)}/>
+                </>
+            );
+        }
+
+        await renderWithProviders(<Owner/>);
+
+        await fireEvent.press(screen.getByTestId("dismiss-hint"));
+
+        expect(mockClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("still closes when a hinted row unmounts before its timers fire", async () => {
+        jest.useFakeTimers();
+        const {unmount} = await renderWithProviders(<SwipeableRecipeRow {...props({
+            hintTray: "action"
+        })}/>);
+
+        await act(async () => { unmount(); });
+
+        expect(mockClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes both staggered hint trays even after the first row reports completion", async () => {
+        jest.useFakeTimers();
+
+        function HintRows() {
+            const [showing, setShowing] = useState(true);
+            return (
+                <>
+                    <SwipeableRecipeRow {...props({
+                        recipe: makeRecipe("First"),
+                        hintTray: showing ? "action" : null,
+                        onBounced: () => setShowing(false),
+                        onBrew: jest.fn(),
+                        onShare: jest.fn(),
+                        onWrite: jest.fn()
+                    })}/>
+                    <SwipeableRecipeRow {...props({
+                        recipe: makeRecipe("Second"),
+                        hintTray: showing ? "management" : null,
+                        hintDelayMs: STAGGER.drawerHint,
+                        onBounced: () => setShowing(false)
+                    })}/>
+                </>
+            );
+        }
+
+        await renderWithProviders(<HintRows/>);
+
+        await act(async () => { jest.advanceTimersByTime(600); });
+        expect(screen.getByTestId("swipeable-open-left")).toBeTruthy();
+        expect(screen.getByTestId("swipeable-open-right")).toBeTruthy();
+
+        await act(async () => {
+            jest.advanceTimersByTime(BOUNCE_CLOSE_DELAY - 600);
+        });
+
+        await act(async () => {
+            jest.advanceTimersByTime(STAGGER.drawerHint + 1);
+        });
+
+        expect(screen.queryByTestId("swipeable-open-left")).toBeNull();
+        expect(screen.queryByTestId("swipeable-open-right")).toBeNull();
+    });
+
+    it("keeps the tray list and the hint signature in step", async () => {
+        await renderWithProviders(<SwipeableRecipeRow {...props({
+            onBrew: jest.fn(),
+            onShare: jest.fn(),
+            onWrite: jest.fn(),
+            onToggleFavourite: jest.fn()
+        })}/>);
+
+        for (const action of DRAWER_ACTIONS) {
+            expect(screen.getByTestId(`recipe-row-${action}`, {includeHiddenElements: true}))
+                .toBeTruthy();
+        }
+    });
+
     it("leaves a gap between the card and the first revealed action", async () => {
         // Without it the copy tile butts straight up against the card's edge and
         // reads as part of it, rather than as something the card slid off.
@@ -149,9 +485,9 @@ describe("SwipeableRecipeRow", () => {
             within(screen.getByTestId(testID, {includeHiddenElements: true}))
                 .getAllByTestId("dot-icon-dot", {includeHiddenElements: true});
 
-        expect(dots("row-action-duplicate"))
+        expect(dots("recipe-row-copy"))
             .toHaveLength(litCells(DOT_ICONS.duplicate).length);
-        expect(dots("row-action-delete"))
+        expect(dots("recipe-row-delete"))
             .toHaveLength(litCells(DOT_ICONS.delete).length);
     });
 
@@ -165,8 +501,8 @@ describe("SwipeableRecipeRow", () => {
             .props.style as {backgroundColor?: string};
         expect(tile.backgroundColor).toBe(palette.surface);
 
-        expect(dotColourOf("row-action-delete")).toBe(palette.danger);
-        expect(dotColourOf("row-action-duplicate")).toBe(palette.success);
+        expect(dotColourOf("recipe-row-delete")).toBe(palette.danger);
+        expect(dotColourOf("recipe-row-copy")).toBe(palette.success);
     });
 
     it("gives the action tray glyphs and tones, as the management tray has", async () => {
@@ -187,11 +523,11 @@ describe("SwipeableRecipeRow", () => {
 
         // BREW wears the recipe's own accent: it is the act on this one recipe,
         // and the tile should not disagree with the card it slid off.
-        expect(dotColourOf("row-action-brew")).toBe("#97D8C4");
-        expect(dotColourOf("row-action-share")).toBe(palette.info);
+        expect(dotColourOf("recipe-row-brew")).toBe("#97D8C4");
+        expect(dotColourOf("recipe-row-share")).toBe(palette.info);
         // WRITE keeps the plain ink. Three coloured tiles in a row would leave
         // the accent nothing to stand out against.
-        expect(dotColourOf("row-action-write")).toBe(palette.text);
+        expect(dotColourOf("recipe-row-write")).toBe(palette.text);
     });
 
     it("dims WRITE on a recipe no card can hold, and says why", async () => {
@@ -203,7 +539,7 @@ describe("SwipeableRecipeRow", () => {
             recipe: unwritableRecipe(), onWrite
         })}/>);
 
-        expect(dotColourOf("row-action-write")).toBe(palette.muted);
+        expect(dotColourOf("recipe-row-write")).toBe(palette.muted);
 
         const tile = screen.getByLabelText(
             "Ethiopia Guji cannot be written to a card", {includeHiddenElements: true}
@@ -255,9 +591,9 @@ describe("SwipeableRecipeRow", () => {
         // Each tile must draw its *own* mark. Lit-dot counts are pinned as
         // literals: a tile handed the wrong bitmap still renders a valid glyph,
         // so only the shape actually drawn can tell them apart.
-        expect(dotCountOf("row-action-brew")).toBe(25);
-        expect(dotCountOf("row-action-share")).toBe(17);
-        expect(dotCountOf("row-action-write")).toBe(33);
+        expect(dotCountOf("recipe-row-brew")).toBe(25);
+        expect(dotCountOf("recipe-row-share")).toBe(17);
+        expect(dotCountOf("recipe-row-write")).toBe(33);
 
         const marks = ["brew", "share", "write", "duplicate", "delete"].map(
             (name) => DOT_ICONS[name as keyof typeof DOT_ICONS].join("/")
@@ -443,9 +779,9 @@ describe("SwipeableRecipeRow", () => {
         // its glyph the id lands nowhere, and any later query for it -- an
         // absence assertion above all -- would pass whether or not the tray had
         // drawn anything. This is the check that would notice.
-        expect(screen.getByTestId("row-action-brew", {includeHiddenElements: true}))
+        expect(screen.getByTestId("recipe-row-brew", {includeHiddenElements: true}))
             .toBeTruthy();
-        expect(screen.getByTestId("row-action-write", {includeHiddenElements: true}))
+        expect(screen.getByTestId("recipe-row-write", {includeHiddenElements: true}))
             .toBeTruthy();
     });
 

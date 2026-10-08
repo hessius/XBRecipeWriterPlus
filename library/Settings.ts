@@ -254,6 +254,19 @@ export const DEFAULTS = {
      */
     libraryView: "list" as LibraryView,
     /**
+     * The drawer hint's learning history for *this device*.
+     *
+     * Five scalars rather than one record, because `get()` validates with
+     * `typeof parsed !== typeof DEFAULTS[key]`, and `typeof` is "object" for an
+     * object, an array and `null` alike. A malformed record would pass that
+     * check and reach the policy; five scalars cannot.
+     */
+    drawerHintLastShownAt: 0,
+    drawerHintShownCount:  0,
+    drawerHintManualOpens: 0,
+    drawerHintSignature:   "",
+    drawerHintLastSeenAt:  0,
+    /**
      * Offer to send a finished brew to Beanconqueror.
      *
      * Off until the reader is in Beanconqueror's own release. Before then the
@@ -371,16 +384,24 @@ export type SettingKey = keyof typeof DEFAULTS;
  * evidence any more. The whole reason they are stored is to be trustworthy
  * about what a real machine said.
  *
+ * The drawer hint counters are held out because they describe what this phone
+ * has already taught, and a restored phone has not seen or forgotten the same
+ * lessons.
+ *
  * Named here rather than simply omitted from the snapshot so that the
  * exhaustiveness test still holds every other key to account: a key is either
  * in a backup or on this list, never quietly missing from both.
  */
 export type BackupExcluded =
     "machineDeviceId" | "lastCardRead" | "labsUnlocked" | "beanconquerorHandoff" |
-    "machineModelString" | "machineName" | "ratingPromptDismissed";
+    "machineModelString" | "machineName" | "ratingPromptDismissed" |
+    "drawerHintLastShownAt" | "drawerHintShownCount" | "drawerHintManualOpens" |
+    "drawerHintSignature" | "drawerHintLastSeenAt";
 export const NOT_IN_BACKUP: readonly SettingKey[] = [
     "machineDeviceId", "lastCardRead", "labsUnlocked", "beanconquerorHandoff",
-    "machineModelString", "machineName", "ratingPromptDismissed"
+    "machineModelString", "machineName", "ratingPromptDismissed",
+    "drawerHintLastShownAt", "drawerHintShownCount", "drawerHintManualOpens",
+    "drawerHintSignature", "drawerHintLastSeenAt"
 ];
 
 /**

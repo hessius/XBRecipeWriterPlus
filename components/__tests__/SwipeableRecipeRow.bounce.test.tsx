@@ -5,16 +5,14 @@ import SwipeableRecipeRow from "@/components/SwipeableRecipeRow";
 import Recipe from "@/library/Recipe";
 
 /**
- * Which tray the mount nudge peeks open.
+ * Which tray the mount hint peeks open.
  *
  * Lives in its own file because it needs a fake `Swipeable` to see the
  * imperative calls, and the sibling suite deliberately renders the real one to
  * check what the trays actually contain.
  *
- * The direction is the whole point of the nudge: there are two trays now, and
- * the one worth teaching is the unconventional one. Swipe-left-to-manage is the
- * iOS convention every user already carries, so hinting it would spend the
- * app's one launch-time interruption saying something already known.
+ * The direction is the whole point of the hint: there are two trays now, and
+ * the owner decides which row demonstrates which side.
  */
 const mockOpenLeft = jest.fn();
 const mockOpenRight = jest.fn();
@@ -48,11 +46,12 @@ afterEach(() => {
     jest.useRealTimers();
 });
 
-describe("SwipeableRecipeRow's mount nudge", () => {
+describe("SwipeableRecipeRow's mount hint", () => {
     it("peeks the action tray, the direction a user has no convention for", async () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={recipe()} onPress={jest.fn()} onDelete={jest.fn()}
-                                onDuplicate={jest.fn()} onBrew={jest.fn()} bounceOnMount/>
+                                onDuplicate={jest.fn()} onBrew={jest.fn()}
+                                hintTray="action"/>
         );
         await act(async () => { jest.advanceTimersByTime(2000); });
 
@@ -65,21 +64,23 @@ describe("SwipeableRecipeRow's mount nudge", () => {
     it("closes again, so the hint is a peek and not a stuck-open row", async () => {
         await renderWithProviders(
             <SwipeableRecipeRow recipe={recipe()} onPress={jest.fn()} onDelete={jest.fn()}
-                                onDuplicate={jest.fn()} onBrew={jest.fn()} bounceOnMount/>
+                                onDuplicate={jest.fn()} onBrew={jest.fn()}
+                                hintTray="action"/>
         );
         await act(async () => { jest.advanceTimersByTime(2000); });
 
         expect(mockClose).toHaveBeenCalled();
     });
 
-    it("reports the nudge once it has been given, so the owner can retire it", async () => {
-        // The owner turns the nudge off on this callback. Without it, "the first
+    it("reports the hint once it has been given, so the owner can retire it", async () => {
+        // The owner turns the hint off on this callback. Without it, "the first
         // row" is whichever recipe the current query puts on top, so every sort,
         // filter and search hands the gate a fresh row and replays the lesson.
         const onBounced = jest.fn();
         await renderWithProviders(
             <SwipeableRecipeRow recipe={recipe()} onPress={jest.fn()} onDelete={jest.fn()}
-                                onDuplicate={jest.fn()} onBrew={jest.fn()} bounceOnMount
+                                onDuplicate={jest.fn()} onBrew={jest.fn()}
+                                hintTray="action"
                                 onBounced={onBounced}/>
         );
         expect(onBounced).not.toHaveBeenCalled();
@@ -91,19 +92,19 @@ describe("SwipeableRecipeRow's mount nudge", () => {
 
     it("still closes when the owner retires the nudge on the report", async () => {
         // The shape the app actually uses, and the one the fixed-prop tests
-        // above cannot see. Retiring the nudge flips `bounceOnMount`, which
+        // above cannot see. Retiring the hint clears `hintTray`, which
         // re-runs the effect and runs its cleanup -- and the cleanup clears the
         // timers. Report from the opening timer and the cleanup cancels the
         // very timer that brings the card back, leaving the row stuck open on
         // every cold start. Report from the closing one and there is nothing
         // left to cancel.
         function Owner() {
-            const [bounce, setBounce] = React.useState(true);
+            const [hintTray, setHintTray] = React.useState<"action" | null>("action");
             return (
                 <SwipeableRecipeRow recipe={recipe()} onPress={jest.fn()} onDelete={jest.fn()}
                                     onDuplicate={jest.fn()} onBrew={jest.fn()}
-                                    bounceOnMount={bounce}
-                                    onBounced={() => setBounce(false)}/>
+                                    hintTray={hintTray}
+                                    onBounced={() => setHintTray(null)}/>
             );
         }
 
