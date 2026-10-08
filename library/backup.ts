@@ -601,6 +601,7 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     pouringAt:  isNumber,
     drawdownAt: isNumber,
     cupAtDrawdown: isNumber,
+    pausedSeconds: isNumber,
     failure:    (v) => v === null || typeof v === "string",
     // A stall is `{atMl, seconds}`, not a number: one list of them per stage.
     // Checked to that shape rather than to a list of numbers, because a
@@ -732,6 +733,10 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         waterTotal: record.waterTotal,
         cupTotal: record.cupTotal,
         heldSeconds: record.heldSeconds,
+        // Undefined stays undefined, the way `watched` does: absent means
+        // nobody paused, and writing 0 onto every record in the file would say
+        // the same thing at the cost of making every old file look different.
+        pausedSeconds: record.pausedSeconds,
         stalls: record.stalls,
         plan: record.plan,
         stageWater: record.stageWater,
