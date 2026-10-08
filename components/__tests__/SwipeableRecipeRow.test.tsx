@@ -8,7 +8,12 @@ import Pour, {POUR_PATTERN} from "@/library/Pour";
 import {palette} from "@/constants/colors";
 import {DOT_ICONS, litCells} from "@/constants/dotIcons";
 import {resolveAccent} from "@/library/accent";
-import {BOUNCE_CLOSE_DELAY, BOUNCE_OPEN_DELAY, STAGGER} from "@/constants/motion";
+import {
+    BOUNCE_CLOSE_DELAY,
+    BOUNCE_OPEN_DELAY,
+    STAGGER,
+    TRAY_ACTION_FALLBACK
+} from "@/constants/motion";
 import {DRAWER_ACTIONS} from "@/library/drawerHint";
 
 const mockOpenLeft = jest.fn();
@@ -27,6 +32,7 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
             renderLeftActions?: () => React.ReactNode;
             renderRightActions?: () => React.ReactNode;
             onSwipeableOpenStartDrag?: (direction: "left" | "right") => void;
+            onSwipeableClose?: (direction: "left" | "right") => void;
         }, ref: React.Ref<unknown>) => {
             const [openTray, setOpenTray] = ReactActual.useState<"left" | "right" | null>(null);
             ReactActual.useImperativeHandle(ref, () => ({
@@ -49,6 +55,11 @@ jest.mock("react-native-gesture-handler/ReanimatedSwipeable", () => {
                 <MockView>
                     <MockPressable testID="simulate-drag"
                                    onPress={() => props.onSwipeableOpenStartDrag?.("left")}/>
+                    {/* The real Swipeable reports a close when the animation
+                        ends, which is a frame the renderer has no notion of.
+                        The test drives that moment itself. */}
+                    <MockPressable testID="simulate-close-end"
+                                   onPress={() => props.onSwipeableClose?.("left")}/>
                     {openTray === "left" && <MockView testID="swipeable-open-left"/>}
                     {openTray === "right" && <MockView testID="swipeable-open-right"/>}
                     {props.renderLeftActions?.()}
@@ -731,21 +742,56 @@ describe("SwipeableRecipeRow", () => {
         expect(screen.getByLabelText("Write Ethiopia Guji to a card")).toBeTruthy();
     });
 
-    it("fires brew, quick edit and write from the action tiles", async () => {
+    it("fires brew and write from the action tiles", async () => {
         const onBrew = jest.fn();
-        const onQuickEdit = jest.fn();
         const onWrite = jest.fn();
         await renderWithProviders(
             <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
                                 onDelete={() => undefined} onDuplicate={() => undefined}
-                                onBrew={onBrew} onQuickEdit={onQuickEdit} onWrite={onWrite}/>
+                                onBrew={onBrew} onQuickEdit={jest.fn()} onWrite={onWrite}/>
         );
         await fireEvent.press(screen.getByLabelText("Brew Ethiopia Guji"));
         expect(onBrew).toHaveBeenCalled();
-        await fireEvent.press(screen.getByLabelText("Quick edit Ethiopia Guji"));
-        expect(onQuickEdit).toHaveBeenCalled();
         await fireEvent.press(screen.getByLabelText("Write Ethiopia Guji to a card"));
         expect(onWrite).toHaveBeenCalled();
+    });
+
+    it("waits for the tray to close before opening quick edit", async () => {
+        const onQuickEdit = jest.fn();
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                onQuickEdit={onQuickEdit}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Quick edit Ethiopia Guji"));
+        expect(mockClose).toHaveBeenCalled();
+        expect(onQuickEdit).not.toHaveBeenCalled();
+
+        await fireEvent.press(screen.getByTestId("simulate-close-end"));
+        expect(onQuickEdit).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens quick edit anyway if the tray never reports its close", async () => {
+        jest.useFakeTimers();
+        const onQuickEdit = jest.fn();
+        await renderWithProviders(
+            <SwipeableRecipeRow recipe={makeRecipe()} onPress={() => undefined}
+                                onDelete={() => undefined} onDuplicate={() => undefined}
+                                onQuickEdit={onQuickEdit}/>
+        );
+
+        await fireEvent.press(screen.getByLabelText("Quick edit Ethiopia Guji"));
+        expect(onQuickEdit).not.toHaveBeenCalled();
+
+        await act(async () => {
+            jest.advanceTimersByTime(TRAY_ACTION_FALLBACK);
+        });
+        expect(onQuickEdit).toHaveBeenCalledTimes(1);
+
+        // A late report must not open it a second time.
+        await fireEvent.press(screen.getByTestId("simulate-close-end"));
+        expect(onQuickEdit).toHaveBeenCalledTimes(1);
     });
 
     it("gives the brew tile the recipe's accent, not a system colour", async () => {

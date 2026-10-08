@@ -12,7 +12,7 @@ import type {DotIconName} from "@/constants/dotIcons";
 import {palette} from "@/constants/colors";
 import {canWriteToCard} from "@/library/cardLimits";
 import {resolveAccent} from "@/library/accent";
-import {BOUNCE_CLOSE_DELAY, BOUNCE_OPEN_DELAY} from "@/constants/motion";
+import {BOUNCE_CLOSE_DELAY, BOUNCE_OPEN_DELAY, TRAY_ACTION_FALLBACK} from "@/constants/motion";
 
 type Props = {
     recipe: Recipe;
@@ -185,6 +185,21 @@ export default function SwipeableRecipeRow({
                                                onHistory
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
+    /**
+     * An action waiting for the tray to finish closing.
+     *
+     * Quick edit opens a panel over a row that stays on screen, so its mount
+     * used to land on top of the tray's own close animation and both stuttered.
+     * The tray reports when it has actually closed, which is a better clock
+     * than any duration guessed here. The timer is only a safety net: if that
+     * report never arrives the tile must still act.
+     *
+     * Deliberately not applied to the other tiles. A deferred action is one
+     * that can be lost if the row unmounts first, which for a delete or a star
+     * would lose what the user asked for.
+     */
+    const afterClose = useRef<(() => void) | null>(null);
+    const afterCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // The same authority as the editor's WRITE gate. Asking only whether the
     // volumes summed marked a recipe with a 3100 ml stage as writable.
@@ -208,6 +223,26 @@ export default function SwipeableRecipeRow({
         shownRef.current = onShown;
         manualOpenRef.current = onManualOpen;
     });
+
+    useEffect(() => () => {
+        if (afterCloseTimer.current !== null) clearTimeout(afterCloseTimer.current);
+    }, []);
+
+    function runAfterClose() {
+        if (afterCloseTimer.current !== null) {
+            clearTimeout(afterCloseTimer.current);
+            afterCloseTimer.current = null;
+        }
+        const pending = afterClose.current;
+        afterClose.current = null;
+        pending?.();
+    }
+
+    function closeThen(action: () => void) {
+        afterClose.current = action;
+        afterCloseTimer.current = setTimeout(runAfterClose, TRAY_ACTION_FALLBACK);
+        swipeableRef.current?.close();
+    }
 
     useEffect(() => {
         if (hintTray === null || hintTray === undefined) {
@@ -350,10 +385,7 @@ export default function SwipeableRecipeRow({
                     <Tile icon="settings" caption="TUNE" tone={palette.info}
                           testID="recipe-row-quick-edit"
                           label={`Quick edit ${recipe.displayName()}`}
-                          onPress={() => {
-                              swipeableRef.current?.close();
-                              onQuickEdit();
-                          }}/>
+                          onPress={() => closeThen(onQuickEdit)}/>
                 )}
                 {onWrite !== undefined && (
                     // The one tile that can be present and still refuse. A
@@ -397,6 +429,7 @@ export default function SwipeableRecipeRow({
                 overshootLeft={false}
                 overshootRight={false}
                 onSwipeableOpenStartDrag={handleManualOpenStartDrag}
+                onSwipeableClose={runAfterClose}
                 renderLeftActions={hasLeftActions ? renderLeftActions : undefined}
                 renderRightActions={renderRightActions}>
                 <RecipeCard recipe={recipe} onPress={onPress} editing={editing}
