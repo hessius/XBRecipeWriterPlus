@@ -47,6 +47,7 @@ import {liveDrawdown} from "@/library/brew/liveDrawdown";
 import {pauseSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
 import {
+    quickEditBounds,
     quickEditRecordAdjustments,
     type QuickEditAdjustments,
     type QuickEditRecordAdjustments
@@ -105,6 +106,49 @@ function parseQuickEditParam(value: string | undefined): QuickEditAdjustments | 
         : undefined;
 }
 
+function quickEditAdjustmentsInBounds(
+    saved: Recipe,
+    adjustments: QuickEditAdjustments
+): boolean {
+    const bounds = quickEditBounds(saved);
+    if (
+        adjustments.dose !== undefined
+        && (adjustments.dose < bounds.dose.min || adjustments.dose > bounds.dose.max)
+    ) {
+        return false;
+    }
+    if (
+        adjustments.ratio !== undefined
+        && (
+            bounds.ratio === null
+            || adjustments.ratio < bounds.ratio.min
+            || adjustments.ratio > bounds.ratio.max
+        )
+    ) {
+        return false;
+    }
+    if (
+        adjustments.grind !== undefined
+        && (
+            bounds.grind === null
+            || adjustments.grind < bounds.grind.min
+            || adjustments.grind > bounds.grind.off
+        )
+    ) {
+        return false;
+    }
+    if (
+        adjustments.tempOffset !== undefined
+        && (
+            adjustments.tempOffset < bounds.tempOffset.min
+            || adjustments.tempOffset > bounds.tempOffset.max
+        )
+    ) {
+        return false;
+    }
+    return true;
+}
+
 function quickEditRecordFromRoute(
     recipe: Recipe,
     value: string | undefined
@@ -121,6 +165,10 @@ function quickEditRecordFromRoute(
         return undefined;
     }
     if (saved === null) {
+        return undefined;
+    }
+    if (!quickEditAdjustmentsInBounds(saved, adjustments)) {
+        console.warn("Brew: ignored malformed quick edit record metadata");
         return undefined;
     }
     return quickEditRecordAdjustments(saved, adjustments);

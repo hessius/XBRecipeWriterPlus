@@ -411,6 +411,39 @@ describe("brew route", () => {
         });
     });
 
+    it("starts the brew but drops quick edit metadata outside the saved recipe bounds", async () => {
+        const saved = new Recipe();
+        saved.name = "Quick Ethiopia";
+        saved.uuid = "saved-recipe";
+        saved.dosage = 18;
+        saved.ratio = 16;
+        saved.grindSize = 62;
+        saved.autoFixPourVolumes();
+        const adjusted = new Recipe(undefined, JSON.stringify(saved));
+        adjusted.dosage = 20;
+        adjusted.ratio = 18;
+        adjusted.grindSize = 68;
+        adjusted.autoFixPourVolumes();
+        mockRecipeJSON = JSON.stringify(adjusted);
+        mockQuickEditAdjustments = JSON.stringify({
+            dose: 20,
+            ratio: 18,
+            grind: 68,
+            tempOffset: 61
+        });
+        mockSavedRecipe = saved;
+
+        await renderWithProviders(<Brew />);
+
+        expect(mockStart).toHaveBeenCalled();
+        const [started, recordAdjustments] = mockStart.mock.calls[0];
+        expect(started).toBeInstanceOf(Recipe);
+        expect(started.dosage).toBe(20);
+        expect(started.ratio).toBe(18);
+        expect(started.grindSize).toBe(68);
+        expect(recordAdjustments).toBeUndefined();
+    });
+
     it("asks for nothing when opened to watch a run that already exists", async () => {
         // The mini bar opens this screen with view=1. Without the flag, coming
         // back to look at the brew you just made brewed it a second time.
