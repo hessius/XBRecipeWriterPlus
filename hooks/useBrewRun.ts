@@ -2,11 +2,13 @@ import {useEffect, useRef, useState} from "react";
 
 import {OVER} from "@/constants/brewCopy";
 import {useBrew} from "@/hooks/useBrew";
+import {useOverflowProtection} from "@/hooks/useOverflowProtection";
 import {bypassRungState, type BypassView} from "@/library/brew/bypassState";
 import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import BrewRecorder from "@/library/brew/BrewRecorder";
 import type {PauseInterval} from "@/library/brew/pauseIntervals";
+import {overflowFor} from "@/library/brew/overflowConfig";
 import {readDialAfterBrew} from "@/library/brew/dialAfterBrew";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {stageOriginMl, stageWaterFrom, stalledNow, stallsInStage, type Stall}
@@ -32,6 +34,11 @@ const PUBLISH_MS = 250;
 /** One empty array, so "no samples yet" is a stable identity across renders. */
 const NO_SAMPLES: BrewSample[] = [];
 const NO_PAUSES: PauseInterval[] = [];
+
+function publishedSeconds(samples: readonly BrewSample[], intervals: PauseInterval[]): number {
+    const lastSampleAt = samples.length > 0 ? samples[samples.length - 1].at : 0;
+    return Math.max(lastSampleAt, intervals.at(-1)?.to ?? 0) / 1000;
+}
 
 // Re-exported from where it now lives: the live rungs and the recorded ladder
 // must not be able to drift apart, so there is one implementation and the
@@ -77,8 +84,11 @@ export function useBrewRun(
     const current = published.runId === runId;
     const samples = current ? published.samples : NO_SAMPLES;
     const elapsed = current ? published.elapsed : 0;
-    const pauseIntervals = current ? published.pauseIntervals : NO_PAUSES;
     const record = recorded?.runId === runId ? recorded.record : undefined;
+    const pauseIntervals = record?.pauseIntervals ?? (current ? published.pauseIntervals : NO_PAUSES);
+    const protection = useOverflowProtection({
+        machine, config: recipe === null ? undefined : overflowFor(recipe), runId
+    });
     // Track phase locally so React re-renders when it changes. The machine it
     // was heard from is remembered alongside it: a reconnect hands us a new
     // machine with a new recorder, and the phase the old one was left in
@@ -175,32 +185,35 @@ export function useBrewRun(
     // is still moving, so the live trace has to keep publishing through it —
     // this is the part of the brew that BREWER_STOP used to throw away.
     const settling = phase.name === "settling";
+    const paused = phase.name === "paused";
     const over = OVER.has(phase.name);
 
     useEffect(() => {
-        if (!pouring && !bypassing && !settling) return;
+        if (!pouring && !bypassing && !settling && !paused) return;
         const tick = setInterval(() => {
             const taken = recorder.current?.samples ?? [];
+            const intervals = recorder.current?.pauseIntervals ?? [];
             setPublished({
                 runId,
                 samples: [...taken],
-                pauseIntervals: recorder.current?.pauseIntervals ?? [],
-                elapsed: taken.length > 0 ? taken[taken.length - 1].at / 1000 : 0
+                pauseIntervals: intervals,
+                elapsed: publishedSeconds(taken, intervals)
             });
         }, PUBLISH_MS);
         return () => clearInterval(tick);
-    }, [pouring, bypassing, settling, runId]);
+    }, [pouring, bypassing, settling, paused, runId]);
 
     // One last copy on the way out, so the finished chart is the whole brew and
     // not whatever the last tick happened to catch.
     useEffect(() => {
         if (!over) return;
         const taken = recorder.current?.samples ?? [];
+        const intervals = recorder.current?.pauseIntervals ?? [];
         setPublished({
             runId,
             samples: [...taken],
-            pauseIntervals: recorder.current?.pauseIntervals ?? [],
-            elapsed: taken.length > 0 ? taken[taken.length - 1].at / 1000 : 0
+            pauseIntervals: intervals,
+            elapsed: publishedSeconds(taken, intervals)
         });
     }, [over, runId]);
 
@@ -295,11 +308,27 @@ export function useBrewRun(
             })
           };
 
+    async function pauseBrew(): Promise<void> {
+        protection.manualPause();
+        await brewer.pauseBrew();
+    }
+
+    async function resumeBrew(): Promise<void> {
+        protection.manualResume();
+        await brewer.resumeBrew();
+    }
+
+    async function cancelBrew(): Promise<void> {
+        protection.cancel();
+        await brewer.cancelBrew();
+    }
+
     return {
         // `phase` after the spread on purpose: the sanitised local reading, not
         // the brewer's raw one, is what callers should see.
         ...brewer, phase, samples, pauseIntervals, elapsed, stageElapsed, activeIndex, holding,
-        heldSeconds, stalls, stageWater, pauseElapsed, bypass, record
+        heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
+        overflow: protection.overflow, pauseBrew, resumeBrew, cancelBrew
     };
 }
 

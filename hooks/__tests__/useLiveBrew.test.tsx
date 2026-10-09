@@ -1,5 +1,6 @@
 import React from "react";
-import {act, render, renderHook} from "@testing-library/react-native";
+import {act, cleanup, render, renderHook} from "@testing-library/react-native";
+import {AppState} from "react-native";
 
 import {LiveBrewProvider, STOPPED_BAR_MS, useLiveBrew} from "@/hooks/useLiveBrew";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
@@ -7,6 +8,8 @@ import type {BrewPhase} from "@/library/machine/Machine";
 import type {Notification} from "@/library/machine/protocol";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
+
+const appStateDescriptor = Object.getOwnPropertyDescriptor(AppState, "currentState")!;
 
 jest.mock("@/hooks/useBrew", () => ({
     useBrew: () => global.__brewer
@@ -16,6 +19,7 @@ declare global {
     var __brewer: Omit<ReturnType<typeof import("@/hooks/useBrew").useBrew>, "machine">
         & {machine: import("@/library/brew/BrewRecorder").RecorderMachine
             & {phase: BrewPhase}
+            & Pick<import("@/library/machine/Machine").default, "pauseBrew" | "resumeBrew">
             & {info?: {grindSize: number} | null;
                askHowItIsDoing?: () => Promise<boolean>}};
 }
@@ -43,6 +47,8 @@ function harness() {
         switchToProAndRetry: jest.fn(async () => {}),
         machine: {
             phase: {name: "idle"} as BrewPhase,
+            pauseBrew: jest.fn(async () => {}),
+            resumeBrew: jest.fn(async () => {}),
             onNotification: (l: (n: Notification) => void) => {
                 notifyListeners.push(l);
                 return () => {
@@ -63,6 +69,9 @@ function harness() {
         written,
         water: (grams: number) => act(async () =>
             [...notifyListeners].forEach((l) => l({kind: "waterWeight", grams}))),
+        cup: (grams: number) => act(async () =>
+            [...notifyListeners].forEach((l) => l({kind: "cupWeight", grams}))),
+        listenerCounts: () => [notifyListeners.length, phaseListeners.length],
         setPhase: (p: BrewPhase) => act(async () => {
             global.__brewer.phase = p;
             global.__brewer.machine.phase = p;
@@ -74,8 +83,105 @@ function harness() {
 }
 
 describe("LiveBrewProvider", () => {
-    beforeEach(() => jest.useFakeTimers());
-    afterEach(() => jest.useRealTimers());
+    beforeEach(() => {
+        jest.useFakeTimers();
+        Object.defineProperty(AppState, "currentState", {configurable: true, value: "active"});
+    });
+    afterEach(async () => {
+        await cleanup();
+        jest.restoreAllMocks();
+        Object.defineProperty(AppState, "currentState", appStateDescriptor);
+        jest.useRealTimers();
+    });
+
+    it("keeps one protection owner across navigation and creates fresh ownership on retry", async () => {
+        const h = harness();
+        let api!: ReturnType<typeof useLiveBrew>;
+        function Screen() {
+            api = useLiveBrew();
+            return null;
+        }
+        const {rerender} = await render(
+            <LiveBrewProvider store={h.store}><Screen key="brew" /></LiveBrewProvider>
+        );
+        const r = recipe();
+        r.cupType = 1;
+        r.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
+        const quickEdit = {adjustedFromDose: 15};
+        const startedAt = Date.now();
+        await act(async () => { api.start(r, quickEdit); });
+        const listeners = h.listenerCounts();
+        expect(listeners).toEqual([2, 3]);
+        await rerender(
+            <LiveBrewProvider store={h.store}><Screen key="home" /></LiveBrewProvider>
+        );
+        await act(async () => { api.start(r); });
+        expect(h.listenerCounts()).toEqual(listeners);
+        expect(global.__brewer.brew).toHaveBeenCalledTimes(1);
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        await h.water(100);
+        await h.cup(0);
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await h.water(100);
+        await h.cup(0);
+        expect(api.run?.overflow?.mode).toBe("requesting");
+        expect(api.run?.startedAt).toBe(startedAt);
+        expect(api.run?.quickEdit).toEqual(quickEdit);
+        const pouring: BrewPhase = {name: "pouring", pour: 1, pours: 2};
+        await h.setPhase({name: "paused", pour: 1, pours: 2, was: pouring, pauseKind: "overflow"});
+        await act(async () => { jest.advanceTimersByTime(1000); });
+        expect(api.run?.pauseIntervals).toEqual([
+            {from: 500, to: 1500, pour: 1, reason: "overflow"}
+        ]);
+        await h.setPhase({name: "failed", reason: "rejected"});
+        await act(async () => { api.startInPro(r); });
+        expect(api.run?.overflow?.mode).not.toBe("ended");
+        expect(api.run?.quickEdit).toEqual(quickEdit);
+        expect(api.run?.startedAt).toBe(Date.now());
+        expect(global.__brewer.switchToProAndRetry).toHaveBeenCalledTimes(1);
+        await h.setPhase(pouring);
+        await h.water(100);
+        await h.cup(0);
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await h.water(100);
+        await h.cup(0);
+        expect(global.__brewer.machine.pauseBrew).toHaveBeenCalledTimes(2);
+    });
+
+    it("subscribes protection before the owner commands the brew", async () => {
+        const h = harness();
+        global.__brewer.brew = jest.fn(async () => {
+            expect(h.listenerCounts()).toEqual([2, 3]);
+        });
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+        });
+        const r = recipe();
+        r.cupType = 1;
+        r.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
+        await act(async () => { result.current.start(r); });
+        expect(global.__brewer.brew).toHaveBeenCalledTimes(1);
+    });
+
+    it("disposes protection when a finished run is dismissed without a replacement brew", async () => {
+        const h = harness();
+        const intervals = jest.spyOn(global, "setInterval");
+        const clear = jest.spyOn(global, "clearInterval");
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+        });
+        const r = recipe();
+        r.cupType = 1;
+        r.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
+        await act(async () => { result.current.start(r); });
+        const protectionTimer = intervals.mock.results[0].value;
+        await h.setPhase({name: "cancelled"});
+        await act(async () => { result.current.dismiss(); });
+        expect(result.current.run).toBeNull();
+        expect(h.listenerCounts()).toEqual([0, 1]);
+        expect(clear).toHaveBeenCalledWith(protectionTimer);
+        expect(global.__brewer.brew).toHaveBeenCalledTimes(1);
+    });
 
     it("publishes the owner's quick edits without commanding a second brew", async () => {
         const h = harness();

@@ -85,6 +85,20 @@ async function run(machine: FakeMachine) {
 
 beforeEach(() => mockConnect.mockClear());
 
+describe("ordinary user pause, resume and cancel errors", () => {
+    it.each(["pauseBrew", "resumeBrew", "cancelBrew"] as const)(
+        "keeps %s failures in the existing user error path", async command => {
+            const machine = fake({phaseAfterFailure: {name: "idle"}});
+            const sent = jest.fn(async () => { throw new Error(`failed ${command}`); });
+            machine[command] = sent;
+            const {result} = await renderHook(() => useBrew(machine));
+            await act(async () => { await result.current[command](); });
+            expect(sent).toHaveBeenCalledWith();
+            expect(result.current.error).toBe(`failed ${command}`);
+        }
+    );
+});
+
 describe("a brew that failed on the link", () => {
     it("drops the link and tries once more", async () => {
         const machine = fake({
