@@ -507,11 +507,25 @@ describe("BrewStageRung", () => {
 });
 
 describe("rung pause marker", () => {
-    it("marks an overflow pause on the active rung and keeps progress", async () => {
+    it.each(["overflow", "manual"] as const)("marks a %s pause without changing progress or lane height", async (pauseKind) => {
+        const plain = await draw({state: "active", delivered: 30});
+        const plainFill = StyleSheet.flatten(plain.getByTestId("segment-fill-0").props.style);
+        const plainLane = StyleSheet.flatten(plain.getByTestId("rung-lane").props.style);
+        const screen = await draw({state: "active", delivered: 30, pauseKind});
+        const fill = StyleSheet.flatten(screen.getByTestId("segment-fill-0").props.style);
+        expect(fill.flex).toBeCloseTo(30 / 70);
+        expect(fill).toEqual(plainFill);
+        expect(StyleSheet.flatten(screen.getByTestId("rung-lane").props.style))
+            .toEqual(plainLane);
+        expect(plainLane.height).toBe(11);
+        expect(fill.height).toBe(11);
+        expect(segmentFlexes(screen.getByTestId, 2)).toEqual(segmentFlexes(plain.getByTestId, 2));
+    });
+
+    it("marks an overflow pause on the active rung", async () => {
         const screen = await draw({state: "active", delivered: 30, pauseKind: "overflow"});
         expect(screen.getByText("DRAINING")).toBeTruthy();
         expect(screen.getByLabelText(/paused, draining/i)).toBeTruthy();
-        expect(screen.getByTestId("segment-fill-0")).toBeTruthy();
     });
 
     it("marks a manual pause plainly", async () => {

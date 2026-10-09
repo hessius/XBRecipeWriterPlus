@@ -53,7 +53,8 @@ type Props = {
     axis?: {maxT: number; maxV: number};
     /**
      * The pauses to shade, in water-relative milliseconds. Drawn behind the
-     * channels, and the axis grows to include one still open.
+     * channels in full and compact traces, and the axis grows to include one
+     * still open. Bands use the existing plot height and add no legend.
      */
     pauseIntervals?: readonly PauseInterval[];
     /** Overflow protection has stopped the water. Turns the live line amber. */
@@ -228,7 +229,8 @@ export default function BrewTrace({
     const planPath = toPath(plan, box);
     // The dash pattern below is measured along the line, not across the box.
     const planLength = pathLength(plan, box);
-    // A line is broken across an automatic pause rather than joined through it.
+    // Both measured channels break across an automatic pause rather than
+    // claiming continuous flow through an unobserved gap.
     const waterRuns = splitAtPauses(water, pauseIntervals);
     const waterPath = waterRuns.map((run) => toPath(run, box)).filter((d) => d !== "").join(" ");
     const cupPath = splitAtPauses(cup, pauseIntervals)
@@ -254,6 +256,15 @@ export default function BrewTrace({
         ? []
         : temperatureMarks(tempStages, tempBand, box, tempHeadroom);
     const pauseBands = intervalRects(pauseIntervals, box.width, box.maxT);
+    const pauseDraws = pauseBands.map(({x, width: bandWidth, interval}, i) => (
+        <Rect
+            key={`pause-${i}`}
+            testID={`trace-pause-${interval.reason}-${i}`}
+            x={x} y={0} width={bandWidth} height={svgHeight}
+            fill={PAUSE_FILL[interval.reason]}
+            fillOpacity={PAUSE_OPACITY}
+        />
+    ));
     const accessibilityLabel = [
         temperatureAccessibilityLabel(marks),
         ...pauseBands.map(({interval}) =>
@@ -262,11 +273,13 @@ export default function BrewTrace({
     // The water line, carried down to the floor and back, so it can be filled.
     // Built here rather than by setting `fill` on the line itself: an open
     // path fills between its endpoints and cuts the corner off the curve.
+    // Preserve the legacy origin closure only for an unsplit stream. Every
+    // split run closes at its own start, even if earlier singletons cannot draw.
     const waterFill = waterRuns
         .map((run) => ({d: toPath(run, box), last: run[run.length - 1]}))
         .filter(({d}) => d !== "")
-        .map(({d, last}, i) => `${d} L${round(box.width * (last.t / Math.max(box.maxT, 1)))} `
-            + `${svgHeight} L${i === 0 ? 0 : firstX(d)} ${svgHeight} Z`)
+        .map(({d, last}) => `${d} L${round(box.width * (last.t / Math.max(box.maxT, 1)))} `
+            + `${svgHeight} L${waterRuns.length === 1 ? 0 : firstX(d)} ${svgHeight} Z`)
         .join(" ");
 
     // Where each stage ends, as a fraction of the axis. The last boundary is
@@ -308,6 +321,7 @@ export default function BrewTrace({
         return (
             <Svg width={width} height={height} accessibilityRole="image"
                  accessibilityLabel={accessibilityLabel}>
+                {pauseDraws}
                 {planPath !== "" && (
                     <Path
                         testID="trace-plan"
@@ -389,15 +403,7 @@ export default function BrewTrace({
                         fill={palette.raised}
                     />
                 )}
-                {pauseBands.map(({x, width: bandWidth, interval}, i) => (
-                    <Rect
-                        key={`pause-${i}`}
-                        testID={`trace-pause-${interval.reason}-${i}`}
-                        x={x} y={0} width={bandWidth} height={svgHeight}
-                        fill={PAUSE_FILL[interval.reason]}
-                        fillOpacity={PAUSE_OPACITY}
-                    />
-                ))}
+                {pauseDraws}
                 {boundaries.map((x, i) => (
                     <Line
                         key={`gridline-${i}`}

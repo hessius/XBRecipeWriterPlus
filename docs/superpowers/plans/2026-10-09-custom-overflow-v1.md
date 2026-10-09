@@ -734,6 +734,14 @@ Controls are module-scope components; no new library or raw colour.
 
 ## Task 8: Graph intervals, ladder state and shared real-time extent
 
+Full and compact traces share the reason-specific, low-opacity pause bands
+behind their channels, within the existing plot height and without extra
+legend rows. Automatic pauses split both measured channels; each split water
+fill closes at its own first sample, including when an earlier singleton was
+discarded. Unsplit streams retain their legacy origin closure. These are
+Task 8 rendering guarantees; propagation to historical and compared callers
+remains Task 9.
+
 **Modify:** `library/brew/pauseIntervals.ts`, `library/brew/brewShape.ts`,
 `components/BrewTrace.tsx`, `components/BrewStageLadder.tsx`,
 `components/BrewStageRung.tsx`, `app/brew.tsx`.
