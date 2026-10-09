@@ -102,7 +102,8 @@ const STORY_TOGGLE_LABELS: Record<StoryContentKey, string> = {
     tags:    "TAGS",
     note:    "NOTE",
     details: "DETAILS",
-    flow:    "FLOW"
+    flow:    "FLOW",
+    recipe:  "DOSE & RATIO"
 };
 
 function storyGrindForBudget(
@@ -422,6 +423,7 @@ export default function BrewRecord({recipeLookup}: Props) {
         hasRating:      judgement.rating > 0,
         tags:           record.tags ?? [],
         hasSummaryNote: summary.note !== undefined,
+        recipeInputs: summary.recipeInputs,
         figureExtraRows: storyFigureDetailRows,
         figureAdjustmentRows: summary.adjustments === undefined ? 0 : 1
     });
@@ -444,6 +446,7 @@ export default function BrewRecord({recipeLookup}: Props) {
     const storyHasNote = summary.note !== undefined && storyContentRequested("note");
     const storyHasDetails = hasStoryDetails && storyContentRequested("details");
     const storyHasRateChart = hasStoryRateChart && storyContentRequested("flow");
+    const storyRecipeInputs = storyContentRequested("recipe") ? summary.recipeInputs : undefined;
     const actionFullWidth = Math.max(0, width - SCREEN_PADDING * 2);
     const actionHalfWidth = Math.max(0, (actionFullWidth - RECORD_ACTION_GAP) / 2);
     // COMPARE and the Beanconqueror handoff each keep a full width row, then
@@ -672,6 +675,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                                         && summary.grind.recipe !== null,
                                     drawdownRate: storyHasDetails ? summary.drawdownRate : null,
                                     hasSummaryNote: storyHasNote,
+                                    recipeInputs: storyRecipeInputs,
                                     stagesUnavailable: summary.stagesUnavailable,
                                     figureExtraRows: storyHasDetails ? storyFigureDetailRows : 0,
                                     figureAdjustmentRows: storyHasDetails ? storyAdjustmentRows : 0,
@@ -698,6 +702,7 @@ export default function BrewRecord({recipeLookup}: Props) {
                         summary={(budget) => (
                             <BrewSummary
                                 {...summary}
+                                recipeInputs={budget.showRecipeInputs ? storyRecipeInputs : undefined}
                                 note={storyHasNote && budget.showSummaryNote
                                     ? summary.note : undefined}
                                 drawdown={storyHasDetails && budget.showFigureDetails

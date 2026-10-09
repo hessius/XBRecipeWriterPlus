@@ -1478,6 +1478,7 @@ describe("brew record's story card", () => {
         expect(screen.queryByLabelText("NOTE")).toBeNull();
         expect(screen.queryByLabelText("DETAILS")).toBeNull();
         expect(screen.queryByLabelText("FLOW")).toBeNull();
+        expect(screen.queryByLabelText("DOSE & RATIO")).toBeNull();
     });
 
     it("offers note, detail and flow toggles when the story can draw them", async () => {
@@ -1511,6 +1512,108 @@ describe("brew record's story card", () => {
         expect(card.queryByTestId("story-coffee")).toBeNull();
         expect(screen.getByLabelText("COFFEE").props.accessibilityState)
             .toEqual(expect.objectContaining({selected: false}));
+    });
+
+    it("toggles recipe inputs and their comparisons independently of details", async () => {
+        mockOpened = {
+            record: makeBrewRecordFixture({
+                dose: 16, ratio: 17, adjustedFromDose: 15, adjustedFromRatio: 16,
+                grindSize: 60, adjustedFromGrind: 50, hasStream: false
+            }),
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(600);
+        const card = within(screen.getByTestId("brew-story-card"));
+        expect(card.getByText("RECIPE 50")).toBeTruthy();
+        await pressStoryToggle("DETAILS");
+        expect(card.queryByText("RECIPE 50")).toBeNull();
+        expect(card.getByText("16 G")).toBeTruthy();
+        expect(card.getByText("RECIPE 15")).toBeTruthy();
+        expect(card.getByLabelText("Recipe dose, 16 grams, saved recipe 15 grams")).toBeTruthy();
+        expect(card.getByLabelText("Recipe ratio, 1 to 17, saved recipe 1 to 16")).toBeTruthy();
+        await pressStoryToggle("DOSE & RATIO");
+        expect(card.queryByTestId("brew-recipe-context")).toBeNull();
+        expect(sharedSettings().get("storyCardHidden")).toBe('["details","recipe"]');
+        await pressStoryToggle("DOSE & RATIO");
+        expect(card.getByText("16 G")).toBeTruthy();
+        expect(card.getByText("1:17")).toBeTruthy();
+        expect(card.getByText("RECIPE 15")).toBeTruthy();
+        expect(sharedSettings().get("storyCardHidden")).toBe('["details"]');
+    });
+
+    it("offers recipe but no empty details toggle for a dose-only quick edit", async () => {
+        mockOpened = {
+            record: makeBrewRecordFixture({
+                dose: 16, ratio: undefined, adjustedFromDose: 15, hasStream: false
+            }),
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(600);
+        expect(screen.getByLabelText("DOSE & RATIO")).toBeTruthy();
+        expect(screen.queryByLabelText("DETAILS")).toBeNull();
+        const card = within(screen.getByTestId("brew-story-card"));
+        expect(card.getByLabelText("Recipe dose, 16 grams, saved recipe 15 grams")).toBeTruthy();
+        expect(card.queryByTestId("brew-recipe-ratio")).toBeNull();
+    });
+
+    it("defaults recipe context on with an old hidden-details preference", async () => {
+        sharedSettings().set("storyCardHidden", '["details"]');
+        mockOpened = {
+            record: makeBrewRecordFixture({
+                dose: 16, ratio: 17, adjustedFromDose: 15, hasStream: false
+            }),
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(600);
+        const card = within(screen.getByTestId("brew-story-card"));
+        expect(card.getByText("16 G")).toBeTruthy();
+        expect(card.getByText("RECIPE 15")).toBeTruthy();
+        expect(screen.getByLabelText("DOSE & RATIO").props.accessibilityState)
+            .toEqual(expect.objectContaining({selected: true}));
+        expect(sharedSettings().get("storyCardHidden")).toBe('["details"]');
+    });
+
+    it("offers the recipe toggle even when a remembered preference hides its context", async () => {
+        sharedSettings().set("storyCardHidden", '["recipe"]');
+        mockOpened = {
+            record: makeBrewRecordFixture({dose: 15, ratio: 16, hasStream: false}),
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(600);
+        const card = within(screen.getByTestId("brew-story-card"));
+        expect(card.queryByTestId("brew-recipe-context")).toBeNull();
+        expect(screen.getByLabelText("DOSE & RATIO").props.accessibilityState)
+            .toEqual(expect.objectContaining({selected: false}));
+        await pressStoryToggle("DOSE & RATIO");
+        expect(card.getByLabelText("Recipe dose, 15 grams")).toBeTruthy();
+        expect(card.getByLabelText("Recipe ratio, 1 to 16")).toBeTruthy();
+        expect(sharedSettings().get("storyCardHidden")).toBe("");
+    });
+
+    it("marks unfittable recipe context unavailable without persisting the refusal", async () => {
+        mockOpened = {
+            record: makeBrewRecordFixture({dose: 31, ratio: 100, hasStream: false}),
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+        await openCard(120);
+        const card = within(screen.getByTestId("brew-story-card"));
+        expect(card.queryByTestId("brew-recipe-context")).toBeNull();
+        expect(screen.getByLabelText("DOSE & RATIO unavailable, this will not fit")
+            .props.accessibilityState).toEqual(expect.objectContaining({selected: false}));
+        expect(screen.getByTestId("story-toggle-recipe-unavailable")).toBeTruthy();
+        expect(sharedSettings().get("storyCardHidden")).toBe("");
+        await fireEvent(screen.getByTestId("story-stage"), "layout", {
+            nativeEvent: {layout: {width: 600, height: 1167, x: 0, y: 0}}
+        });
+        expect(within(screen.getByTestId("brew-story-card"))
+            .getByLabelText("Recipe ratio, 1 to 100")).toBeTruthy();
+        expect(screen.queryByTestId("story-toggle-recipe-unavailable")).toBeNull();
+        expect(sharedSettings().get("storyCardHidden")).toBe("");
     });
 
     it("marks a requested story section unavailable when it cannot fit", async () => {

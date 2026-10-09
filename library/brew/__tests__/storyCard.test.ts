@@ -32,11 +32,13 @@ import {
     brewFigureBadgeGeometry,
     brewFigureBadgeWidth,
     brewFigureTextGeometry,
-    brewFigureUsesFourColumns
+    brewFigureUsesFourColumns,
+    brewRecipeUnits,
+    type BrewRecipeInputs
 } from "../figureGeometry";
 import {formatBrewDate, formatBrewTime} from "../brewFormat";
 import {MACHINE_CARD_MAX_STAGES} from "@/library/cardWriteErrors";
-import {dotoRowHeight, dotoTextWidth, DOTO_MAX_FONT_SCALE} from "@/library/dotoMetrics";
+import {dotoRowHeight, dotoTextWidth, DOTO_MAX_FONT_SCALE, DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
 import {stageLadderRungMinHeight} from "../stageLadderGeometry";
 
 const brew = (over: Partial<BrewRecord> = {}) =>
@@ -46,11 +48,20 @@ const STORY_NAME_SIZE = 13;
 const STORY_NAME_MARGIN = 12;
 
 type SweepInput = Parameters<typeof storySummaryBudget>[0];
+const SWEEP_MAX_STAGES = 17;
+const RECIPE_CONTEXTS: (BrewRecipeInputs | undefined)[] = [
+    undefined,
+    {dose: 31},
+    {ratio: 100},
+    {dose: 31, ratio: 100},
+    {dose: 15.5, ratio: 17, adjustedFromDose: 31, adjustedFromRatio: 100}
+];
 
 function storyMaskInputs(width: number, stages: number, fontScale: number): SweepInput[] {
-    return Array.from({length: 128}, (_, mask) => ({
+    return RECIPE_CONTEXTS.flatMap((recipeInputs) => Array.from({length: 128}, (_, mask) => ({
         width,
         stages,
+        recipeInputs,
         hasCoffee:      (mask & 1) !== 0,
         hasRating:      (mask & 2) !== 0,
         tags:           (mask & 4) !== 0
@@ -63,7 +74,35 @@ function storyMaskInputs(width: number, stages: number, fontScale: number): Swee
         hasGrindRecipeBadge: (mask & 16) !== 0,
         drawdownRate:   (mask & 16) !== 0 ? 2.1 : null,
         fontScale
+    })));
+}
+
+function trueRecipeHeight(input: SweepInput, budget: StorySummaryBudget): number {
+    const units = budget.showRecipeInputs ? brewRecipeUnits(input.recipeInputs) : [];
+    if (units.length === 0) return 0;
+    const scale = storyTextScale(input.width);
+    const fontScale = input.fontScale ?? 1;
+    const badge = brewFigureBadgeGeometry(scale);
+    const segments = units.map((unit) => ({
+        base: dotoTextWidth(unit.label, 12 * scale, fontScale, 1.2 * scale)
+            + 4 * scale + dotoTextWidth(unit.value, 12 * scale, fontScale, 1.2 * scale),
+        badge: unit.badge === null ? 0 : brewFigureBadgeWidth(unit.badge, fontScale, scale),
+        hasBadge: unit.badge !== null
     }));
+    const twoColumnWidth = (storyTextContentWidth(input.width) - 16 * scale) / 2;
+    const columns = units.length === 2 && segments.every((unit) =>
+        Math.max(unit.base, unit.badge) + STORY_FIT_MARGIN <= twoColumnWidth) ? 2 : 1;
+    const columnWidth = columns === 2 ? twoColumnWidth : storyTextContentWidth(input.width);
+    const lineHeight = dotoRowHeight(12 * scale, fontScale);
+    const badgeHeight = dotoRowHeight(badge.fontSize, fontScale, DOTO_MIN_FONT_SIZE * scale)
+        + 2 * (badge.paddingVertical + badge.borderWidth);
+    const heights = segments.map((unit) => !unit.hasBadge ? lineHeight
+        : unit.base + badge.gap + unit.badge + STORY_FIT_MARGIN <= columnWidth
+            ? Math.max(lineHeight, badgeHeight)
+            : lineHeight + badge.gap + badgeHeight);
+    return columns === 2 ? Math.max(...heights) + 8 * scale
+        : heights.reduce((sum, height) => sum + height, 0)
+            + (units.length - 1) * 6 * scale + 8 * scale;
 }
 
 function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySummaryBudget>) {
@@ -132,6 +171,7 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
     return budget.surroundingHeight
         + STORY_CAPTURE_PADDING * 2
         + nameHeight
+        + trueRecipeHeight(input, budget)
         + budget.traceHeight
         + rateHeight
         + baseFigures
@@ -141,16 +181,41 @@ function trueDrawnHeight(input: SweepInput, budget: ReturnType<typeof storySumma
         + ladderHeight;
 }
 
-function storySweepWorstSlack(): {worst: number; cell: SweepInput; visited: number} {
+type StorySweep = {worst: number; cell: SweepInput; visited: number; widths: Set<number>};
+let cachedSweep: StorySweep | undefined;
+
+function storySweep(): StorySweep {
+    if (cachedSweep !== undefined) return cachedSweep;
     let worst = -1;
     let cell: SweepInput | null = null;
     let visited = 0;
-    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
+    const widths = new Set<number>();
+    for (let stages = 1; stages <= SWEEP_MAX_STAGES; stages += 1) {
         for (const fontScale of STORY_TEST_FONT_SCALES) {
             for (const width of STORY_TEST_WIDTHS) {
+                widths.add(width);
                 for (const input of storyMaskInputs(width, stages, fontScale)) {
                     visited += 1;
                     const budget = storySummaryBudget(input);
+                    const drawn = trueDrawnHeight(input, budget);
+                    const horizontal = storyHorizontalFit(input, budget);
+                    const optionalRows = [
+                        budget.showCoffee, budget.showRating, budget.shownTagCount > 0
+                    ].filter(Boolean).length;
+                    if (!(drawn <= budget.contentHeight) || !(budget.requiredHeight + 0.001 >= drawn)
+                        || !(budget.margin >= 0) || !horizontal.fits
+                        || budget.gapSlots !== 1 + optionalRows) {
+                        throw new Error(`Story sweep fit failure: ${JSON.stringify({
+                            input, budget, drawn, horizontal
+                        })}`);
+                    }
+                    if (budget.declinedContent.recipe && (
+                        budget.showRecipeInputs || budget.showStages || budget.showRateChart
+                        || budget.showFigureDetails || budget.showCoffee || budget.showRating
+                        || budget.showSummaryNote || budget.shownTagCount !== 0
+                    )) {
+                        throw new Error(`Recipe declined before optional content: ${JSON.stringify(input)}`);
+                    }
                     if (budget.margin > worst) {
                         worst = budget.margin;
                         cell = input;
@@ -160,40 +225,14 @@ function storySweepWorstSlack(): {worst: number; cell: SweepInput; visited: numb
         }
     }
     if (cell === null) throw new Error("story slack sweep visited no cells");
-    return {worst, cell, visited};
-}
-
-function storyHorizontalSweep(): {visited: number} {
-    let visited = 0;
-    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
-        for (const fontScale of STORY_TEST_FONT_SCALES) {
-            for (const width of STORY_TEST_WIDTHS) {
-                for (const input of storyMaskInputs(width, stages, fontScale)) {
-                    visited += 1;
-                    const budget = storySummaryBudget(input);
-
-                    expect(storyHorizontalFit(input, budget)).toEqual(
-                        expect.objectContaining({fits: true})
-                    );
-                }
-            }
-        }
-    }
-    return {visited};
+    cachedSweep = {worst, cell, visited, widths};
+    return cachedSweep;
 }
 
 function expectAllMasksFit(widths: number[]) {
-    for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
-        for (const fontScale of STORY_TEST_FONT_SCALES) {
-            for (const width of widths) {
-                for (const input of storyMaskInputs(width, stages, fontScale)) {
-                    const budget = storySummaryBudget(input);
-
-                    expect(trueDrawnHeight(input, budget))
-                        .toBeLessThanOrEqual(budget.contentHeight);
-                }
-            }
-        }
+    const sweep = storySweep();
+    for (const width of widths) {
+        expect(sweep.widths.has(width)).toBe(true);
     }
 }
 
@@ -397,24 +436,7 @@ describe("the frame", () => {
     });
 
     it("keeps the budget's section gap slots in step with the rendered card", () => {
-        for (let stages = 1; stages <= MACHINE_CARD_MAX_STAGES; stages += 1) {
-            for (const fontScale of STORY_TEST_FONT_SCALES) {
-                for (const width of STORY_TEST_WIDTHS) {
-                    for (const input of storyMaskInputs(width, stages, fontScale)) {
-                        const budget = storySummaryBudget(input);
-                        const optionalRows = [
-                            budget.showCoffee,
-                            budget.showRating,
-                            budget.shownTagCount > 0
-                        ].filter(Boolean).length;
-
-                        expect(budget.gapSlots).toBe(1 + optionalRows);
-                        expect(budget.requiredHeight + 0.001)
-                            .toBeGreaterThanOrEqual(trueDrawnHeight(input, budget));
-                    }
-                }
-            }
-        }
+        expect(storySweep().visited).toBe(565_760);
     });
 
     it("keeps the height the story card really draws inside the safe band", () => {
@@ -429,12 +451,14 @@ describe("the frame", () => {
      * coverage this proof claims, so narrowing a list has to be deliberate.
      */
     it("keeps every drawn story row inside the card width", () => {
-        const sweep = storyHorizontalSweep();
+        const sweep = storySweep();
 
         expect(STORY_TEST_WIDTHS.length).toBe(13);
         expect(STORY_TEST_FONT_SCALES.length).toBe(4);
         expect(MACHINE_CARD_MAX_STAGES).toBe(10);
-        expect(sweep.visited).toBe(66_560);
+        expect(SWEEP_MAX_STAGES).toBe(17);
+        expect(RECIPE_CONTEXTS).toHaveLength(5);
+        expect(sweep.visited).toBe(565_760);
     });
 
     it("uses an explicit horizontal fit tolerance", () => {
@@ -640,9 +664,9 @@ describe("the frame", () => {
     });
 
     it("bounds slack after growing every story content mask", () => {
-        const sweep = storySweepWorstSlack();
+        const sweep = storySweep();
 
-        expect(sweep.visited).toBe(66_560);
+        expect(sweep.visited).toBe(565_760);
         expect(sweep.cell).toMatchObject({
             width: 430,
             stages: 8,
@@ -873,6 +897,87 @@ describe("the coffee line", () => {
 });
 
 describe("the story content chooser", () => {
+    it.each([
+        [{dose: 31}, true],
+        [{ratio: 100}, true],
+        [{dose: 15.5, ratio: 17, adjustedFromDose: 31, adjustedFromRatio: 100}, true],
+        [undefined, false],
+        [{dose: 0, ratio: NaN}, false],
+        [{dose: -1, ratio: Infinity}, false]
+    ] satisfies [BrewRecipeInputs | undefined, boolean][])(
+        "offers only finite positive recipe inputs: %j", (recipeInputs, available) => {
+            const input = {
+                width: 600, stages: 0, fontScale: 1.4,
+                hasRateChart: false, hasCoffee: false, hasRating: false, recipeInputs
+            };
+            const facts = storyContentFacts(input);
+            expect(facts.recipe).toBe(available);
+            expect(facts.details).toBe(false);
+            const budget = storySummaryBudget(input);
+            expect(budget.showRecipeInputs).toBe(available);
+            expect(budget.declinedContent.recipe).toBe(false);
+            expect(budget.requiredHeight).toBeCloseTo(trueDrawnHeight(input, budget), 6);
+            const hidden = storySummaryBudget({...input, recipeInputs: undefined});
+            expect(budget.requiredHeight - hidden.requiredHeight)
+                .toBeCloseTo(trueRecipeHeight(input, budget), 6);
+            expect(hidden.showRecipeInputs).toBe(false);
+        }
+    );
+
+    it("keeps the content key vocabulary and old fixture refusals explicit", () => {
+        expect(STORY_CONTENT_KEYS).toEqual([
+            "coffee", "rating", "tags", "note", "details", "flow", "recipe"
+        ]);
+        expect(storySummaryBudget({
+            width: 600, stages: 0,
+            hasRateChart: false, hasCoffee: false, hasRating: false
+        }).declinedContent).toEqual({
+            coffee: false, rating: false, tags: false, note: false,
+            details: false, flow: false, recipe: false
+        });
+    });
+
+    it("offers recipe inputs independently of details", () => {
+        const facts = storyContentFacts({
+            hasRateChart: false, hasCoffee: false, hasRating: false,
+            recipeInputs: {dose: 15, ratio: 16}
+        });
+        expect(offeredStoryContent(facts)).toEqual(["recipe"]);
+        expect(storyHiddenFromSetting('["details"]').has("recipe")).toBe(false);
+        expect(storyHiddenToSetting(["recipe"])).toBe('["recipe"]');
+    });
+
+    it("retains actual adjusted recipe inputs at large text when they fit", () => {
+        const input = {
+            width: 375, stages: 3, fontScale: 1.4,
+            hasRateChart: false, hasCoffee: false, hasRating: false,
+            recipeInputs: {dose: 31, ratio: 100, adjustedFromDose: 15, adjustedFromRatio: 16}
+        };
+        const budget = storySummaryBudget(input);
+        expect(budget.showRecipeInputs).toBe(true);
+        expect(budget.declinedContent.recipe).toBe(false);
+        expect(budget.requiredHeight).toBeLessThanOrEqual(budget.contentHeight);
+        expect(storyHorizontalFit(input, budget).fits).toBe(true);
+    });
+
+    it("declines recipe inputs last without changing the stored preference", () => {
+        const setting = '["details"]';
+        const input = {
+            width: 120, stages: 3, fontScale: 1.4,
+            hasRateChart: true, hasCoffee: true, hasRating: true,
+            tags: ["washed"], hasSummaryNote: true, figureExtraRows: 1,
+            recipeInputs: {dose: 31, ratio: 100}
+        };
+        const budget = storySummaryBudget(input);
+        expect(budget.showRecipeInputs).toBe(false);
+        expect(budget.declinedContent.recipe).toBe(true);
+        expect(storyHiddenToSetting(storyHiddenFromSetting(setting))).toBe(setting);
+        expect(budget).toMatchObject({
+            showStages: false, showRateChart: false, showFigureDetails: false,
+            showCoffee: false, showRating: false, showSummaryNote: false, shownTagCount: 0
+        });
+    });
+
     it("offers only the content the budget input says exists", () => {
         const facts = storyContentFacts({
             hasRateChart: true,
@@ -901,6 +1006,7 @@ describe("the story content chooser", () => {
             yield "coffee" as const;
             yield "tags" as const;
             yield "note" as const;
+            yield "recipe" as const;
         }
 
         const setting = storyHiddenToSetting(hiddenSections());
