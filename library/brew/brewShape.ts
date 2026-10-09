@@ -1,7 +1,7 @@
 import type Pour from "@/library/Pour";
 
 import type {BrewSample} from "./BrewRecord";
-import {intervalExtent, type PauseInterval} from "./pauseIntervals";
+import {intervalExtent, pausedWithin, type PauseInterval} from "./pauseIntervals";
 
 /** A point on the brew's plane: seconds since the start, and millilitres. */
 export type Point = {t: number; v: number};
@@ -75,6 +75,24 @@ export function pourEndDelaySeconds(
     const pourEnd = seconds - drawdown - Math.max(0, pausedSeconds);
     const delay = Math.round(pourEnd - planSeconds);
     return delay >= DELAY_FLOOR_SECONDS ? delay : null;
+}
+
+/**
+ * Seconds of pause that sit before the pour ended, for `pourEndDelaySeconds`.
+ * Drawdown seconds already exclude pauses after the boundary, so only interval
+ * overlap before `drawdownAt` (ms, interval clock) may be subtracted. Without
+ * intervals (legacy records) the stored total is the only evidence there is.
+ */
+export function pausedBeforeDrawdownSeconds(
+    intervals: readonly PauseInterval[] | undefined,
+    drawdownAt: number | undefined,
+    pausedSeconds = 0
+): number {
+    if (intervals === undefined || intervals.length === 0
+        || drawdownAt === undefined || !(drawdownAt > 0)) {
+        return Math.max(0, pausedSeconds);
+    }
+    return pausedWithin(intervals, 0, drawdownAt) / 1000;
 }
 
 /** Where one stage begins, stops pouring, and finally ends. Seconds. */

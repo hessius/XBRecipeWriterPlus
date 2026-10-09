@@ -46,7 +46,7 @@ import {
     storyTextScale,
     type StoryContentKey
 } from "@/library/brew/storyCard";
-import {plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
+import {pausedBeforeDrawdownSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import {brewFigureAdjustmentLayout} from "@/library/brew/figureGeometry";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
@@ -411,7 +411,8 @@ export default function BrewRecord({recipeLookup}: Props) {
             durationSeconds,
             drawdown?.seconds ?? null,
             plannedSecs,
-            record.pausedSeconds ?? 0
+            pausedBeforeDrawdownSeconds(
+                record.pauseIntervals, record.drawdownAt, record.pausedSeconds)
         ),
         grind:             summaryGrind,
         adjustments

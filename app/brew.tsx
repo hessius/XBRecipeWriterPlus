@@ -55,7 +55,7 @@ import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {liveDrawdown} from "@/library/brew/liveDrawdown";
-import {pauseSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
+import {pauseSeconds, pausedBeforeDrawdownSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import {pausedWithin} from "@/library/brew/pauseIntervals";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
 import {
@@ -315,7 +315,10 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const doneDrawdownRate = phase.name === "done" ? doneDrawdownFigures?.rate ?? null : null;
     const doneDelay = phase.name === "done"
         ? pourEndDelaySeconds(elapsed, doneDrawdown, plannedSecs,
-                              run?.record?.pausedSeconds ?? 0)
+                              pausedBeforeDrawdownSeconds(
+                                  run?.record?.pauseIntervals ?? run?.pauseIntervals,
+                                  run?.record?.drawdownAt,
+                                  run?.record?.pausedSeconds))
         : null;
     const liveDelay = pourEndDelaySeconds(
         elapsed,
