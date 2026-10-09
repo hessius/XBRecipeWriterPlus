@@ -75,6 +75,22 @@ describe("LiveBrewProvider", () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
 
+    it("publishes the owner's quick edits without commanding a second brew", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => (
+                <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+            )
+        });
+        const r = recipe();
+        const quickEdit = {adjustedFromDose: 15, adjustedFromRatio: 16};
+
+        await act(async () => { result.current.start(r, quickEdit); });
+
+        expect(result.current.run?.quickEdit).toEqual(quickEdit);
+        expect(global.__brewer.brew).toHaveBeenCalledTimes(1);
+    });
+
     /**
      * The provider sits above the whole navigator. If starting a brew changes
      * the shape of the tree — a new element type above `children`, or a new

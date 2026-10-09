@@ -4,6 +4,7 @@ import {Text, YStack} from "tamagui";
 
 import BrewFigures, {type BrewFigureAdjustments} from "@/components/BrewFigures";
 import BrewRateChart from "@/components/BrewRateChart";
+import BrewRecipeContext from "@/components/BrewRecipeContext";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewTrace from "@/components/BrewTrace";
 import MarqueeText from "@/components/MarqueeText";
@@ -16,6 +17,7 @@ import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {BypassView} from "@/library/brew/bypassState";
 import type {GrindFigure} from "@/library/brew/dialAfterBrew";
 import type {FlowPoint} from "@/library/brew/flowRate";
+import type {BrewRecipeInputs} from "@/library/brew/figureGeometry";
 import {
     hasDrawableRateRun,
     RATE_BOTTOM_GAP,
@@ -54,6 +56,7 @@ export function summaryLadderHeight(
 
 type Props = {
     recipeName: string;
+    recipeInputs?: BrewRecipeInputs;
     hasStream: boolean;
     samples: BrewSample[];
     stages: Pour[];
@@ -156,7 +159,7 @@ const NO_PLAN: Pour[] = [];
  * figures near-invisible.
  */
 export default function BrewSummary({
-    recipeName, hasStream, samples, stages, accent, width, plannedSeconds,
+    recipeName, recipeInputs, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
     note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
     drawdown = null, rateSeries, drawdownRate = null, delay = null, grind = null,
@@ -211,6 +214,8 @@ export default function BrewSummary({
                     {recipeName}
                 </DotMatrixText>
             </MarqueeText>
+
+            <BrewRecipeContext inputs={recipeInputs} contentWidth={traceWidth} textScale={textScale}/>
 
             {hasStream ? (
                 <View testID="trace-chart-slot" style={chartSlotStyle}>

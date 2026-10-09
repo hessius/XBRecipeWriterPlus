@@ -60,6 +60,7 @@ describe("BrewSummary story scaling", () => {
                 drawdownRate={2.1}
                 delay={5}
                 grind={{kind: "dial", dial: 53, recipe: 60}}
+                recipeInputs={{dose: 16, ratio: 17, adjustedFromDose: 15, adjustedFromRatio: 16}}
                 textScale={0.5}
             />
         );
@@ -70,5 +71,10 @@ describe("BrewSummary story scaling", () => {
         expect(style.marginBottom).toBeCloseTo(6, 6);
         expect(textStyleOf("RECIPE 60").fontSize).toBeCloseTo(5.5, 6);
         expect(textStyleOf("RECIPE 60").letterSpacing).toBeCloseTo(0.25, 6);
+        expect(textStyleOf("16 G").fontSize).toBeCloseTo(6, 6);
+        expect(textStyleOf("1:17").letterSpacing).toBeCloseTo(0.6, 6);
+        expect(textStyleOf("RECIPE 15").fontSize).toBeCloseTo(5.5, 6);
+        expect(textStyleOf("RECIPE 1:16").letterSpacing).toBeCloseTo(0.25, 6);
+        expect(screen.getByTestId("brew-recipe-context")).toHaveStyle({gap: 3, marginBottom: 4});
     });
 });

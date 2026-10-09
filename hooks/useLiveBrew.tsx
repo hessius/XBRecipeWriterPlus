@@ -30,6 +30,7 @@ export type LiveBrewSnapshot = {
     bypass?: BypassView;
     /** The row the recorder wrote for a finished brew. */
     record?: BrewRecord;
+    quickEdit?: QuickEditRecordAdjustments;
 };
 
 type LiveBrew = {
@@ -222,7 +223,7 @@ function RunOwner({
 
     const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
-        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
+        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, quickEdit,
     };
     const quickEditFor = (
         next: Recipe,
