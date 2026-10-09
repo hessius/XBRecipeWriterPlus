@@ -151,6 +151,15 @@ Firmware ordering remains an explicit hardware gate, not a solved correlation
 problem. The native notification format also contains no connection epoch;
 generation guards reject observable stale callbacks, not unknowable wire age.
 
+Connection setup observes the actual peripheral and generation before native
+connect, through service discovery, notifications, MTU and model reads. A drop
+rejects that attempt before it can publish a connected link; an unrelated
+peripheral's drop is ignored. Every setup native call and its awaited result
+is guarded before another call or diagnostic mutation. Supersession propagates
+as failure rather than a best-effort characteristic refusal, and old-attempt
+observer cleanup cannot remove the replacement connection's observers.
+The deliberate ghost-link disconnect is excluded from the retry's lifecycle.
+
 Native dispatch, receipt and final storage completion each have a separate,
 conservative **unmeasured 15-second software budget**. Dispatch includes
 pacing; receipt's budget begins after native dispatch resolves. An early ACK
