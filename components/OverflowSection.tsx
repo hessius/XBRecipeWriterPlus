@@ -1,17 +1,21 @@
 import React, {useState} from "react";
-import {Pressable, TextInput} from "react-native";
-import {Text, YStack} from "tamagui";
+import {Pressable} from "react-native";
+import {Input, Text, YStack} from "tamagui";
+import type {ColorTokens} from "tamagui";
 
 import FieldRow from "@/components/FieldRow";
 import SegmentedRow from "@/components/SegmentedRow";
-import {OVERFLOW_ESTIMATE_NOTE, OVERFLOW_FOREGROUND_CAUTION} from "@/constants/brewCopy";
+import {
+    OVERFLOW_ESTIMATE_NOTE, OVERFLOW_FOREGROUND_CAUTION, OVERFLOW_INVALID_LIMIT,
+    OVERFLOW_LIMIT_LABEL, OVERFLOW_LIMIT_PLACEHOLDER, OVERFLOW_OFF_ACTION, OVERFLOW_OFF_LABEL,
+    overflowIntervalLabel
+} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {OVERFLOW_INTERVALS, type OverflowInterval, type OverflowProtection} from "@/library/brew/overflowConfig";
 
 const INTERVAL_OPTIONS = OVERFLOW_INTERVALS.map((seconds) => ({
-    value: String(seconds), label: `${seconds} S`
+    value: String(seconds), label: overflowIntervalLabel(seconds)
 }));
-const INVALID_LIMIT = "Enter a whole number of grams above 0.";
 
 type Props = {
     config?: OverflowProtection;
@@ -61,26 +65,24 @@ export default function OverflowSection({config, onChange}: Props) {
 
     return (
         <YStack testID="overflow-section">
-            <FieldRow topic="overflowThreshold" showHint error={invalid ? INVALID_LIMIT : undefined}>
-                <TextInput
+            <FieldRow topic="overflowThreshold" showHint error={invalid ? OVERFLOW_INVALID_LIMIT : undefined}>
+                <Input
                     testID="overflow-limit"
-                    accessibilityLabel="Retained-water limit in grams"
+                    accessibilityLabel={OVERFLOW_LIMIT_LABEL}
                     value={draft}
                     onChangeText={onChangeText}
                     keyboardType="number-pad"
-                    placeholder="grams"
-                    placeholderTextColor={palette.placeholder}
+                    placeholder={OVERFLOW_LIMIT_PLACEHOLDER}
+                    placeholderTextColor={palette.placeholder as ColorTokens}
                     returnKeyType="done"
-                    style={{
-                        width:             96,
-                        minHeight:         44,
-                        fontSize:          16,
-                        textAlign:         "right",
-                        color:             invalid ? palette.danger : palette.text,
-                        backgroundColor:   palette.raised,
-                        borderRadius:      12,
-                        paddingHorizontal: 14
-                    }}/>
+                    width={96}
+                    minHeight={44}
+                    fontSize={16}
+                    textAlign="right"
+                    color={(invalid ? palette.danger : palette.text) as ColorTokens}
+                    backgroundColor={palette.raised}
+                    borderRadius={12}
+                    paddingHorizontal={14}/>
             </FieldRow>
 
             {configured && (
@@ -96,11 +98,11 @@ export default function OverflowSection({config, onChange}: Props) {
                             {OVERFLOW_ESTIMATE_NOTE}
                         </Text>
                         <Pressable accessibilityRole="button"
-                                   accessibilityLabel="Turn off overflow protection"
+                                   accessibilityLabel={OVERFLOW_OFF_LABEL}
                                    onPress={turnOff}
                                    style={{minHeight: 44, justifyContent: "center"}}>
                             <Text fontSize={11} letterSpacing={1.5} color={palette.danger}>
-                                OFF
+                                {OVERFLOW_OFF_ACTION}
                             </Text>
                         </Pressable>
                     </YStack>

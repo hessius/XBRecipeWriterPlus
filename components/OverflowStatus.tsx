@@ -2,7 +2,9 @@ import React from "react";
 import {Text, YStack} from "tamagui";
 
 import {
-    OVERFLOW_ESTIMATE_NOTE, OVERFLOW_FOREGROUND_CAUTION, OVERFLOW_STATE_COPY
+    OVERFLOW_ESTIMATE_NOTE, OVERFLOW_ESTIMATE_UNAVAILABLE, OVERFLOW_FOREGROUND_CAUTION,
+    OVERFLOW_STATE_COPY, OVERFLOW_WAITING_FOR_READINGS, overflowCountdownText,
+    overflowEstimateLine, overflowGramsText
 } from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import type {OverflowSnapshot} from "@/library/brew/OverflowController";
@@ -28,21 +30,21 @@ function stateLine(status: OverflowSnapshot): string {
 
 function estimate(status: OverflowSnapshot): string {
     return status.telemetryAvailable && status.retainedGrams !== null
-        ? `${Math.round(status.retainedGrams)} g`
-        : "unavailable";
+        ? overflowGramsText(status.retainedGrams)
+        : OVERFLOW_ESTIMATE_UNAVAILABLE;
 }
 
 function figuresLine(status: OverflowSnapshot, now: number): string | null {
-    if (status.mode === "armed") return `Estimated in the dripper: ${estimate(status)}`;
+    if (status.mode === "armed") return overflowEstimateLine(estimate(status), false);
     if (status.mode !== "holding") return null;
     const parts: string[] = [];
     if (status.telemetryAvailable && status.retainedGrams !== null) {
-        parts.push(`Estimated in the dripper: ${estimate(status)}.`);
+        parts.push(overflowEstimateLine(estimate(status), true));
     } else {
-        parts.push("Waiting for fresh scale readings.");
+        parts.push(OVERFLOW_WAITING_FOR_READINGS);
     }
     if (status.nextCheckAt !== null) {
-        parts.push(`Next check in ${Math.max(0, Math.ceil((status.nextCheckAt - now) / 1000))} s.`);
+        parts.push(overflowCountdownText(Math.max(0, Math.ceil((status.nextCheckAt - now) / 1000))));
     }
     return parts.join(" ");
 }
@@ -62,6 +64,9 @@ export default function OverflowStatus({status, now, compact}: Props) {
     const stopped = status.mode === "disabled";
     const color = failed ? palette.danger : stopped ? palette.warn : palette.text;
     const figures = figuresLine(status, now);
+    // Every state in which the protection is still in force keeps the caution.
+    const active = status.mode === "armed" || status.mode === "requesting"
+        || status.mode === "holding" || status.mode === "resuming";
 
     return (
         <YStack testID="overflow-status" gap="$1">
@@ -75,7 +80,7 @@ export default function OverflowStatus({status, now, compact}: Props) {
                     {figures}
                 </Text>
             )}
-            {!compact && status.mode === "armed" && (
+            {!compact && active && (
                 <>
                     <Text fontSize={12} lineHeight={17} color={palette.dim}>
                         {OVERFLOW_FOREGROUND_CAUTION}

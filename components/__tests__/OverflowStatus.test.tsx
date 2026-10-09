@@ -57,6 +57,23 @@ describe("OverflowStatus", () => {
         expect(screen.queryByText(/cup is full|cup full/i)).toBeNull();
     });
 
+    it.each([
+        ["armed", {}],
+        ["requesting", {}],
+        ["resuming", {}],
+        ["holding", {nextCheckAt: 5000, retainedGrams: 60, telemetryAvailable: true}],
+        ["holding", {nextCheckAt: 5000}]
+    ] as const)("%s keeps the caution and the estimate note (%j)", async (mode, extra) => {
+        await renderWithProviders(<OverflowStatus status={snap({mode, ...extra})} now={0}/>);
+        expect(screen.getByText(OVERFLOW_FOREGROUND_CAUTION)).toBeOnTheScreen();
+        expect(screen.getByText(OVERFLOW_ESTIMATE_NOTE)).toBeOnTheScreen();
+    });
+
+    it("error carries no caution, since nothing is protecting the brew", async () => {
+        await renderWithProviders(<OverflowStatus status={snap({mode: "error"})} now={0}/>);
+        expect(screen.queryByText(OVERFLOW_FOREGROUND_CAUTION)).toBeNull();
+    });
+
     it("resuming says so", async () => {
         await renderWithProviders(<OverflowStatus status={snap({mode: "resuming"})} now={0}/>);
         expect(screen.getByText("Resuming the brew.")).toBeOnTheScreen();

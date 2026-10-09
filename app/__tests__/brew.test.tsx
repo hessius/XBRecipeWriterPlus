@@ -1585,6 +1585,41 @@ describe("brew route custom overflow protection", () => {
         expect(screen.queryByText(OVERFLOW_FOREGROUND_CAUTION)).toBeNull();
     });
 
+    it.each(["requesting", "holding", "resuming"] as const)(
+        "keeps the caution while %s",
+        async (mode) => {
+            protect();
+            mockOverflow = {...holding, mode};
+            await renderWithProviders(<Brew />);
+            expect(screen.getByText(OVERFLOW_FOREGROUND_CAUTION)).toBeOnTheScreen();
+        }
+    );
+
+    it("keeps the caution while holding without a fresh reading", async () => {
+        protect();
+        mockOverflow = {mode: "holding", retainedGrams: null, nextCheckAt: 20_000, telemetryAvailable: false};
+        await renderWithProviders(<Brew />);
+        expect(screen.getByText(OVERFLOW_FOREGROUND_CAUTION)).toBeOnTheScreen();
+        expect(screen.getByText(/Waiting for fresh scale readings/)).toBeOnTheScreen();
+    });
+
+    it("shows the lost-contact reason on the stopped run, owner recipe taking precedence", async () => {
+        mockOwnerRecipe = new Recipe(undefined, JSON.stringify(mockRecipe));
+        protect(mockOwnerRecipe);
+        mockPhase = {name: "lostContact"} as BrewPhase;
+        mockOverflow = {...armed, mode: "disabled", disabledReason: "lostContact"};
+        await renderWithProviders(<Brew />);
+        expect(screen.getByText(/contact with the machine was lost/)).toBeOnTheScreen();
+        expect(screen.queryByText(OVERFLOW_FOREGROUND_CAUTION)).toBeNull();
+    });
+
+    it("shows nothing on a lost-contact run that was never protected", async () => {
+        mockPhase = {name: "lostContact"} as BrewPhase;
+        mockOverflow = {...armed, mode: "disabled", disabledReason: "lostContact"};
+        await renderWithProviders(<Brew />);
+        expect(screen.queryByTestId("overflow-status")).toBeNull();
+    });
+
     it("shows no active status once the run has ended", async () => {
         protect();
         mockPhase = {name: "cancelled"} as BrewPhase;

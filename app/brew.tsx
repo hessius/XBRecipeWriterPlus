@@ -343,7 +343,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const overflowStatus = overflowFor(recipe) === undefined ? undefined
         : run?.overflow ?? (running ? ARMED_AT_START : undefined);
     const showOverflow = overflowStatus !== undefined && overflowStatus.mode !== "ended"
-        && (running || overflowPause);
+        && (running || overflowPause || phase.name === "lostContact");
     const headline = blocked
         ? (BLOCKED_HEADLINE[blockKind ?? "notEnoughWater"] ?? BLOCKED_WATER_HEADLINE)
         : failed

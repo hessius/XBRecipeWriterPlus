@@ -188,6 +188,30 @@ export const OVERFLOW_ESTIMATE_NOTE =
     "Estimated water in the dripper includes water held by the grounds. It is not a measured fill level.";
 export const OVERFLOW_MANUAL_OVERRIDE = "Custom overflow protection is off for this brew.";
 
+export const OVERFLOW_INVALID_LIMIT = "Enter a whole number of grams above 0.";
+export const OVERFLOW_LIMIT_LABEL = "Retained-water limit in grams";
+export const OVERFLOW_LIMIT_PLACEHOLDER = "grams";
+export const OVERFLOW_OFF_LABEL = "Turn off overflow protection";
+export const OVERFLOW_OFF_ACTION = "OFF";
+export const OVERFLOW_ESTIMATE_UNAVAILABLE = "unavailable";
+export const OVERFLOW_WAITING_FOR_READINGS = "Waiting for fresh scale readings.";
+
+export function overflowIntervalLabel(seconds: number): string {
+    return `${seconds} S`;
+}
+
+export function overflowGramsText(grams: number): string {
+    return `${Math.round(grams)} g`;
+}
+
+export function overflowEstimateLine(estimate: string, sentence: boolean): string {
+    return `Estimated in the dripper: ${estimate}${sentence ? "." : ""}`;
+}
+
+export function overflowCountdownText(seconds: number): string {
+    return `Next check in ${seconds} s.`;
+}
+
 /** What the status says about the protection's state. One stable line per state: it is the spoken one. */
 /** The headline for a pause the app made itself, distinct from a manual one. */
 export const OVERFLOW_PAUSED_HEADLINE = "Paused for overflow.";
