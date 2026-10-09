@@ -1,6 +1,6 @@
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View}
     from "react-native";
 import ViewShot from "react-native-view-shot";
@@ -210,12 +210,22 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
            error, watch, ratingNoteOpen} = useLiveBrew();
 
+    // When the attempt now showing began, so a "Copy diagnostic log" press
+    // can scope its history to this attempt rather than the whole session.
+    // Stamped on every call that starts a run, including a retry, so a
+    // second attempt's log does not carry the first attempt's history too.
+    const attemptStartedAt = useRef(Date.now());
+    function startAttempt(target: Recipe, adjustments?: QuickEditRecordAdjustments) {
+        attemptStartedAt.current = Date.now();
+        start(target, adjustments);
+    }
+
     // Tell the provider to start a run for this recipe. `start` is idempotent:
     // if RunOwner is already mounted it replaces `start` with a no-op, so
     // re-mounting this screen while a brew is in flight never commands a second
     // brew (Finding 2).
     useEffect(() => {
-        if (!viewing) start(localRecipe, quickEditRecord);
+        if (!viewing) startAttempt(localRecipe, quickEditRecord);
         // localRecipe and viewing are stable for the life of this screen.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -337,7 +347,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // which are "greater than zero", so a threshold drew the two halves of the
     // beat identically and the flicker never appeared at all.
     const planColor = mix(palette.muted, accent, motion.warmth);
-    const {status, connect} = useMachine();
+    const {status, connect, machine} = useMachine();
 
     // Export mechanics, shared with the record screen so the two look and
     // behave identically. The record is read from the store on press after
@@ -628,7 +638,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // on the spent one brewed a coffee that no history row
                         // ever mentioned.
                         <Action label="Try again" color={palette.text}
-                                onPress={() => start(recipe, quickEditRecord)} />
+                                onPress={() => startAttempt(recipe, quickEditRecord)} />
                     )}
                     {offerPro && (
                         <Action label="Switch to Pro" color={palette.warn}
