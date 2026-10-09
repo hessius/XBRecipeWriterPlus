@@ -29,7 +29,12 @@ export function asTemperatureUnit(value: unknown): TemperatureUnit {
 /** What the card can hold, in whole Celsius. Mirrors `cardLimits`. */
 export const CELSIUS_RANGE = {min: 39, max: 99} as const;
 
-function clampCelsius(celsius: number): number {
+/**
+ * Exported so an importer can clamp a temperature the card cannot hold (an
+ * official-app "BP" preset, for instance, has landed here as 99.4 C rather
+ * than a clean 98) without duplicating the band it is clamped to.
+ */
+export function clampCelsius(celsius: number): number {
     if (!Number.isFinite(celsius)) return CELSIUS_RANGE.min;
     return Math.min(Math.max(celsius, CELSIUS_RANGE.min), CELSIUS_RANGE.max);
 }
