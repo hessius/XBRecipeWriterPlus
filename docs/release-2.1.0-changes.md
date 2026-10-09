@@ -89,7 +89,7 @@ Original review threads and PR metadata were not changed.
    brewing after the machine changes to EASY. Establish safe recovery for an
    unknown receipt or missing final completion before enabling production writes.
 9. Check the Easy Mode screen and library markers on native iOS/Android:
-   narrow widths, large text, marked shelf tile height, pinned action,
+   narrow widths, large text, fixed marked shelf tile geometry, pinned action,
    VoiceOver/TalkBack and recipe-picker accessibility isolation.
 10. Verify the brewer/cup and overflow behaviour of stored slots before release.
     The documented coffee blob does not encode cup type or phone-side overflow
@@ -191,3 +191,10 @@ Package 10's isolated worktree was additionally validated on 2026-10-09:
 No full release suite, new Expo Doctor run, native build or physical device
 verification was performed for package 10. Its production transport and
 release gates above remain open.
+
+The single Copilot review on #207 found three software issues, reproduced on
+both Jest platforms and corrected: recipe-context preparation now claims
+navigation before assigning a slot; the Easy Mode route hides from
+accessibility while the global brew-note sheet is open; and marked shelf tiles
+retain `TILE_HEIGHT`, using a one-line visual marker with the full status in
+their accessibility label. No second review round was requested.

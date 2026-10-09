@@ -8,6 +8,10 @@ import EasyModeScreen from "@/app/easyMode";
 const mockAllRecipes = [coffee("Whole library recipe")];
 const mockRecord = emptySlotRecord();
 let mockParams: {recipeJSON?: string} = {};
+let mockRatingNoteOpen = false;
+jest.mock("@/hooks/useLiveBrew", () => ({
+    useLiveBrew: () => ({ratingNoteOpen: mockRatingNoteOpen})
+}));
 jest.mock("expo-router", () => ({
     useLocalSearchParams: () => mockParams,
     router: {push: jest.fn(), back: jest.fn(), canGoBack: () => true},
@@ -29,7 +33,17 @@ jest.mock("@/hooks/useRecipeLibrary", () => ({
     useRecipeLibrary: () => ({allRecipes: () => mockAllRecipes})
 }));
 
-beforeEach(() => { mockParams = {}; });
+beforeEach(() => { mockParams = {}; mockRatingNoteOpen = false; });
+
+it("hides the whole route while the global brew-note sheet is open", async () => {
+    mockRatingNoteOpen = true;
+    await renderWithProviders(<EasyModeScreen/>);
+    expect(screen.queryByRole("header", {name: /Easy Mode/i})).toBeNull();
+    expect(screen.queryByRole("button", {name: "Change slot A recipe"})).toBeNull();
+    expect(screen.queryByRole("button", {name: "Write all three slots"})).toBeNull();
+    expect(screen.getByTestId("easy-mode-screen", {includeHiddenElements: true}).props
+        .importantForAccessibility).toBe("no-hide-descendants");
+});
 
 it("renders the canonical route with its own header and production block", async () => {
     await renderWithProviders(<EasyModeScreen/>);

@@ -7,6 +7,7 @@ import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
 import SelectableRecipeRow from "@/components/SelectableRecipeRow";
 import MachinePanel from "@/components/MachinePanel";
 import {palette} from "@/constants/colors";
+import {TILE_HEIGHT} from "@/components/ShelfTile";
 import {coffee} from "@/library/slots/__tests__/fixtures";
 
 it("draws slot assignment markers and exposes the recipe action on list cards", async () => {
@@ -28,6 +29,7 @@ it("draws the same marker and action on shelf tiles", async () => {
         onLongPress={jest.fn()} onShare={jest.fn()} onDuplicate={jest.fn()} onDelete={jest.fn()}
         onEasyMode={onEasyMode} slotMarker="Draft C."/>);
     expect(screen.getByTestId("slot-marker", {includeHiddenElements: true})).toHaveTextContent("Draft C.");
+    expect(screen.getByTestId("recipe-tile")).toHaveStyle({height: TILE_HEIGHT});
     await fireEvent(screen.getByTestId(`recipe-tile-${recipe.uuid}`), "accessibilityAction",
         {nativeEvent: {actionName: "easyMode"}});
     expect(onEasyMode).toHaveBeenCalledTimes(1);

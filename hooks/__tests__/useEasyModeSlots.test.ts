@@ -3,8 +3,42 @@ import {createTestDatabase} from "@/test-utils/sqlite";
 import {SlotDatabase} from "@/library/slots/SlotDatabase";
 import {coffee} from "@/library/slots/__tests__/fixtures";
 import {prepareSet, snapshotRecipe} from "@/library/slots/slotModel";
-import {prepareEasyModeEntry, useEasyModeSlots, useSlotRecord} from "@/hooks/useEasyModeSlots";
+import {openEasyModeRecipe, prepareEasyModeEntry, sharedSlotDatabase, useEasyModeSlots, useSlotRecord} from "@/hooks/useEasyModeSlots";
+import {forgetLastMove, SETTLE_MS} from "@/hooks/steadyRouter";
 import type {SlotLease} from "@/library/slots/slotWriter";
+
+const mockPush = jest.fn();
+jest.mock("expo-router", () => ({
+    router: {push: (...args: unknown[]) => mockPush(...args)}
+}));
+jest.mock("expo-sqlite", () => ({
+    openDatabaseSync: () => jest.requireActual("@/test-utils/sqlite").createTestDatabase()
+}));
+
+beforeEach(() => {
+    forgetLastMove();
+    mockPush.mockClear();
+});
+
+it("assigns only once on rapid context taps but allows a deliberate repeat visit", () => {
+    const now = jest.spyOn(Date, "now").mockReturnValue(1000);
+    const recipe = coffee();
+    const store = sharedSlotDatabase();
+    const deviceId = "rapid-context";
+    try {
+        openEasyModeRecipe(recipe, deviceId);
+        openEasyModeRecipe(recipe, deviceId);
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(store.read(deviceId).drafts.map((slot) => slot?.sourceUuid ?? null))
+            .toEqual([recipe.uuid, null, null]);
+        now.mockReturnValue(1000 + SETTLE_MS);
+        openEasyModeRecipe(recipe, deviceId);
+        expect(mockPush).toHaveBeenCalledTimes(2);
+        expect(store.read(deviceId).drafts[1]?.sourceUuid).toBe(recipe.uuid);
+    } finally {
+        now.mockRestore();
+    }
+});
 
 it("context entry fills only an empty slot and full sets require replacement choice", () => {
     const store = new SlotDatabase(createTestDatabase());

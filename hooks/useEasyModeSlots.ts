@@ -1,7 +1,7 @@
 import {useRef, useState, useSyncExternalStore} from "react";
 import {appDatabase} from "@/library/appDatabase";
 import Recipe from "@/library/Recipe";
-import router from "@/hooks/steadyRouter";
+import {pushPrepared} from "@/hooks/steadyRouter";
 import {notify} from "@/components/XbrwToast";
 import {SlotDatabase} from "@/library/slots/SlotDatabase";
 import {
@@ -47,7 +47,8 @@ export function prepareEasyModeEntry(
 
 export function openEasyModeRecipe(recipe: Recipe, deviceId: string): void {
     try {
-        router.push(prepareEasyModeEntry(sharedSlotDatabase(), deviceId, recipe));
+        pushPrepared(JSON.stringify(["easyMode", deviceId, recipe.uuid]),
+            () => prepareEasyModeEntry(sharedSlotDatabase(), deviceId, recipe));
     } catch (error) {
         notify({tone: "error", message: error instanceof Error ? error.message : String(error)});
     }

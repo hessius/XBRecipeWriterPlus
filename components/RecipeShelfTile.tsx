@@ -218,8 +218,7 @@ export default function RecipeShelfTile({
                 opacity:   pressed ? 0.85 : 1,
                 transform: [{scale: pressed ? 0.99 : 1}]
             })}>
-            <YStack testID="recipe-tile" height={slotMarker === undefined ? TILE_HEIGHT : undefined}
-                    minHeight={TILE_HEIGHT} gap="$2"
+            <YStack testID="recipe-tile" height={TILE_HEIGHT}
                     justifyContent="space-between" overflow="hidden"
                     padding="$3" borderRadius="$4"
                     style={{backgroundColor: accent}}>
@@ -287,9 +286,9 @@ export default function RecipeShelfTile({
                 </XStack>
 
                 <YStack gap="$1">
-                    <SlotMarker label={slotMarker}/>
+                    <SlotMarker label={slotMarker} compact/>
                     {/* One line rather than two once there are figures under
-                        it. Unmarked tiles keep the grid's fixed height:
+                        it. Every tile keeps the grid's fixed height:
                         a name that reflowed on its contents would break the
                         row alignment the whole grid is built on. */}
                     <Text fontSize={15} fontWeight="700"
