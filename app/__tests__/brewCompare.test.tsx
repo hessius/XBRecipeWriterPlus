@@ -13,6 +13,8 @@ import {
 } from "@/test-utils/brewRecordMocks";
 import {renderWithProviders} from "@/test-utils/render";
 import {planFromPours} from "@/library/brew/BrewRecord";
+import {toPath} from "@/library/brew/brewShape";
+import {compareTracePlotHeight} from "@/components/CompareTrace";
 import {formatBrewDate, formatBrewTime} from "@/library/brew/brewFormat";
 import {referenceCupColour} from "@/library/brew/traceStyle";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
@@ -122,6 +124,128 @@ describe("the comparison screen", () => {
         expect(getByTestId("trace-cup-subject")).toBeTruthy();
         expect(queryByTestId("compare-lane-a")).toBeNull();
     });
+
+    it("carries lane pauses, seconds and disconnected cup regions through both modes and swap",
+        async () => {
+            const a = makeBrewRecordFixture({
+                id: "a", plan: [], waterTotal: 100,
+                pauseIntervals: [{from: 2000, to: 8000, pour: 1, reason: "overflow"}]
+            });
+            const b = makeBrewRecordFixture({
+                id: "b", plan: [], waterTotal: 100,
+                pauseIntervals: [{from: 4000, to: 12000, pour: 1, reason: "manual"}]
+            });
+            const samples = [0, 2, 8, 10].map((t) =>
+                ({at: t * 1000, water: t * 10, cup: t * 10, pour: 1}));
+            setRecords({
+                a: {record: a, samples},
+                b: {record: b, samples: [
+                    {at: 0, water: 0, cup: 0, pour: 1},
+                    {at: 10000, water: 100, cup: 50, pour: 1}
+                ]}
+            });
+            setParams({a: "a", b: "b"});
+            const {getByTestId, getByLabelText} = await renderWithProviders(<BrewCompareScreen />);
+            const width = getByTestId("compare-trace-plot").props.width;
+            const band = getByTestId("trace-pause-subject-overflow-0");
+            expect(band.props.x).toBeCloseTo(width * 2 / 12);
+            expect(band.props.width).toBeCloseTo(width * 6 / 12);
+            const box = {width, height: compareTracePlotHeight(220), maxT: 12, maxV: 100};
+            const polygons = [
+                [{t: 0, v: 0}, {t: 2, v: 20}, {t: 2, v: 10}, {t: 0, v: 0}],
+                [{t: 8, v: 80}, {t: 10, v: 100}, {t: 10, v: 50}, {t: 8, v: 40}]
+            ];
+            expect(getByTestId("trace-cup-gap").props.d)
+                .toBe(polygons.map((run) => `${toPath(run, box)} Z`).join(" "));
+            await fireEvent.press(getByLabelText("Show the brews separately"));
+            const runs = [[0, 1, 2], [8, 9, 10]];
+            function separatePath(sign: number): string {
+                return runs.map((times) => {
+                    const top = times.map((t) => ({t, v: 50 + sign * t * 5}));
+                    const bottom = [...times].reverse().map((t) => ({t, v: 50}));
+                    return `${toPath([...top, ...bottom], {...box, height: 34})} Z`;
+                }).join(" ");
+            }
+            expect(getByTestId("compare-cup-gap-separate").props.d).toBe(separatePath(1));
+            expect(within(getByTestId("compare-lane-a")).getByTestId("trace-pause-overflow-0"))
+                .toBeTruthy();
+            await fireEvent.press(getByLabelText("Swap which brew leads"));
+            expect(getByTestId("compare-cup-gap-separate").props.d).toBe(separatePath(-1));
+            expect(within(getByTestId("compare-lane-b")).getByTestId("trace-pause-overflow-0"))
+                .toBeTruthy();
+            await fireEvent.press(getByLabelText("Show the brews overlaid"));
+            expect(getByLabelText("That brew: paused for overflow 6 seconds")).toBeTruthy();
+            expect(getByLabelText("This brew: paused by you 8 seconds")).toBeTruthy();
+            expect(getByTestId("trace-cup-gap").props.d).toBe(polygons.map((run) =>
+                `${toPath([...run].reverse(), box)} Z`).join(" "));
+        }
+    );
+
+    it("does not draw or extend a swept lane's pause in either mode", async () => {
+        pair({
+            hasStream: false,
+            pauseIntervals: [{from: 2000, to: 500000, pour: 1, reason: "overflow"}]
+        });
+        const {getByTestId, queryByTestId, getByLabelText} =
+            await renderWithProviders(<BrewCompareScreen />);
+        expect(queryByTestId("trace-pause-reference-overflow-0")).toBeNull();
+        expect(queryByTestId("trace-cup-gap")).toBeNull();
+        const width = getByTestId("compare-trace-plot").props.width;
+        expect(getByTestId("trace-cup-subject").props.d).toContain(`L${width} `);
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+        expect(queryByTestId("compare-lane-b")).toBeNull();
+        expect(queryByTestId("compare-cup-gap-separate")).toBeNull();
+    });
+
+    it("intersects overlapping automatic gaps in the rendered regions before and after swap",
+        async () => {
+            const a = makeBrewRecordFixture({
+                id: "a", plan: [], waterTotal: 100,
+                pauseIntervals: [{from: 2000, to: 8000, pour: 1, reason: "overflow"}]
+            });
+            const b = makeBrewRecordFixture({
+                id: "b", plan: [], waterTotal: 100,
+                pauseIntervals: [{from: 1000, to: 9000, pour: 1, reason: "overflow"}]
+            });
+            setRecords({
+                a: {record: a, samples: [0, 2, 8, 10].map((t) =>
+                    ({at: t * 1000, water: t * 10, cup: t * 10, pour: 1}))},
+                b: {record: b, samples: [0, 1, 9, 10].map((t) =>
+                    ({at: t * 1000, water: t * 10, cup: t * 5, pour: 1}))}
+            });
+            setParams({a: "a", b: "b"});
+            const {getByTestId, getByLabelText} = await renderWithProviders(<BrewCompareScreen />);
+            const width = getByTestId("compare-trace-plot").props.width;
+            const box = {width, height: compareTracePlotHeight(220), maxT: 10, maxV: 100};
+            const polygons = [
+                [{t: 0, v: 0}, {t: 1, v: 10}, {t: 1, v: 5}, {t: 0, v: 0}],
+                [{t: 9, v: 90}, {t: 10, v: 100}, {t: 10, v: 50}, {t: 9, v: 45}]
+            ];
+            const separatePolygons = [
+                [{t: 0, v: 50}, {t: 1, v: 55}, {t: 1, v: 50}, {t: 0, v: 50}],
+                [{t: 9, v: 95}, {t: 10, v: 100}, {t: 10, v: 50}, {t: 9, v: 50}]
+            ];
+            expect(getByTestId("trace-cup-gap").props.d)
+                .toBe(polygons.map((run) => `${toPath(run, box)} Z`).join(" "));
+            await fireEvent.press(getByLabelText("Show the brews separately"));
+            expect(getByTestId("compare-cup-gap-separate").props.d).toBe(
+                separatePolygons.map((run) => `${toPath(run, {...box, height: 34})} Z`).join(" ")
+            );
+            await fireEvent.press(getByLabelText("Swap which brew leads"));
+            expect(getByTestId("compare-cup-gap-separate").props.d).toBe(
+                separatePolygons.map((run) => `${toPath(
+                    run.map(({t, v}) => ({t, v: 100 - v})), {...box, height: 34}
+                )} Z`).join(" ")
+            );
+            await fireEvent.press(getByLabelText("Show the brews overlaid"));
+            expect(getByTestId("trace-cup-gap").props.d)
+                .toBe(polygons.map((run) => `${toPath([...run].reverse(), box)} Z`).join(" "));
+            expect(getByTestId("trace-pause-subject-overflow-0").props.width)
+                .toBeCloseTo(width * 8 / 10);
+            expect(getByTestId("trace-pause-reference-overflow-0").props.width)
+                .toBeCloseTo(width * 6 / 10);
+        }
+    );
 
     it("announces the selected view mode", async () => {
         pair();

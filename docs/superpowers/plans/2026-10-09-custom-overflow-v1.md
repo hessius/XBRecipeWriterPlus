@@ -815,9 +815,17 @@ the scale by 1000.
   does not gain a row. If a pause legend is necessary, account for it explicitly
   and extend the independent drawn-height test before shipping it.
 - [ ] Compare lane model carries intervals. Its shared axis includes both
-  records' interval extents; CompareTrace passes the correct lane intervals
-  into compact BrewTrace. No pause appears on the other lane just because the
-  axes are shared.
+  drawn records' interval extents. SEPARATE passes each lane's intervals into
+  compact BrewTrace; OVERLAY uses CompareTrace's own channels and in-plot bands,
+  with coloured THIS and grey THAT ownership and spoken pause reason/duration.
+  No pause appears on the other lane just because the axes are shared, and a
+  swept lane contributes neither pause bands nor interval extent.
+  Both channels split independently with `splitAtPauses`. Cup differences and
+  closed fill polygons use only overlapping observed runs; neither display
+  mode reconnects across an unsampled automatic pause. Actual samples inside
+  pauses and manual continuity remain intact. Matching water with recorded
+  gaps retains separate lane paths rather than claiming one line covers BOTH.
+  These marks add no height or legend row to the existing chart budget.
 - [ ] Add tests for record after recipe deletion, full Story Card and ordinary
   capture include interval bands, hidden-chart choice omits them, swept stream
   still retains pause metadata, restored record has no invented trace, and two
