@@ -1252,6 +1252,30 @@ function flatDrawdown(
 }
 
 describe("live flow and drawdown", () => {
+    it.each([["overflow", 0], ["manual", 0], ["overflow", 10]] as const)(
+        "excludes a confirmed %s pause from live delay but preserves %i seconds of real delay",
+        async (reason, delay) => {
+            mockRecipe.pours = [new Pour(1, 120, 93, 40, 0, 0, 0)];
+            mockPauseIntervals = [{from: 1700, to: 31_700, pour: 1, reason}];
+            const boundary = 60_000 + delay * 1000;
+            mockSamples = [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 1000, water: 4, cup: 1, pour: 1},
+                {at: 1600, water: 6, cup: 2, pour: 1},
+                {at: 31_700, water: 6, cup: 4, pour: 1},
+                {at: 32_000, water: 7, cup: 4, pour: 1},
+                {at: boundary, water: 120, cup: 100, pour: 1},
+                {at: boundary + 10_000, water: 120, cup: 110, pour: 1}
+            ];
+            mockElapsed = boundary / 1000 + 10;
+            mockPhase = {name: "settling"};
+            await renderWithProviders(<Brew />);
+            expect(screen.getByLabelText("Drawdown, 10 seconds")).toBeTruthy();
+            if (delay === 0) expect(screen.queryByTestId("figures-delay")).toBeNull();
+            else expect(screen.getByLabelText(`Delay, ${delay} seconds`)).toBeTruthy();
+        }
+    );
+
     it("shows the flow row once the bed is giving something up", async () => {
         mockSamples = sampleStream(6, {water: 3, cup: 2, pour: 1});
         mockElapsed = 6;

@@ -42,6 +42,31 @@ function harness(config: OverflowProtection = {retainedGrams: 100, checkSeconds:
 }
 
 describe("OverflowController", () => {
+    it.each(["requesting", "holding"] as const)(
+        "invalidates a late pause rejection at every terminal ending while %s", async mode => {
+            for (const ending of ["done", "cancelled", "failed", "cancel", "dispose"] as const) {
+                const h = harness();
+                const pending = deferred();
+                h.pause.mockReturnValueOnce(pending.promise);
+                if (mode === "holding") h.hold(); else h.request();
+                if (ending === "cancel") h.controller.cancel();
+                else if (ending === "dispose") h.controller.dispose();
+                else if (ending === "failed") h.controller.phase({name: "failed", reason: "noWater"});
+                else h.controller.phase({name: ending});
+                const publications = h.changes.length;
+                pending.reject(new Error("late pause write"));
+                await Promise.resolve();
+                h.controller.phase(paused);
+                h.low();
+                h.controller.tick();
+                expect(h.controller.snapshot.mode).toBe("ended");
+                expect(h.changes).toHaveLength(publications);
+                expect(h.pause).toHaveBeenCalledTimes(1);
+                expect(h.resume).not.toHaveBeenCalled();
+            }
+        }
+    );
+
     it.each([false, true])("requests exactly one pause with either channel order (%s)", async cupFirst => {
         const h = harness();
         h.pair(1000, 200, 80, cupFirst);

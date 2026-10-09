@@ -56,6 +56,7 @@ import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {liveDrawdown} from "@/library/brew/liveDrawdown";
 import {pauseSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
+import {pausedWithin} from "@/library/brew/pauseIntervals";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
 import {
     quickEditBounds,
@@ -319,7 +320,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const liveDelay = pourEndDelaySeconds(
         elapsed,
         liveDrawdownFigure.drawdown,
-        plannedSecs
+        plannedSecs,
+        pausedWithin(run?.pauseIntervals ?? [], 0, liveDrawdownFigure.drawdownAt) / 1000
     );
     const doneRateSeries = phase.name === "done" && samples.length > 0
         ? retrospectiveFlowSeries(samples, stages)

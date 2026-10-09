@@ -450,9 +450,9 @@ describe("BrewSummary pause intervals", () => {
         expect(rateX).toBeCloseTo(80.1 / 90 * traceWidth, 1);
     });
 
-    it("spends no height on the bands: the chart slot is the same drawn size", async () => {
+    it.each([120, 393, 600])("spends no height on story pause bands at width %i", async width => {
         const storyProps = {
-            samples: rows, plannedSeconds: 50, rateSeries,
+            width, textScale: width / 393, samples: rows, plannedSeconds: 50, rateSeries,
             traceHeight: 90, rateHeight: 40, storyBands: {barHeight: 8, rungGap: 4}
         };
         const plain = await draw(storyProps);
@@ -463,6 +463,8 @@ describe("BrewSummary pause intervals", () => {
 
         await draw({...storyProps, pauseIntervals: intervals});
         expect(screen.getByLabelText(/^Brew trace/).props.height).toBe(plainHeight);
+        expect(screen.getByTestId("trace-pause-overflow-0").props.height).toBe(plainHeight);
+        expect(screen.getByLabelText("Brew rate chart").props.height).toBe(40);
         expect(StyleSheet.flatten(
             screen.getByTestId("trace-chart-slot").props.style as StyleProp<ViewStyle>
         )).toEqual(plainSlot);

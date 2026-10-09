@@ -199,7 +199,10 @@ describe("overflow protection through useBrew's real preflight retry", () => {
         const pause = jest.spyOn(machine, "pauseBrew");
         const resume = jest.spyOn(machine, "resumeBrew");
         const store = {insert: jest.fn()};
-        const hook = await renderHook(() => useBrewRun(r, store, 7));
+        const hook = await renderHook(
+            ({runId}: {runId: number}) => useBrewRun(r, store, runId),
+            {initialProps: {runId: 7}}
+        );
         return {transport, machine, r, phases, pause, resume, store, ...hook};
     }
 
@@ -325,17 +328,42 @@ describe("overflow protection through useBrew's real preflight retry", () => {
         expect(h.store.insert).not.toHaveBeenCalled();
     });
 
-    it("ignores a stale retry callback from another run", async () => {
+    it("rejects the old retry's owner callback after the machine and run actually change", async () => {
         const h = await setup("noVitals");
-        const attempts = jest.spyOn(h.machine, "brew");
+        let finishDisconnect!: () => void;
+        const disconnected = new Promise<void>(resolve => { finishDisconnect = resolve; });
+        jest.spyOn(h.machine, "disconnect").mockImplementation(async () => { await disconnected; });
         const pending = h.result.current.brew(h.r);
-        await h.rerender({});
-        await act(async () => { await jest.advanceTimersByTimeAsync(100); await pending; });
-        expect(attempts).toHaveBeenCalledTimes(2);
+        await advance(100);
+        expect(h.machine.disconnect).toHaveBeenCalledTimes(1);
+
+        const nextTransport = new FakeTransport();
+        const nextMachine = new Machine(nextTransport, {frameGapMs: 0});
+        await nextMachine.connect("CC:DD");
+        mockSharedMachine = nextMachine;
+        await h.rerender({runId: 8});
+        await act(async () => { await h.result.current.brew(h.r); });
+        await act(async () => { nextTransport.emit(event(40507)); });
+        await pair(nextTransport);
+        await advance(250);
+        expect(h.result.current.samples).toHaveLength(1);
+        await act(async () => { appListeners.forEach(listener => listener("inactive")); });
+        expect(h.result.current.overflow?.disabledReason).toBe("background");
+
+        await act(async () => { finishDisconnect(); await pending; });
+        expect(h.result.current.machine).toBe(nextMachine);
+        expect(h.result.current.overflow?.disabledReason).toBe("background");
         await act(async () => { h.transport.emit(event(40507)); });
         await pair(h.transport);
+        await act(async () => { h.transport.emit(event(40512)); });
+        expect(h.store.insert).not.toHaveBeenCalled();
+        await pair(nextTransport, 120);
         await act(async () => { await h.result.current.cancelBrew(); });
         expect(h.store.insert).toHaveBeenCalledTimes(1);
+        const [record, samples] = h.store.insert.mock.calls[0];
+        expect(record.outcome).toBe("cancelled");
+        expect(samples).toHaveLength(2);
+        expect(h.result.current.record?.id).toBe(record.id);
     });
 
     it.each(["background", "lostContact"] as const)(
