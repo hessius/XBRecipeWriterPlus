@@ -3,9 +3,54 @@
 This is the source for the full release-testing checklist, not a claim that
 device testing is complete. Update it whenever release scope or behaviour changes.
 
-## Integration
+## Final slot/overflow consolidation
 
-`integration/2.1.0` starts at main `9dbe819` and includes all four open PRs:
+PR #209 was merged into `integration/2.1.0` as `3c6f0230` after its single
+Copilot review finding was fixed in `01d2897` and CI passed. Pending manual
+pause suppression now rolls back on native rejection and expires at the
+existing acknowledgement deadline; confirmed manual pauses remain manual.
+No additional automated review round was requested.
+
+PR #207 finalization implements the previously disconnected production port:
+exclusive machine operations, actual connection identity/generation,
+bounded notification-driven receipts/completion, durable recovery reservations
+and shared-owner installation before link opening. Raw dosage is validated
+before Recipe construction, and the overwrite/EASY warning remains beside the
+write/recovery action. An app-side pre-send slot refusal now terminates and
+releases the rejected live-run owner without sending, reconnecting, recording
+a brew or replaying after recovery.
+
+The shared Machine merge retains both slot exclusion and overflow pause
+provenance/request tokens. Parent validation of combined head `6df753d6`:
+
+| Command | Result |
+|---------|--------|
+| `npm run typecheck` | Passed, no diagnostics. |
+| `npm run lint` | Passed; 0 errors, 27 warnings. |
+| `npx expo-doctor` | Passed; 21/21 checks. |
+| `npm test -- --ci` | 710 suites passed; 13,640 tests passed, 24 skipped, 13,664 total; two snapshots passed. Both iOS and Android, 579.735 seconds. |
+
+Logs are session artifacts `release-combined-{typecheck,lint,doctor,full}.log`.
+The finalization received independent local reviews; fixes cover setup-time
+disconnects, superseded notification subscriptions and refused brew ownership.
+The original three #207 automated review findings remain fixed; no second
+automated review was requested.
+
+The heads of #202, #204, #205 and #206 are already ancestors of the release
+branch through `6c1cdb97`, `d06d249e`, `27a2f931` and `61521aaa`, respectively.
+GitHub refuses to retarget an already-included PR with no new commits.
+Closing those superseded PRs references their existing release integration;
+it does not merge their main-targeted PRs or change `main`.
+
+This is completed software integration, not a release safety sign-off.
+Physical BLE/NFC and native layout/accessibility gates below remain open.
+Slot dispatch/receipt/completion budgets are unmeasured software choices;
+code-only delayed receipts and unknown recovery still require firmware
+evidence. No native configuration, app version or backup version changed.
+
+## Initial integration
+
+`integration/2.1.0` starts at main `9dbe819` and includes the original four PRs:
 #204, #205, #206 and prototype #202. Main and the original PR branches remain
 unchanged. Including #202 here is permission to test it together, not approval
 to ship its unmeasured hardware behaviour.
