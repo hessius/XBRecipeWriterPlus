@@ -42,6 +42,158 @@ function harness(config: OverflowProtection = {retainedGrams: 100, checkSeconds:
 }
 
 describe("OverflowController", () => {
+    it.each(["tick", "reading", "phase"] as const)(
+        "expires an unconfirmed manual pause at the exact ACK deadline via %s", source => {
+            const h = harness();
+            h.pair(1000);
+            h.controller.manualPause();
+            const drive = () => {
+                if (source === "tick") h.controller.tick();
+                else if (source === "reading") h.controller.notification({kind: "cupWeight", grams: 80});
+                else h.controller.phase(pouring);
+            };
+            h.time(1000 + PAUSE_ACK_MS - 1);
+            drive();
+            h.pair(1000 + PAUSE_ACK_MS - 1);
+            expect(h.pause).not.toHaveBeenCalled();
+            h.time(1000 + PAUSE_ACK_MS);
+            drive();
+            h.pair(1000 + PAUSE_ACK_MS);
+            expect(h.pause).not.toHaveBeenCalled();
+            h.pair(1000 + PAUSE_ACK_MS + 499);
+            expect(h.pause).not.toHaveBeenCalled();
+            h.pair(1000 + PAUSE_ACK_MS + 500);
+            expect(h.pause).toHaveBeenCalledTimes(1);
+            expect(h.controller.snapshot.mode).toBe("requesting");
+        }
+    );
+
+    it("rolls back a failed native manual request without reusing earlier high evidence", () => {
+        const h = harness();
+        h.pair(1000);
+        const failed = h.controller.manualPause();
+        expect(typeof failed).toBe("function");
+        h.pair(1499);
+        failed?.();
+        h.pair(1500);
+        expect(h.pause).not.toHaveBeenCalled();
+        h.pair(1999);
+        expect(h.pause).not.toHaveBeenCalled();
+        h.pair(2000);
+        expect(h.pause).toHaveBeenCalledTimes(1);
+    });
+
+    it("an older manual rollback and deadline cannot clear a newer pending manual request", () => {
+        const h = harness();
+        const first = h.controller.manualPause();
+        expect(typeof first).toBe("function");
+        h.time(2000);
+        h.controller.manualPause();
+        first?.();
+        h.pair(4000);
+        h.pair(4500);
+        expect(h.pause).not.toHaveBeenCalled();
+        h.time(5000);
+        h.controller.tick();
+        h.pair(5000);
+        h.pair(5500);
+        expect(h.pause).toHaveBeenCalledTimes(1);
+    });
+
+    it("an expired manual rollback cannot invalidate a new automatic request", () => {
+        const h = harness();
+        const failed = h.controller.manualPause();
+        expect(typeof failed).toBe("function");
+        h.pair(4000);
+        h.pair(4500);
+        expect(h.pause).toHaveBeenCalledTimes(1);
+        failed?.();
+        h.controller.phase(paused);
+        expect(h.controller.snapshot.mode).toBe("holding");
+    });
+
+    it.each(["ordinary", "overflow"] as const)(
+        "confirmation with %s provenance remains manually owned past the deadline and late rejection", kind => {
+            const h = harness();
+            const failed = h.controller.manualPause();
+            expect(typeof failed).toBe("function");
+            h.time(1500);
+            h.controller.phase({...paused, pauseKind: kind === "overflow" ? "overflow" : undefined});
+            failed?.();
+            h.low();
+            h.controller.tick();
+            h.pair(17000);
+            h.pair(17500);
+            expect(h.pause).not.toHaveBeenCalled();
+            expect(h.resume).not.toHaveBeenCalled();
+            expect(h.controller.snapshot).toMatchObject({mode: "armed", nextCheckAt: null});
+        }
+    );
+
+    it("a late ordinary confirmation after manual expiry takes a newer automatic request out of policy", () => {
+        const h = harness();
+        h.controller.manualPause();
+        h.pair(4000);
+        h.pair(4500);
+        expect(h.pause).toHaveBeenCalledTimes(1);
+        h.controller.phase({...paused, pauseKind: undefined});
+        h.low();
+        h.controller.tick();
+        expect(h.controller.snapshot).toMatchObject({mode: "armed", nextCheckAt: null});
+        expect(h.resume).not.toHaveBeenCalled();
+        h.controller.phase(pouring);
+        h.pair(17000);
+        expect(h.pause).toHaveBeenCalledTimes(1);
+        h.pair(17500);
+        expect(h.pause).toHaveBeenCalledTimes(2);
+    });
+
+    it.each(["requesting", "holding"] as const)(
+        "manual supersession of %s never expires back into automatic resume", mode => {
+            const h = harness();
+            if (mode === "holding") h.hold(); else h.request();
+            const failed = h.controller.manualPause();
+            expect(typeof failed).toBe("function");
+            if (mode === "requesting") {
+                h.time(2000);
+                h.controller.phase(paused);
+            }
+            h.time(5000);
+            h.controller.tick();
+            failed?.();
+            h.low();
+            h.controller.tick();
+            expect(h.controller.snapshot).toMatchObject({mode: "armed", nextCheckAt: null});
+            expect(h.pause).toHaveBeenCalledTimes(1);
+            expect(h.resume).not.toHaveBeenCalled();
+        }
+    );
+
+    it.each(["background", "lostContact", "cancel", "done", "dispose"] as const)(
+        "manual rollback and expiry cannot re-arm after %s", ending => {
+            const h = harness();
+            const failed = h.controller.manualPause();
+            expect(typeof failed).toBe("function");
+            if (ending === "background") h.controller.background();
+            else if (ending === "lostContact") h.controller.phase({name: "lostContact"});
+            else if (ending === "done") h.controller.phase({name: "done"});
+            else h.controller[ending]();
+            const publications = h.changes.length;
+            failed?.();
+            h.time(4000);
+            h.controller.tick();
+            h.controller.phase(pouring);
+            h.pair(4500);
+            h.pair(5000);
+            expect(h.controller.snapshot.mode).toBe(
+                ending === "background" || ending === "lostContact" ? "disabled" : "ended"
+            );
+            expect(h.changes).toHaveLength(publications);
+            expect(h.pause).not.toHaveBeenCalled();
+            expect(h.resume).not.toHaveBeenCalled();
+        }
+    );
+
     it.each(["requesting", "holding"] as const)(
         "invalidates a late pause rejection at every terminal ending while %s", async mode => {
             for (const ending of ["done", "cancelled", "failed", "cancel", "dispose"] as const) {

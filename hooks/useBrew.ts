@@ -30,7 +30,8 @@ export type Brewer = {
      * auto-start off. Only meaningful in the `readyToStart` phase.
      */
     startBrew: () => Promise<void>;
-    pauseBrew: () => Promise<void>;
+    /** Native write failures still resolve with `error`; notify the request owner too. */
+    pauseBrew: (onFailure?: () => void) => Promise<void>;
     resumeBrew: () => Promise<void>;
     cancelBrew: () => Promise<void>;
     /**
@@ -141,12 +142,13 @@ export function useBrew(injected?: Machine): Brewer {
         }
     }
 
-    async function pauseBrew(): Promise<void> {
+    async function pauseBrew(onFailure?: () => void): Promise<void> {
         setError(null);
         try {
             await machine.pauseBrew();
         } catch (e) {
             setError((e as Error).message);
+            onFailure?.();
         }
     }
 

@@ -347,8 +347,8 @@ export function useBrewRun(
     }
 
     async function pauseBrew(): Promise<void> {
-        protection.manualPause();
-        await brewer.pauseBrew();
+        const rollback = protection.manualPause();
+        await brewer.pauseBrew(rollback);
     }
 
     async function resumeBrew(): Promise<void> {

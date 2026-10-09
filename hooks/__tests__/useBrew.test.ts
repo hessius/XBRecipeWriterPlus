@@ -10,6 +10,7 @@
 import {act, cleanup, renderHook} from "@testing-library/react-native";
 import {AppState, type AppStateStatus} from "react-native";
 
+import {PAUSE_ACK_MS} from "@/constants/machine";
 import {useBrew} from "@/hooks/useBrew";
 import {useBrewRun} from "@/hooks/useBrewRun";
 import {BluetoothPermissionError, RadioUnavailableError} from "@/library/machine/errors";
@@ -216,6 +217,112 @@ describe("overflow protection through useBrew's real preflight retry", () => {
     async function advance(ms: number) {
         await act(async () => { await jest.advanceTimersByTimeAsync(ms); });
     }
+
+    async function pouringRun() {
+        const h = await setup();
+        await act(async () => {
+            await h.result.current.brew(h.r);
+            h.transport.emit(status(0x22));
+            h.transport.emit(event(40507));
+        });
+        expect(h.result.current.phase.name).toBe("pouring");
+        return h;
+    }
+
+    it("rolls back a real native manual pause failure immediately, preserves its error, and protects again", async () => {
+        const h = await pouringRun();
+        await pair(h.transport);
+        await advance(250);
+        h.transport.failWriteOf = {code: 40518, reason: "native manual pause failed"};
+        await act(async () => { await h.result.current.pauseBrew(); });
+        expect(h.result.current.error).toBe("native manual pause failed");
+        expect(h.result.current.phase.name).toBe("pouring");
+        h.transport.failWriteOf = null;
+        await pair(h.transport);
+        await advance(499);
+        await pair(h.transport);
+        expect(h.pause).toHaveBeenCalledTimes(1);
+        await advance(1);
+        await pair(h.transport);
+        expect(h.pause.mock.calls).toEqual([[], ["overflow"]]);
+        expect(h.transport.sent.filter(code => code === 40518)).toHaveLength(1);
+        await act(async () => { h.transport.emit(event(40515)); });
+        expect(h.result.current.overflow?.mode).toBe("holding");
+    });
+
+    it("expires a real silent manual ACK timeout while pouring, then requires fresh sustained high", async () => {
+        const h = await pouringRun();
+        await act(async () => { await h.result.current.pauseBrew(); });
+        await pair(h.transport);
+        await advance(500);
+        await pair(h.transport);
+        expect(h.pause.mock.calls).toEqual([[]]);
+        await advance(PAUSE_ACK_MS - 500);
+        expect(h.result.current.phase.name).toBe("pouring");
+        expect(h.result.current.error).toBeNull();
+        await pair(h.transport);
+        await advance(499);
+        await pair(h.transport);
+        expect(h.pause).toHaveBeenCalledTimes(1);
+        await advance(1);
+        await pair(h.transport);
+        expect(h.pause.mock.calls).toEqual([[], ["overflow"]]);
+        expect(h.transport.sent.filter(code => code === 40518)).toHaveLength(2);
+        await act(async () => { h.transport.emit(event(40515)); });
+        expect(h.result.current.overflow?.mode).toBe("holding");
+    });
+
+    it("keeps a real confirmed ordinary manual pause manual past timeout with no automatic resume", async () => {
+        const h = await pouringRun();
+        await act(async () => {
+            await h.result.current.pauseBrew();
+            h.transport.emit(event(40515));
+        });
+        expect(h.result.current.phase.name).toBe("paused");
+        expect(h.result.current.phase).not.toHaveProperty("pauseKind");
+        await advance(15_000);
+        await pair(h.transport, 100, 90);
+        await advance(500);
+        await pair(h.transport, 100, 90);
+        await advance(15_000);
+        expect(h.pause.mock.calls).toEqual([[]]);
+        expect(h.resume).not.toHaveBeenCalled();
+        expect(h.result.current.phase.name).toBe("paused");
+        await act(async () => { h.transport.emit(event(40516)); });
+        await pair(h.transport);
+        await advance(500);
+        await pair(h.transport);
+        expect(h.pause.mock.calls).toEqual([[], ["overflow"]]);
+    });
+
+    it("a real old native rejection cannot release a second manual pause still awaiting ACK", async () => {
+        const h = await pouringRun();
+        let rejectFirst!: (error: Error) => void;
+        const firstWrite = new Promise<void>((_resolve, reject) => { rejectFirst = reject; });
+        jest.spyOn(h.transport, "write").mockImplementationOnce(() => firstWrite);
+        let first!: Promise<void>;
+        await act(async () => { first = h.result.current.pauseBrew(); });
+        await advance(1000);
+        await act(async () => { await h.result.current.pauseBrew(); });
+        await act(async () => {
+            rejectFirst(new Error("old native failure"));
+            await first;
+        });
+        expect(h.result.current.error).toBe("old native failure");
+        await advance(PAUSE_ACK_MS - 1000);
+        await pair(h.transport);
+        await advance(500);
+        await pair(h.transport);
+        expect(h.pause.mock.calls).toEqual([[], []]);
+        await act(async () => { h.transport.emit(event(40515)); });
+        await advance(15_000);
+        await pair(h.transport, 100, 90);
+        await advance(500);
+        await pair(h.transport, 100, 90);
+        await advance(15_000);
+        expect(h.result.current.phase.name).toBe("paused");
+        expect(h.resume).not.toHaveBeenCalled();
+    });
 
     it.each(["noVitals", "notConnected"] as const)(
         "protects the successful second attempt after %s on the same machine/runId", async block => {

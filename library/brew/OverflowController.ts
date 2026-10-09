@@ -42,6 +42,7 @@ export class OverflowController {
     private generation = 0;
     private disposed = false;
     private manualPaused = false;
+    private manualAckAt: number | null = null;
     private published?: OverflowSnapshot;
     private publishedAt = -Infinity;
 
@@ -56,6 +57,7 @@ export class OverflowController {
     notification(parsed: Notification): void {
         if (this.stopped()) return;
         const now = this.options.now();
+        this.expireManualAck(now);
         this.resetStale(now);
         if (parsed.kind === "waterWeight") this.water = {grams: parsed.grams, at: now};
         if (parsed.kind === "cupWeight") this.cup = {grams: parsed.grams, at: now};
@@ -88,6 +90,7 @@ export class OverflowController {
             this.disable("lostContact");
             return;
         }
+        this.expireManualAck(this.options.now());
         if (this.expireAck(this.options.now())) return;
         const previous = this.currentPhase;
         this.currentPhase = phase;
@@ -99,8 +102,12 @@ export class OverflowController {
             this.publish();
             return;
         }
-        if (phase.name === "paused" && phase.pauseKind !== "overflow") {
-            this.manualPause();
+        if (phase.name === "paused" && (phase.pauseKind !== "overflow" || this.manualPaused)) {
+            // A late overflow ACK may describe the pause the user just took over.
+            this.manualPaused = true;
+            this.manualAckAt = null;
+            this.relinquish();
+            this.publish();
             return;
         }
         if (this.state.mode === "holding" && phase.name !== "paused") {
@@ -108,7 +115,7 @@ export class OverflowController {
             return;
         }
         if (previous.name === "paused" && previous.pauseKind !== "overflow" && phase.name !== "paused") {
-            this.manualPaused = false;
+            this.releaseManualPause();
         }
         const samePour = previous.name === "pouring" && phase.name === "pouring"
             && previous.pour === phase.pour && previous.pours === phase.pours;
@@ -124,6 +131,7 @@ export class OverflowController {
     tick(): void {
         if (this.stopped()) return;
         const now = this.options.now();
+        this.expireManualAck(now);
         const pair = this.refresh(now);
         if (!pair) this.resetCrossing();
         if (this.expireAck(now)) return;
@@ -145,11 +153,19 @@ export class OverflowController {
         if (!this.stopped()) this.disable("background");
     }
 
-    manualPause(): void {
+    /** Suppress before sending; only this request's native failure can roll it back. */
+    manualPause(): (() => void) | undefined {
         if (this.stopped()) return;
         this.manualPaused = true;
         this.relinquish();
+        // Taking over an actual pause must not expire back into automatic ownership.
+        this.manualAckAt = this.currentPhase.name === "paused" ? null : this.options.now() + PAUSE_ACK_MS;
+        const generation = this.generation;
         this.publish();
+        return () => {
+            if (this.stopped() || generation !== this.generation || this.manualAckAt === null) return;
+            this.releaseManualPause();
+        };
     }
 
     manualResume(): void {
@@ -157,8 +173,7 @@ export class OverflowController {
         if (this.ownsPause()) {
             this.disable("manualOverride");
         } else {
-            this.manualPaused = false;
-            this.resetCrossing();
+            this.releaseManualPause();
         }
     }
 
@@ -196,6 +211,8 @@ export class OverflowController {
     private clear(): void {
         this.generation++;
         this.ackAt = null;
+        this.manualAckAt = null;
+        this.manualPaused = false;
         this.water = undefined;
         this.cup = undefined;
         this.resetCrossing();
@@ -240,6 +257,17 @@ export class OverflowController {
         if (this.state.mode !== "requesting" || this.ackAt === null || now < this.ackAt) return false;
         this.fail("The machine did not confirm the protection pause.");
         return true;
+    }
+
+    private expireManualAck(now: number): void {
+        if (this.manualAckAt !== null && now >= this.manualAckAt) this.releaseManualPause();
+    }
+
+    private releaseManualPause(): void {
+        this.generation++;
+        this.manualAckAt = null;
+        this.manualPaused = false;
+        this.resetCrossing();
     }
 
     private fail(error: string): void {

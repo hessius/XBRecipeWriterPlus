@@ -18,7 +18,7 @@ export function useOverflowProtection({machine, config, runId}: {
     overflow: OverflowSnapshot | undefined;
     /** Epoch ms of the latest publication; advances each tick while holding. */
     now: number | undefined;
-    manualPause: () => void;
+    manualPause: () => (() => void) | undefined;
     manualResume: () => void;
     cancel: () => void;
     preflightRetry: () => void;
@@ -93,7 +93,7 @@ export function useOverflowProtection({machine, config, runId}: {
     return {
         overflow: current?.snapshot,
         now: current?.now,
-        manualPause: () => { handle.current?.manualPause(); },
+        manualPause: () => handle.current?.manualPause(),
         manualResume: () => { handle.current?.manualResume(); },
         cancel: () => { handle.current?.cancel(); },
         preflightRetry: () => {

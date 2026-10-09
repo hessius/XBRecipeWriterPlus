@@ -62,8 +62,81 @@ is not proof of whether a finding was fixed.
 | #204 | Helper comment said boiling point was a clean 98 C | Corrected to 100 C in this integration branch; behaviour unchanged. The original PR branch still has the comment typo. |
 | #205 | Cleanup disconnect could defeat deadline; design described a nonexistent assignment guard and screen-local timestamp | Fixed in `3dd7da9`: timeout cleanup is not awaited and has a hanging-disconnect regression; design explains Promise.race and shared snapshot timestamp. Remaining test-description reference to a local ref corrected here. |
 | #206 | No inline findings | No finding fixes required; native visual/accessibility verification remains outstanding. |
+| #209 | Sole automated finding, `discussion_r4234333876`: failed/unconfirmed manual PAUSE permanently suppresses overflow policy | Verified against `81823385` and fixed in the local follow-up below. Native failure rolls back only its pending request; unconfirmed suppression expires at the existing ACK deadline. Confirmed manual pauses never grant automatic resume ownership. |
 
 Original review threads and PR metadata were not changed.
+
+### #209 manual PAUSE lifecycle follow-up
+
+The ordinary `useBrew.pauseBrew` catch previously resolved after recording a
+native write error, leaving `OverflowController.manualPaused` latched while
+the machine continued pouring. A silent Machine ACK timeout had the same
+effect. Both paths are reproduced through the real `useBrewRun`, `useBrew`
+and `Machine`, with only native transport substituted.
+
+Manual suppression now starts before sending and has a controller-held deadline
+using the existing **unmeasured 3-second `PAUSE_ACK_MS`**. Ticks expire it without
+readings; raw notifications and phases also enforce the inclusive deadline.
+Failure/expiry clears crossing evidence, requiring a new sustained high before
+one automatic PAUSE. Rollback is generation-scoped: old native rejections cannot
+clear newer manual/automatic requests or revive a cancelled, disposed,
+background-disabled or lost-contact run.
+
+An ordinary confirmed pause remains manually owned until resume. Taking over an
+already confirmed automatic hold has no pending deadline, and an overflow-kind
+confirmation arriving while a manual request is pending cannot reclaim automatic
+resume ownership. An ordinary paused phase arriving after expiry also blocks
+policy and relinquishes a newer automatic request. Neither confirmation nor a
+late native rejection schedules an automatic RESUME.
+
+API changes are limited to `useBrew.pauseBrew(onFailure?: () => void)` and
+`OverflowController`/`useOverflowProtection.manualPause` returning an optional,
+request-scoped rollback closure. The ordinary hook retains `Promise<void>` and
+its existing visible `brewer.error` path; the public run/UI pause action remains
+parameterless. Machine/Transport, native configuration, dependencies and slots
+implementation are unchanged.
+
+| Command | Observed result, both Jest projects |
+|---------|------------------------------------|
+| Controller + real hook regressions, verified red | Exit 1; 4 suites failed, 36 tests failed, 196 passed. Failures show missing expiry/rollback and ignored subsequent high readings. |
+| Same controller + real hook paths, green | Exit 0; 4 suites passed, 232 tests passed. |
+| Controller/policy + four hooks + lifecycle selector below | Exit 0; 14 suites passed, 458 tests passed, no skipped tests/snapshots. |
+| Brew route selector below | Exit 0; 2 suites passed, 68 tests passed, 194 deselected, no snapshots. |
+| `npm run typecheck` | Exit 0; no diagnostics. |
+| Changed-code ESLint below | Exit 0; zero errors, one existing `useBrewRun` exhaustive-deps warning. |
+| `git diff --check` | Passed. |
+
+```bash
+npm test -- --ci --runTestsByPath \
+  library/brew/__tests__/OverflowController.test.ts \
+  library/brew/__tests__/overflowPolicy.test.ts \
+  hooks/__tests__/useBrew.test.ts hooks/__tests__/useBrewRun.test.ts \
+  hooks/__tests__/useOverflowProtection.test.ts hooks/__tests__/useLiveBrew.test.tsx \
+  hooks/__tests__/overflowLifecycle.test.tsx
+npm test -- --ci --runTestsByPath app/__tests__/brew.test.tsx \
+  -t 'Pause|Resume|pause|transport error|custom overflow protection'
+npm run typecheck
+npx eslint library/brew/OverflowController.ts \
+  library/brew/__tests__/OverflowController.test.ts \
+  hooks/useBrew.ts hooks/useBrewRun.ts hooks/useOverflowProtection.ts \
+  hooks/__tests__/useBrew.test.ts
+git diff --check
+```
+
+Final targeted evidence is **526 passing tests**. The direct controller guards
+cover exact expiry via tick/reading/phase, fresh crossing evidence, superseded
+manual/automatic generations, late ordinary/overflow confirmation, existing
+automatic ownership and terminal/disabled states. Real-hook scripts additionally
+prove native failure visibility, no-40515 expiry, confirmed ordinary manual
+ownership and two manual writes whose older rejection must not clear the newer.
+Self-review found no outstanding issue in this scoped patch.
+
+No expensive full-suite/Doctor/CI run or further GitHub review round was made;
+the parent owns final integration and push after validation. This follow-up is
+software evidence only, not hardware safety verification. All existing physical
+and native release gates remain open. Logs are session artifacts
+`pr209-manual-red.log`, `pr209-manual-green.log`, `pr209-manual-targeted.log`
+and `pr209-manual-app.log`.
 
 ## Release gates still open
 
