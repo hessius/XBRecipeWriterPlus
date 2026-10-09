@@ -266,7 +266,7 @@ describe("brew record", () => {
         const savedRecipe = new Recipe();
         savedRecipe.dosage = 20;
         savedRecipe.ratio = 18;
-        await renderWithProviders(
+        const rendered = await renderWithProviders(
             <BrewRecord recipeLookup={{getRecipe: jest.fn(() => savedRecipe)}} />
         );
 
@@ -276,6 +276,13 @@ describe("brew record", () => {
         expect(context.getByText("1:16")).toBeTruthy();
         expect(context.queryByText("20 G")).toBeNull();
         expect(context.queryByText("1:18")).toBeNull();
+
+        await rendered.rerender(<BrewRecord recipeLookup={noRecipeLookup} />);
+
+        const deletedRecipeContext = within(within(screen.getByTestId("brew-capture"))
+            .getByTestId("brew-recipe-context"));
+        expect(deletedRecipeContext.getByText("15 G")).toBeTruthy();
+        expect(deletedRecipeContext.getByText("1:16")).toBeTruthy();
     });
 
     it("captures edited dose and ratio comparisons once in the recipe context", async () => {
@@ -1577,7 +1584,7 @@ describe("brew record's story card", () => {
     });
 
     it("offers the recipe toggle even when a remembered preference hides its context", async () => {
-        sharedSettings().set("storyCardHidden", '["recipe"]');
+        sharedSettings().set("storyCardHidden", '["coffee","recipe"]');
         mockOpened = {
             record: makeBrewRecordFixture({dose: 15, ratio: 16, hasStream: false}),
             samples: []
@@ -1591,7 +1598,7 @@ describe("brew record's story card", () => {
         await pressStoryToggle("DOSE & RATIO");
         expect(card.getByLabelText("Recipe dose, 15 grams")).toBeTruthy();
         expect(card.getByLabelText("Recipe ratio, 1 to 16")).toBeTruthy();
-        expect(sharedSettings().get("storyCardHidden")).toBe("");
+        expect(sharedSettings().get("storyCardHidden")).toBe('["coffee"]');
     });
 
     it("marks unfittable recipe context unavailable without persisting the refusal", async () => {

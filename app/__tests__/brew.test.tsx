@@ -13,7 +13,7 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 import {drawdownFrom, drawdownSeconds, type BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
 import type {BypassView} from "@/library/brew/bypassState";
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import type {QuickEditRecordAdjustments} from "@/library/quickEdit";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 
@@ -308,6 +308,19 @@ describe("brew route", () => {
             expect(screen.getAllByTestId("brew-recipe-context")).toHaveLength(1);
         }
     );
+
+    it("keeps tea dose and ratio independent of partial measured yield", async () => {
+        mockRecipe.cupType = CUP_TYPE.TEA;
+        mockRecipe.dosage = 5;
+        mockRecipe.ratio = 18;
+        mockSamples = [{at: 12_000, water: 45, cup: 40, pour: 1}];
+
+        await renderWithProviders(<Brew />);
+
+        expect(screen.getByText("5 G")).toBeOnTheScreen();
+        expect(screen.getByText("1:18")).toBeOnTheScreen();
+        expect(screen.getByLabelText("Recipe ratio, 1 to 18")).toBeOnTheScreen();
+    });
 
     it("retains context rows and spacing from pouring through settling", async () => {
         mockRecipe.dosage = 16;
@@ -1215,6 +1228,8 @@ describe("bypass on the live brew screen", () => {
     });
 
     it("does not count bypass water into the WATER figure", async () => {
+        mockRecipe.dosage = 15;
+        mockRecipe.ratio = 16;
         await renderBrew({
             phase: {name: "settling"},
             samples: [{at: 190_000, water: 245, cup: 200, pour: 4}],
@@ -1223,6 +1238,8 @@ describe("bypass on the live brew screen", () => {
         });
         expect(screen.getByText("240")).toBeTruthy();
         expect(screen.getByText("+5")).toBeTruthy();
+        expect(screen.getByText("1:16")).toBeOnTheScreen();
+        expect(screen.getByLabelText("Recipe ratio, 1 to 16")).toBeOnTheScreen();
     });
 });
 
