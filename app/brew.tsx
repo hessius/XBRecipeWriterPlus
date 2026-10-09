@@ -18,6 +18,7 @@ import ScrollFade from "@/components/ScrollFade";
 import ExportButton from "@/components/ExportButton";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
+import OverflowStatus from "@/components/OverflowStatus";
 import DotMatrixText from "@/components/DotMatrixText";
 import LinkText from "@/components/LinkText";
 import MachineDot from "@/components/MachineDot";
@@ -25,7 +26,7 @@ import {notify} from "@/components/XbrwToast";
 import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
         ENDED_ON_MACHINE_NOTE, FAILURE_COPY,
         FIRST_BREW_REMINDER, LONGEST_ACTIVE_HEADLINE, NO_RETRY, PAUSABLE,
-        PAUSED_NOTE, PHASE_COPY,
+        OVERFLOW_PAUSED_HEADLINE, PAUSED_NOTE, PHASE_COPY,
         PRO_MODE_PROMPT, RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
 import {useBrewExport, type BrewExportSource} from "@/hooks/useBrewExport";
@@ -39,6 +40,8 @@ import BeanNameSheet from "@/components/BeanNameSheet";
 import {useTraceAnimation} from "@/hooks/useTraceAnimation";
 import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
+import {overflowFor} from "@/library/brew/overflowConfig";
+import type {OverflowSnapshot} from "@/library/brew/OverflowController";
 import {allocateBands} from "@/library/brew/bands";
 import {finalOutcome} from "@/library/brew/BrewRecord";
 import type {BrewRecipeInputs} from "@/library/brew/figureGeometry";
@@ -52,7 +55,8 @@ import {canHandOff, HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 import {handoffCoffee} from "@/library/brew/handoff/backfill";
 import {beanNameFromRecipe} from "@/library/brew/handoff/beanName";
 import {liveDrawdown} from "@/library/brew/liveDrawdown";
-import {pauseSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
+import {pauseSeconds, pausedBeforeDrawdownSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
+import {pausedWithin} from "@/library/brew/pauseIntervals";
 import {isActiveBrewPhase} from "@/library/machine/Machine";
 import {
     quickEditBounds,
@@ -204,7 +208,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // made would make it again: `start` replaces a finished run, and this
     // screen would hand it a freshly deserialised recipe on every mount.
     const viewing = view === "1";
-    const {width} = useWindowDimensions();
+    const {width, height: windowHeight} = useWindowDimensions();
 
     // A local recipe from the route params. Used for the first render (before
     // RunOwner in the provider has its first tick) and for `total` below.
@@ -311,12 +315,16 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const doneDrawdownRate = phase.name === "done" ? doneDrawdownFigures?.rate ?? null : null;
     const doneDelay = phase.name === "done"
         ? pourEndDelaySeconds(elapsed, doneDrawdown, plannedSecs,
-                              run?.record?.pausedSeconds ?? 0)
+                              pausedBeforeDrawdownSeconds(
+                                  run?.record?.pauseIntervals ?? run?.pauseIntervals,
+                                  run?.record?.drawdownAt,
+                                  run?.record?.pausedSeconds))
         : null;
     const liveDelay = pourEndDelaySeconds(
         elapsed,
         liveDrawdownFigure.drawdown,
-        plannedSecs
+        plannedSecs,
+        pausedWithin(run?.pauseIntervals ?? [], 0, liveDrawdownFigure.drawdownAt) / 1000
     );
     const doneRateSeries = phase.name === "done" && samples.length > 0
         ? retrospectiveFlowSeries(samples, stages)
@@ -334,11 +342,18 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const phaseCopy = phase.name === "idle" && !viewing
         ? PHASE_COPY.connecting
         : PHASE_COPY[phase.name];
+    const overflowPause = phase.name === "paused" && phase.pauseKind === "overflow";
+    // The owner's snapshot is silent until its first tick, and the caution
+    // must not wait for that, so an active protected run starts armed.
+    const overflowStatus = overflowFor(recipe) === undefined ? undefined
+        : run?.overflow ?? (running ? ARMED_AT_START : undefined);
+    const showOverflow = overflowStatus !== undefined && overflowStatus.mode !== "ended"
+        && (running || overflowPause || phase.name === "lostContact");
     const headline = blocked
         ? (BLOCKED_HEADLINE[blockKind ?? "notEnoughWater"] ?? BLOCKED_WATER_HEADLINE)
         : failed
             ? (FAILURE_COPY[phase.reason] ?? phase.detail ?? "The brew did not start.")
-            : phaseCopy;
+            : overflowPause ? OVERFLOW_PAUSED_HEADLINE : phaseCopy;
     const headlineColor = blocked ? palette.warn : failed ? palette.danger : palette.text;
     // The same beat that pulses the plan line. A second progress metaphor
     // would compete with the ladder, and a spinner says "busy" without saying
@@ -554,6 +569,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             === "endedOnMachine" ? ENDED_ON_MACHINE_NOTE : undefined}
                         stagesUnavailable={false}
                         bypass={bypass}
+                        pauseIntervals={run?.pauseIntervals}
                         availableHeight={doneHeight}
                     />
                 </ViewShot>
@@ -580,6 +596,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             planDashed={motion.dashed}
                             planHeadAt={motion.headAt}
                             bypass={bypass}
+                            pauseIntervals={run?.pauseIntervals}
                         />
 
                         <BrewStageLadder
@@ -594,6 +611,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             stalls={stalls}
                             pauseElapsed={pauseElapsed}
                             bypass={bypass}
+                            pauseKind={phase.name === "paused" ? phase.pauseKind ?? "manual" : undefined}
                         />
                     </YStack>
                     </YStack>
@@ -640,8 +658,18 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 </Text>
             )}
 
-            {phase.name === "paused" && (
+            {phase.name === "paused" && !overflowPause && (
                 <Text color={palette.warn} fontSize={13}>{PAUSED_NOTE}</Text>
+            )}
+
+            {/* Outside the band region, so the ladder's budget already has
+                its height taken off; bounded, and scrolls when text is large. */}
+            {showOverflow && overflowStatus && (
+                <ScrollView testID="overflow-status-region"
+                            style={{flexGrow: 0, maxHeight: Math.max(72, Math.round(windowHeight * 0.2))}}>
+                    <OverflowStatus status={overflowStatus}
+                                    now={run?.overflowNow ?? overflowStatus.nextCheckAt ?? 0} />
+                </ScrollView>
             )}
 
             {!firstBrewDone && running && (
@@ -778,6 +806,10 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
         </KeyboardAvoidingView>
     );
 }
+
+const ARMED_AT_START: OverflowSnapshot = {
+    mode: "armed", retainedGrams: null, nextCheckAt: null, telemetryAvailable: false
+};
 
 /**
  * The phase line, holding the tallest running sentence while a brew is live.

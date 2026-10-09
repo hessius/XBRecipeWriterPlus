@@ -1,4 +1,6 @@
 import {isRating, type BrewRecord} from "./brew/BrewRecord";
+import {isOverflowProtection} from "./brew/overflowConfig";
+import {isPauseIntervals} from "./brew/pauseIntervals";
 import {
     BEAN_FIELDS,
     type BeanField,
@@ -382,7 +384,9 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     checksum:    isNumber,
     backup:         isNumberArray,
     offline_backup: isNumberArray,
-    uid:            isNumberArray
+    uid:            isNumberArray,
+    // Not droppable: a malformed limit must not be erased into "protection off".
+    overflowProtection: isOverflowProtection
 };
 
 const BREW_BASELINE_DOSE = {min: 1, max: 999};
@@ -602,6 +606,7 @@ const OPTIONAL_BREW_FIELDS: Record<string, (value: unknown) => boolean> = {
     drawdownAt: isNumber,
     cupAtDrawdown: isNumber,
     pausedSeconds: isNumber,
+    pauseIntervals: isPauseIntervals,
     failure:    (v) => v === null || typeof v === "string",
     // A stall is `{atMl, seconds}`, not a number: one list of them per stage.
     // Checked to that shape rather than to a list of numbers, because a
@@ -717,6 +722,11 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
     // but the record is also handed to the screens, and a backup should not be
     // able to decide what a brew record contains.
     const record = cleaned as unknown as BrewRecord;
+    if (record.pauseIntervals !== undefined) {
+        const duration = record.endedAt - (record.pouringAt || record.startedAt);
+        if (record.pauseIntervals.some((interval) =>
+            interval.pour > record.pours + 1 || interval.to > duration)) return null;
+    }
     return {
         id: record.id,
         recipeUuid: record.recipeUuid,
@@ -737,6 +747,8 @@ export function reviveBrew(entry: unknown): BrewRecord | null {
         // nobody paused, and writing 0 onto every record in the file would say
         // the same thing at the cost of making every old file look different.
         pausedSeconds: record.pausedSeconds,
+        ...(record.pauseIntervals !== undefined && record.pauseIntervals.length > 0
+            ? {pauseIntervals: record.pauseIntervals} : {}),
         stalls: record.stalls,
         plan: record.plan,
         stageWater: record.stageWater,

@@ -13,6 +13,7 @@ import {drawdownFrom, finalOutcome, newBrewId, planFromPours,
 import {plannedSeconds} from "./brewShape";
 import {cupAtDrawdownFrom} from "./flowRate";
 import {NOISE_FLOOR_ML, stageWaterFrom} from "./stalls";
+import type {PauseInterval, PauseKind} from "./pauseIntervals";
 
 /** The part of `Machine` a recorder needs. Narrow, so a test can be a literal. */
 export type RecorderMachine = {
@@ -73,6 +74,9 @@ export default class BrewRecorder {
     private pausedAt: number | null = null;
     /** Milliseconds held across every pause so far. */
     private pausedMs = 0;
+    private readonly closedPauses: PauseInterval[] = [];
+    private pausePour = 0;
+    private pauseReason: PauseKind = "manual";
     /** True once the pour phase has opened, so the backstop knows a brew began. */
     private pourOpened = false;
     /** Wall clock when the pour phase opened — the fallback zero if water never moves. */
@@ -133,6 +137,20 @@ export default class BrewRecorder {
         return this.collected;
     }
 
+    get pauseIntervals(): PauseInterval[] {
+        // Keep epochs until publication: first water can move the origin after
+        // a grinding/heating pause has already closed.
+        const origin = this.pouringAt || this.pourOpenedAt || this.startedAt;
+        const intervals = this.pausedAt === null ? this.closedPauses : [
+            ...this.closedPauses,
+            {from: this.pausedAt, to: Math.max(this.pausedAt, this.clock()),
+                pour: this.pausePour, reason: this.pauseReason}
+        ];
+        return intervals.map(({from, to, pour, reason}) => ({
+            from: Math.max(0, from - origin), to: Math.max(0, to - origin), pour, reason
+        }));
+    }
+
     start(): void {
         // An instance started twice must not end up wired twice. Re-arming is
         // cheaper to make safe than to forbid, so tear down first.
@@ -183,7 +201,7 @@ export default class BrewRecorder {
             // channel, so sample on it here (the water value is static by now).
             // A silent gap in the trace would look exactly like success. Record
             // before deciding, so the frame that ends the settle is itself kept.
-            if (this.settling) {
+            if (this.settling && this.pausedAt === null) {
                 if (this.pouringAt !== 0) this.push(this.lastWater);
                 this.watchSettle(parsed.grams);
             }
@@ -264,7 +282,12 @@ export default class BrewRecorder {
         // follows it, so a brew paused three times is the sum of three spans
         // rather than the last one.
         if (phase.name === "paused") {
-            if (this.pausedAt === null) this.pausedAt = this.clock();
+            if (this.pausedAt === null) {
+                this.pausedAt = this.clock();
+                // The sample lane includes bypass; the paused phase's pour does not.
+                this.pausePour = this.pour;
+                this.pauseReason = phase.pauseKind ?? "manual";
+            }
             return;
         }
         // Here rather than beside `summarise`, and that is load-bearing: a
@@ -326,7 +349,10 @@ export default class BrewRecorder {
     /** Shut an open pause span, adding it to the total. */
     private closePause(): void {
         if (this.pausedAt === null) return;
-        this.pausedMs += Math.max(0, this.clock() - this.pausedAt);
+        const to = Math.max(this.pausedAt, this.clock());
+        this.pausedMs += to - this.pausedAt;
+        this.closedPauses.push({from: this.pausedAt, to,
+            pour: this.pausePour, reason: this.pauseReason});
         this.pausedAt = null;
     }
 
@@ -403,6 +429,7 @@ export default class BrewRecorder {
         // `cancelled` is routinely followed by another phase, and a machine
         // that drops mid-cancel produces two terminals for one brew.
         if (this.emitted) return;
+        this.closePause();
         this.emitted = true;
         // If a brew opened but water never moved the clock, fall back to where
         // the pour opened so the record has a coherent, non-zero zero rather
@@ -414,8 +441,9 @@ export default class BrewRecorder {
         const plannedWater = recipe.pours.reduce(
             (sum, pour) => sum + Math.max(pour.volume, 0), 0
         );
+        const pauseIntervals = this.pauseIntervals;
         const figures = summarise(
-            this.collected, plannedSeconds(recipe.pours), this.pausedMs / 1000
+            this.collected, plannedSeconds(recipe.pours), this.pausedMs / 1000, pauseIntervals
         );
         const failure: BrewFailure | null =
             phase.name === "failed" ? phase.reason : null;
@@ -475,7 +503,7 @@ export default class BrewRecorder {
             pours: this.pours > 0 ? this.pours : recipe.pours.length,
             stalls: stallsFromSamples(
                 this.collected,
-                recipe.pours.map((pour) => Math.max(pour.volume, 0))
+                recipe.pours.map((pour) => Math.max(pour.volume, 0)), pauseIntervals
             ),
             // Snapshotted here for the same reason `stalls` is computed here:
             // a record is a thing that happened, and it must go on saying what
@@ -515,7 +543,8 @@ export default class BrewRecorder {
             // Omitted when nobody paused, so an ordinary brew's record is what
             // it was before the pause existed. The storage column has the same
             // rule, and the backup round trip depends on the two agreeing.
-            ...(figures.pausedSeconds > 0 ? {pausedSeconds: figures.pausedSeconds} : {})
+            ...(figures.pausedSeconds > 0 ? {pausedSeconds: figures.pausedSeconds} : {}),
+            ...(pauseIntervals.length > 0 ? {pauseIntervals} : {})
         };
         // The machine hands a phase to every listener in turn, and this is one
         // of them. If the write throws — a full disk is the realistic way —

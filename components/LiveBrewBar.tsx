@@ -122,6 +122,8 @@ export default function LiveBrewBar() {
                 dose={run.recipe.dosage}
                 pours={run.recipe.pours}
                 samples={run.samples}
+                pauseIntervals={run.pauseIntervals}
+                bypass={run.bypass}
                 accent={resolveAccent(run.recipe)}
                 phase={run.phase}
                 elapsed={run.elapsed}

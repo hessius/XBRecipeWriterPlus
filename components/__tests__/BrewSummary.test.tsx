@@ -417,3 +417,71 @@ it("carries the bypass into the ladder, the trace and the figures", async () => 
     expect(screen.getByTestId("trace-bypass")).toBeTruthy();
     expect(screen.getByText("+5")).toBeTruthy();
 });
+
+describe("BrewSummary pause intervals", () => {
+    const intervals = [
+        {from: 20_000, to: 50_000, pour: 1, reason: "overflow" as const},
+        {from: 60_000, to: 90_000, pour: 2, reason: "manual" as const}
+    ];
+    const traceWidth = 390 - (18 + 12) * 2;
+    const rows: BrewSample[] = [
+        {at: 0, water: 0, cup: 0, pour: 1},
+        {at: 20_000, water: 40, cup: 30, pour: 1},
+        {at: 60_000, water: 80, cup: 70, pour: 2}
+    ];
+    const rateSeries = [
+        {at: 80_000, cup: 1.6, water: 3.2},
+        {at: 80_100, cup: 1.7, water: 3.2}
+    ];
+
+    it("draws the recorded bands inside the existing chart slot", async () => {
+        await draw({samples: rows, pauseIntervals: intervals, plannedSeconds: 50});
+        const slot = within(screen.getByTestId("trace-chart-slot"));
+        expect(slot.getByTestId("trace-pause-overflow-0")).toBeTruthy();
+        expect(slot.getByTestId("trace-pause-manual-1")).toBeTruthy();
+    });
+
+    it("sizes the trace and the rate chart to the intervals, not the last sample", async () => {
+        await draw({samples: rows, pauseIntervals: intervals, plannedSeconds: 50, rateSeries});
+        // The final pause ends at 90 s, thirty seconds after the last sample.
+        const manual = screen.getByTestId("trace-pause-manual-1");
+        expect(Number(manual.props.x) + Number(manual.props.width)).toBeCloseTo(traceWidth, 1);
+        const rateX = pathPoints(screen.getByTestId("rate-chart-water").props.d as string)[1].x;
+        expect(rateX).toBeCloseTo(80.1 / 90 * traceWidth, 1);
+    });
+
+    it.each([120, 393, 600])("spends no height on story pause bands at width %i", async width => {
+        const storyProps = {
+            width, textScale: width / 393, samples: rows, plannedSeconds: 50, rateSeries,
+            traceHeight: 90, rateHeight: 40, storyBands: {barHeight: 8, rungGap: 4}
+        };
+        const plain = await draw(storyProps);
+        const plainHeight = plain.getByLabelText(/^Brew trace/).props.height;
+        const plainSlot = StyleSheet.flatten(
+            screen.getByTestId("trace-chart-slot").props.style as StyleProp<ViewStyle>);
+        await plain.unmount();
+
+        await draw({...storyProps, pauseIntervals: intervals});
+        expect(screen.getByLabelText(/^Brew trace/).props.height).toBe(plainHeight);
+        expect(screen.getByTestId("trace-pause-overflow-0").props.height).toBe(plainHeight);
+        expect(screen.getByLabelText("Brew rate chart").props.height).toBe(40);
+        expect(StyleSheet.flatten(
+            screen.getByTestId("trace-chart-slot").props.style as StyleProp<ViewStyle>
+        )).toEqual(plainSlot);
+    });
+
+    it("keeps the old axis when the record has no intervals", async () => {
+        await draw({samples: rows, plannedSeconds: 50, rateSeries});
+        expect(screen.queryByTestId(/^trace-pause-/)).toBeNull();
+        const rateX = pathPoints(screen.getByTestId("rate-chart-water").props.d as string)[1].x;
+        // Sample-only extent: the last sample, at 60 s, is the axis.
+        expect(rateX).toBeCloseTo(80.1 / 60 * traceWidth, 0);
+    });
+
+    it("draws no graph and no bands for a record whose stream is gone", async () => {
+        await draw({hasStream: false, samples: [], pauseIntervals: intervals});
+        expect(screen.queryByTestId("trace-chart-slot")).toBeNull();
+        expect(screen.queryByTestId(/^trace-pause-/)).toBeNull();
+        expect(screen.getByText("NO TRACE KEPT")).toBeTruthy();
+    });
+});

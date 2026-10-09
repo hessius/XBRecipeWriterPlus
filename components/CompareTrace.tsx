@@ -1,11 +1,13 @@
 import React from "react";
-import Svg, {Path} from "react-native-svg";
+import Svg, {Path, Rect} from "react-native-svg";
 import {XStack, YStack} from "tamagui";
 
 import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
+import {tracePauseSpoken} from "@/constants/brewCopy";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {type Box, livePoints, type Point, toPath} from "@/library/brew/brewShape";
-import {gapBand, type PourVerdict} from "@/library/brew/compare";
+import {type Box, livePoints, type Point, splitAtPauses, toPath} from "@/library/brew/brewShape";
+import {gapBands, type PourVerdict} from "@/library/brew/compare";
+import {intervalRects, type PauseInterval} from "@/library/brew/pauseIntervals";
 import {channelStyle} from "@/library/brew/traceStyle";
 
 /**
@@ -31,6 +33,8 @@ import {channelStyle} from "@/library/brew/traceStyle";
 
 /** How much of the band's fill shows. Enough to read as a region, not a line. */
 const GAP_OPACITY = 0.14;
+const PAUSE_OPACITY = 0.18;
+const NO_INTERVALS: readonly PauseInterval[] = [];
 
 /**
  * The plan is context here, not the subject. Fainter than `BrewTrace`'s
@@ -68,11 +72,17 @@ type Props = {
     subjectPlan?: string;
     /** Only when the plans differ in shape; otherwise one plan stands for both. */
     referencePlan?: string;
+    subjectPauses?: readonly PauseInterval[];
+    referencePauses?: readonly PauseInterval[];
 };
 
 function closedPath(points: Point[], box: Box): string {
     const path = toPath(points, box);
     return path === "" ? "" : `${path} Z`;
+}
+
+function runPath(runs: Point[][], box: Box): string {
+    return runs.map((run) => toPath(run, box)).filter((d) => d !== "").join(" ");
 }
 
 function lastCup(points: Point[]): number | null {
@@ -83,14 +93,17 @@ function accessibilityText(
     oneWater: boolean,
     subjectWaterPresent: boolean,
     referenceWaterPresent: boolean,
-    cupDifference: number | null
+    cupDifference: number | null,
+    matchedWithGaps: boolean
 ): string {
     const cup = cupDifference === null
         ? "Cup difference is not drawn because a trace is missing."
         : `Cups finished ${cupDifference} g apart.`;
     let water = "Water is not drawn because both traces are missing.";
     if (subjectWaterPresent && referenceWaterPresent) {
-        water = oneWater
+        water = matchedWithGaps
+            ? "Water matched, but observed gaps require separate water lines."
+            : oneWater
             ? "Water matched, so one coloured water line stands for both brews."
             : "Water differed, so coloured and grey water lines are both drawn.";
     } else if (subjectWaterPresent) {
@@ -103,7 +116,7 @@ function accessibilityText(
 
 export default function CompareTrace({
     subject, reference, accent, verdict, width, height, maxT, maxV,
-    subjectPlan, referencePlan
+    subjectPlan, referencePlan, subjectPauses = NO_INTERVALS, referencePauses = NO_INTERVALS
 }: Props) {
     const svgHeight = compareTracePlotHeight(height);
     const box: Box = {width, height: svgHeight, maxT, maxV};
@@ -116,7 +129,12 @@ export default function CompareTrace({
     // The success state. Saying the pours matched and then drawing two water
     // lines a millilitre apart would contradict the sentence above the chart,
     // and the millimetre between them is scale noise rather than a finding.
-    const oneWater = verdict === "same";
+    // Recorded gaps are different evidence, so those retain both lane paths.
+    const subjectWaterRuns = splitAtPauses(subjectWater, subjectPauses);
+    const referenceWaterRuns = splitAtPauses(referenceWater, referencePauses);
+    const matchedWithGaps = verdict === "same"
+        && (subjectWaterRuns.length > 1 || referenceWaterRuns.length > 1);
+    const oneWater = verdict === "same" && !matchedWithGaps;
 
     const cupSubject = channelStyle("cup", {accent});
     const cupReference = channelStyle("cup", {accent, role: "reference"});
@@ -131,22 +149,36 @@ export default function CompareTrace({
     });
     const referencePlanStyle = channelStyle("plan", {accent});
 
-    const band = closedPath(gapBand(subjectCup, referenceCup), box);
+    const band = gapBands(subjectCup, referenceCup, subjectPauses, referencePauses)
+        .map((points) => closedPath(points, box)).filter((d) => d !== "").join(" ");
     const paths = {
-        cupSubject:     toPath(subjectCup, box),
-        cupReference:   toPath(referenceCup, box),
-        waterSubject:   toPath(subjectWater, box),
-        waterReference: toPath(referenceWater, box)
+        cupSubject:     runPath(splitAtPauses(subjectCup, subjectPauses), box),
+        cupReference:   runPath(splitAtPauses(referenceCup, referencePauses), box),
+        waterSubject:   runPath(subjectWaterRuns, box),
+        waterReference: runPath(referenceWaterRuns, box)
     };
+    const pauseBands = [
+        ...intervalRects(subject.length >= 2 ? subjectPauses : [], width, maxT)
+            .map((rect, index) => ({
+                ...rect, index, role: "subject", colour: waterSubject.stroke, label: "This"
+            })),
+        ...intervalRects(reference.length >= 2 ? referencePauses : [], width, maxT)
+            .map((rect, index) => ({
+                ...rect, index, role: "reference", colour: waterReference.stroke, label: "That"
+            }))
+    ];
+    const pauseLabels = pauseBands.map(({interval, label}) =>
+        `${label} brew: ${tracePauseSpoken(interval.reason, (interval.to - interval.from) / 1000)}`);
     const cupA = lastCup(subjectCup);
     const cupB = lastCup(referenceCup);
     const cupDifference = cupA === null || cupB === null ? null : Math.round(Math.abs(cupA - cupB));
-    const accessibilityLabel = accessibilityText(
+    const accessibilityLabel = [accessibilityText(
         oneWater,
         paths.waterSubject !== "",
         paths.waterReference !== "",
-        cupDifference
-    );
+        cupDifference,
+        matchedWithGaps
+    ), ...pauseLabels].join(" ");
     const hasSubjectPlan = (subjectPlan ?? "") !== "";
     const hasReferencePlan = (referencePlan ?? "") !== "";
     const hasTwoPlans = hasSubjectPlan && hasReferencePlan;
@@ -155,6 +187,15 @@ export default function CompareTrace({
         <YStack width={width}>
             <Svg testID="compare-trace-plot" width={width} height={svgHeight} accessibilityRole="image"
                  accessibilityLabel={accessibilityLabel}>
+                {pauseBands.map(({x, width: bandWidth, interval, role, colour, index}, i) => (
+                    <Rect
+                        key={`pause-${role}-${index}`}
+                        testID={`trace-pause-${role}-${interval.reason}-${index}`}
+                        x={x} y={0} width={bandWidth} height={svgHeight}
+                        fill={colour} fillOpacity={PAUSE_OPACITY}
+                        accessibilityLabel={pauseLabels[i]}
+                    />
+                ))}
                 {hasSubjectPlan && (
                     <Path
                         testID="trace-plan-subject"

@@ -299,3 +299,20 @@ describe('XID encoding', () => {
         expect(encoded.slice(39, -1)).toEqual(original.slice(39, -1));
     });
 });
+
+describe('dripper overflow protection and the card', () => {
+    it.each([15, 30, 45] as const)('leaves independent card bytes identical with a %i-second configuration', checkSeconds => {
+        const card = buildCard({...XPOD_CARD, cupType: CUP_TYPE.OTHER});
+        const prefix = card.slice(0, HASH_LENGTH);
+        const plain = new Recipe(card);
+        const before = plain.getData(prefix, true);
+        expect(before).toEqual(card);
+
+        const configured = new Recipe(undefined, JSON.stringify(plain));
+        configured.overflowProtection = {retainedGrams: 40, checkSeconds};
+        const after = new Recipe(undefined, JSON.stringify(configured)).getData(prefix, true);
+
+        expect(after).toEqual(before);
+        expect(after.slice(0, HASH_LENGTH)).toEqual(prefix);
+    });
+});

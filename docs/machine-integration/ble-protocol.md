@@ -281,6 +281,18 @@ document's `single-source` marking on those two comes from.
 > `58 01 01 4C 9E 10 00 00 00 01 01 00 00 00 ED CC` (40524), pinned in
 > `library/machine/__tests__/spikeFrames.test.ts`.
 
+**App-side pause ownership and accounting (not wire fields):**
+`Machine.pauseBrew("overflow")` tags only a requested pause confirmed by `40515`;
+manual confirmations retain the old phase shape without a `pauseKind` key.
+The promise resolves on the native send, not on confirmation. Pending ownership
+expires with the acknowledgement window and is cleared on rejection, resume,
+terminal phases and link reset; an older request cannot clear a newer one.
+`BrewRecorder` snapshots confirmed manual/overflow spans in epoch time, then
+publishes owned `pauseIntervals` copies relative to first water (or the pour-open/
+brew-start fallback). Pre-water spans clamp to zero after rebasing but still count
+toward total `pausedSeconds`. Stalls and held-time overrun subtract only interval
+overlap on the sample clock, once; radio gaps alone never imply a pause.
+
 > **Observed on hardware 2026-09-01 (V12.0D.500):** commit (`8002`) **auto-proceeds**. The machine went from commit straight to grinding, in both EASY and PRO, without ever passing through `0x1E`. `0x1E` is corroborated by three sources, so it is kept as a fallback path — but on this unit it is not the normal route.
 
 > **Observed on hardware 2026-09-01:** a single BLE notification may carry **more than one frame**, back to back. Captured verbatim: `58 02 07 FE 2C 10 00 00 00 C1 91 32 78 56 67 74` immediately followed by `58 02 07 4B 9E 10 00 00 00 C1 00 00 00 00 FD 32` — event 11518 and a water-volume reading in one packet. The length field at offset 5 is the **total frame length**, so a reader must walk the packet by it rather than parsing the first frame and discarding the tail.

@@ -6,6 +6,7 @@ import {grindBand} from "@/library/grindBands";
 
 import type {Fermentation, Process, Roast} from "./beanTags";
 import {NOISE_FLOOR_ML, stageWaterFrom, stallsInStage, type Stall} from "./stalls";
+import {pausedWithin, type PauseInterval} from "./pauseIntervals";
 
 /**
  * One instant of a brew, as the machine reported it.
@@ -169,9 +170,9 @@ export type BrewRecord = {
     /** Seconds the brew ran beyond its plan — overflow protection, mostly. */
     heldSeconds: number;
     /**
-     * Seconds the user held the brew with PAUSE, summed over every pause.
+     * Seconds held by confirmed manual or overflow pauses, summed over every pause.
      *
-     * Separate from `heldSeconds` and subtracted from it, which is not a
+     * Separate from `heldSeconds`, which excludes pauses on its clock. This is not a
      * refinement but a correction: held time is derived as `elapsed - planned`
      * rather than measured, so without this a pause would be reported as the
      * machine holding water back. Whose decision made a brew long is the only
@@ -180,6 +181,8 @@ export type BrewRecord = {
      * Absent on rows written before it existed, and 0 where nobody paused.
      */
     pausedSeconds?: number;
+    /** Confirmed pauses on the first-water sample clock, in milliseconds. */
+    pauseIntervals?: PauseInterval[];
     /**
      * Where each stage stopped pouring, one list per stage, index-aligned with
      * the recipe's pours.
@@ -472,20 +475,25 @@ export function drawdownFrom(
 }
 
 export function summarise(
-    samples: BrewSample[], plannedSeconds: number, pausedSeconds = 0
+    samples: BrewSample[], plannedSeconds: number, pausedSeconds = 0,
+    intervals?: readonly PauseInterval[]
 ): BrewSummary {
     const last = samples[samples.length - 1];
     if (last === undefined) {
         return {waterTotal: 0, cupTotal: 0, heldSeconds: 0, pausedSeconds: 0};
     }
     const elapsed = last.at / 1000;
+    const pausedOnClock = intervals === undefined
+        ? pausedSeconds : pausedWithin(intervals, 0, last.at) / 1000;
     return {
         waterTotal: last.water,
         cupTotal: last.cup,
+        // Only overlap on this clock comes out; pre-water pauses still belong
+        // to pausedSeconds but cannot reduce a first-water-clock overrun.
         // The pause comes out before the comparison, not after: a brew that
         // was paused for longer than it ran over has not held anything, and
         // the subtraction has to be able to reach zero.
-        heldSeconds: Math.max(0, Math.round(elapsed - plannedSeconds - pausedSeconds)),
+        heldSeconds: Math.max(0, Math.round(elapsed - plannedSeconds - pausedOnClock)),
         pausedSeconds: Math.max(0, Math.round(pausedSeconds)),
     };
 }
@@ -495,8 +503,10 @@ export function summarise(
  *
  * @param targets each stage's planned volume, index-aligned with the pours
  */
-export function stallsFromSamples(samples: BrewSample[], targets: number[]): Stall[][] {
-    return targets.map((target, i) => stallsInStage(samples, i + 1, target));
+export function stallsFromSamples(
+    samples: BrewSample[], targets: number[], intervals?: readonly PauseInterval[]
+): Stall[][] {
+    return targets.map((target, i) => stallsInStage(samples, i + 1, target, undefined, intervals));
 }
 
 /**

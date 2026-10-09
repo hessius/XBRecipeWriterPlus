@@ -15,6 +15,7 @@ import {summaryBands} from "@/library/brew/bands";
 import {traceAxisFor} from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
 import type {BypassView} from "@/library/brew/bypassState";
+import type {PauseInterval} from "@/library/brew/pauseIntervals";
 import type {GrindFigure} from "@/library/brew/dialAfterBrew";
 import type {FlowPoint} from "@/library/brew/flowRate";
 import type {BrewRecipeInputs} from "@/library/brew/figureGeometry";
@@ -90,6 +91,12 @@ type Props = {
     /** The bypass this brew had, if any. Absent on every record without one. */
     bypass?: BypassView;
     /**
+     * The confirmed pauses this brew had, on the sample clock, taken from the
+     * record or the finished run. Never rebuilt from a recipe. Drawn only where
+     * a trace is; the same intervals size the trace axis and the rate chart.
+     */
+    pauseIntervals?: readonly PauseInterval[];
+    /**
      * Seconds of drawdown, or null when there are none to report.
      *
      * Null on the live screen, where the brew has not finished drawing down
@@ -161,7 +168,7 @@ const NO_PLAN: Pour[] = [];
 export default function BrewSummary({
     recipeName, recipeInputs, hasStream, samples, stages, accent, width, plannedSeconds,
     water, cup, seconds, activeIndex, stageWater, stalls, stagesUnavailable,
-    note, nameStill = false, selectedIndex = null, onSelectStage, bypass,
+    note, nameStill = false, selectedIndex = null, onSelectStage, bypass, pauseIntervals,
     drawdown = null, rateSeries, drawdownRate = null, delay = null, grind = null,
     adjustments,
     availableHeight = 0,
@@ -180,7 +187,7 @@ export default function BrewSummary({
     const chartSlotStyle = chartBleed > 0
         ? {marginHorizontal: -chartBleed}
         : undefined;
-    const traceAxis = traceAxisFor(NO_PLAN, samples, plannedSeconds, bypass);
+    const traceAxis = traceAxisFor(NO_PLAN, samples, plannedSeconds, bypass, pauseIntervals);
     const rates = rateSeries ?? [];
     const drawsRateChart = hasStream && showRateChart && hasDrawableRateRun(rates);
 
@@ -233,6 +240,7 @@ export default function BrewSummary({
                     selectedIndex={selectedIndex}
                     onSelectStage={onSelectStage}
                     bypass={bypass}
+                    pauseIntervals={pauseIntervals}
                     legendInset={chartBleed}
                     axis={traceAxis}
                 />

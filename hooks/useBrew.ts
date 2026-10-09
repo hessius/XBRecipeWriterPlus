@@ -24,13 +24,15 @@ export type Brewer = {
     error: string | null;
     /** The link itself, for a recorder that needs the raw notification stream. */
     machine: Machine;
-    brew: (recipe: Recipe) => Promise<void>;
+    /** The callback runs only before the automatic, pre-delivery second attempt. */
+    brew: (recipe: Recipe, onPreflightRetry?: () => void) => Promise<void>;
     /**
      * Commit a recipe that was uploaded but held back, because the user has
      * auto-start off. Only meaningful in the `readyToStart` phase.
      */
     startBrew: () => Promise<void>;
-    pauseBrew: () => Promise<void>;
+    /** Native write failures still resolve with `error`; notify the request owner too. */
+    pauseBrew: (onFailure?: () => void) => Promise<void>;
     resumeBrew: () => Promise<void>;
     cancelBrew: () => Promise<void>;
     /**
@@ -115,7 +117,7 @@ export function useBrew(injected?: Machine): Brewer {
         return !isActiveBrewPhase(phase);
     }
 
-    async function brew(recipe: Recipe): Promise<void> {
+    async function brew(recipe: Recipe, onPreflightRetry?: () => void): Promise<void> {
         setError(null);
         try {
             await attempt(recipe);
@@ -131,6 +133,7 @@ export function useBrew(injected?: Machine): Brewer {
             // no-op while the transport still believes it is up, which is the
             // state this exists to escape.
             await machine.disconnect();
+            onPreflightRetry?.();
             await attempt(recipe);
         } catch (e) {
             setError((e as Error).message);
@@ -147,12 +150,13 @@ export function useBrew(injected?: Machine): Brewer {
         }
     }
 
-    async function pauseBrew(): Promise<void> {
+    async function pauseBrew(onFailure?: () => void): Promise<void> {
         setError(null);
         try {
             await machine.pauseBrew();
         } catch (e) {
             setError((e as Error).message);
+            onFailure?.();
         }
     }
 

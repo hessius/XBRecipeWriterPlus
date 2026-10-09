@@ -1,6 +1,6 @@
 import Pour from "@/library/Pour";
 import {
-    bypassSeconds, livePoints, pathLength, planPoints, plannedSeconds, pourEndDelaySeconds,
+    bypassSeconds, livePoints, pausedBeforeDrawdownSeconds, pathLength, planPoints, plannedSeconds, pourEndDelaySeconds,
     pourSeconds, stageSpans, toMonotonePath, toPath
 } from "@/library/brew/brewShape";
 import type {BrewSample} from "@/library/brew/BrewRecord";
@@ -26,6 +26,8 @@ describe("plannedSeconds", () => {
     it("adds every pour and every pause", () => {
         expect(plannedSeconds([bloom(), main()])).toBe(10 + 20 + 40);
     });
+
+    const overflow = [{from: 40700, to: 55700, pour: 1, reason: "overflow" as const}];
 
     describe("pourEndDelaySeconds", () => {
         it("subtracts drawdown before measuring delay against the plan", () => {
@@ -57,6 +59,36 @@ describe("plannedSeconds", () => {
         it("still reports the part of a delay the pause does not explain", () => {
             // Ten seconds paused out of a brew that ran 25 seconds late.
             expect(pourEndDelaySeconds(152, 32, 95, 10)).toBe(15);
+        });
+
+        it("does not subtract a pause that fell after the drawdown boundary", () => {
+            // 30 s plan, pouring ended at 40 s, 15 s overflow pause inside the
+            // drawdown, done at 60 s. Drawdown seconds already exclude the pause.
+            const paused = pausedBeforeDrawdownSeconds(overflow, 40000, 15);
+            expect(paused).toBe(0);
+            expect(pourEndDelaySeconds(60, 20, 30, paused)).toBe(10);
+        });
+    });
+
+    describe("pausedBeforeDrawdownSeconds", () => {
+        it("counts only the part of a straddling interval before the boundary", () => {
+            const straddle = [{from: 38000, to: 48000, pour: 1, reason: "manual" as const}];
+            expect(pausedBeforeDrawdownSeconds(straddle, 40000, 10)).toBe(2);
+        });
+
+        it("counts a pre-boundary pause once", () => {
+            const early = [{from: 5000, to: 12000, pour: 0, reason: "manual" as const}];
+            expect(pausedBeforeDrawdownSeconds(early, 40000, 7)).toBe(7);
+        });
+
+        it("falls back to the stored total without intervals", () => {
+            expect(pausedBeforeDrawdownSeconds(undefined, 40000, 9)).toBe(9);
+            expect(pausedBeforeDrawdownSeconds([], 40000, 9)).toBe(9);
+            expect(pausedBeforeDrawdownSeconds(undefined, undefined)).toBe(0);
+        });
+
+        it("falls back to the total when the drawdown boundary is absent", () => {
+            expect(pausedBeforeDrawdownSeconds(overflow, 0, 15)).toBe(15);
         });
     });
 
@@ -240,5 +272,39 @@ describe("bypassSeconds", () => {
     it("is zero for no bypass", () => {
         expect(bypassSeconds(0)).toBe(0);
         expect(bypassSeconds(-4)).toBe(0);
+    });
+});
+
+describe("pause intervals on the axis", () => {
+    const {traceAxisFor, traceTimeExtent, traceTimeParts, splitAtPauses} =
+        jest.requireActual("@/library/brew/brewShape");
+    const rows: BrewSample[] = [
+        {at: 5000, water: 20, cup: 0, pour: 1},
+        {at: 20000, water: 20, cup: 0, pour: 1},
+    ];
+    const open = [{from: 20000, to: 60000, pour: 1, reason: "overflow" as const}];
+
+    it("is byte for byte unchanged without intervals", () => {
+        expect(traceTimeParts(10, rows)).toEqual(traceTimeParts(10, rows, undefined, []));
+        expect(traceAxisFor([], rows, 10)).toEqual(traceAxisFor([], rows, 10, undefined, []));
+    });
+
+    it("extends past the last sample for an open pause", () => {
+        expect(traceTimeParts(10, rows, undefined, open).ranTo).toBe(60);
+        expect(traceTimeExtent(10, rows, undefined, open)).toBe(60);
+        expect(traceAxisFor([], rows, 10, undefined, open).maxT).toBe(60);
+    });
+
+    it("places the bypass after the pause", () => {
+        const parts = traceTimeParts(10, rows, {volume: 20, startedAt: null}, open);
+        expect(parts.bypassFrom).toBe(60);
+    });
+
+    it("splits a line only where consecutive samples bridge an overflow pause", () => {
+        const pts = [{t: 5, v: 1}, {t: 10, v: 2}, {t: 40, v: 2}, {t: 45, v: 3}];
+        const gap = [{from: 10000, to: 40000, pour: 1, reason: "overflow" as const}];
+        expect(splitAtPauses(pts, gap)).toEqual([pts.slice(0, 2), pts.slice(2)]);
+        expect(splitAtPauses(pts, [{...gap[0], reason: "manual" as const}])).toEqual([pts]);
+        expect(splitAtPauses(pts, [])).toEqual([pts]);
     });
 });

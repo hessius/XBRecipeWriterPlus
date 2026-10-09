@@ -154,7 +154,7 @@ export type BrewPhase =
      * drawn without unwrapping it. They are 0/0 for a pause taken before the
      * first pour.
      */
-    | {name: "paused"; pour: number; pours: number; was: BrewPhase}
+    | {name: "paused"; pour: number; pours: number; was: BrewPhase; pauseKind?: "overflow"}
     | {name: "done"}
     | {name: "cancelled"}
     /** The link dropped mid-brew. The machine is assumed to still be brewing. */
@@ -505,6 +505,8 @@ export default class Machine {
      */
     private pauseRequested = false;
     private pauseTimer: ReturnType<typeof setTimeout> | null = null;
+    private pendingPauseKind: "overflow" | undefined;
+    private pauseRequestToken = 0;
     /**
      * Promotes a stranded `settling` to `done` after `settleCapMs`.
      *
@@ -1070,8 +1072,7 @@ export default class Machine {
         // of brew state the machine does not hold, so the only thing that can
         // strand it is us forgetting to put it down.
         if (phase.name !== "paused") {
-            this.clearPauseTimer();
-            this.pauseRequested = false;
+            this.clearPauseRequest();
         }
         this.phase = phase;
         this.brewing = isActiveBrewPhase(phase);
@@ -1434,18 +1435,24 @@ export default class Machine {
      *
      * Inert when nothing is running, so there is no state guard.
      */
-    async pauseBrew(): Promise<void> {
+    async pauseBrew(pauseKind?: "overflow"): Promise<void> {
         this.assertOrdinaryOperation();
-        this.clearPauseTimer();
+        this.clearPauseRequest();
+        const token = ++this.pauseRequestToken;
         this.pauseRequested = true;
+        this.pendingPauseKind = pauseKind;
         this.pauseTimer = setTimeout(() => {
             // The machine did not answer. Drop the request rather than the
             // phase: nothing was ever claimed, so there is nothing to undo.
-            this.pauseRequested = false;
-            this.pauseTimer = null;
+            if (this.pauseRequestToken === token) this.clearPauseRequest();
         }, PAUSE_ACK_MS);
         this.pauseTimer.unref?.();
-        await this.send(buildType1(COMMAND_PAUSE, [1]));
+        try {
+            await this.send(buildType1(COMMAND_PAUSE, [1]));
+        } catch (error) {
+            if (this.pauseRequestToken === token) this.clearPauseRequest();
+            throw error;
+        }
     }
 
     /**
@@ -1473,9 +1480,14 @@ export default class Machine {
      * than a pause the app has invented.
      */
     private leavePause(): void {
+        this.clearPauseRequest();
+        if (this.phase.name === "paused") this.setPhase(this.phase.was);
+    }
+
+    private clearPauseRequest(): void {
         this.clearPauseTimer();
         this.pauseRequested = false;
-        if (this.phase.name === "paused") this.setPhase(this.phase.was);
+        this.pendingPauseKind = undefined;
     }
 
     private clearPauseTimer(): void {
@@ -1606,12 +1618,13 @@ export default class Machine {
             // against a request of ours. An unasked-for 40515 is not evidence
             // the user stopped anything.
             if (!this.pauseRequested) return;
-            this.clearPauseTimer();
-            this.pauseRequested = false;
-            const was = this.phase;
+            const pauseKind = this.pendingPauseKind;
+            this.clearPauseRequest();
+            const was = this.phase.name === "paused" ? this.phase.was : this.phase;
             const pour = was.name === "pouring" ? was.pour : 0;
             const pours = was.name === "pouring" ? was.pours : 0;
-            this.setPhase({name: "paused", pour, pours, was});
+            this.setPhase({name: "paused", pour, pours, was,
+                ...(pauseKind === undefined ? {} : {pauseKind})});
             return;
         }
 
@@ -1696,6 +1709,7 @@ export default class Machine {
         // Likewise the settling watchdog: a promotion to `done` fired after the
         // link dropped would land on whatever brew came next.
         this.clearSettleTimer();
+        this.clearPauseRequest();
         if (this.brewing) {
             // The machine executes a committed recipe itself, so a dropped
             // link is very probably not a failed brew. Saying "failed" would

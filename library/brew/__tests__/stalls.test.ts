@@ -1,10 +1,38 @@
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {stallsInStage} from "@/library/brew/stalls";
+import {stalledNow, stallsInStage} from "@/library/brew/stalls";
+import {stallsFromSamples} from "@/library/brew/BrewRecord";
+import type {PauseInterval} from "@/library/brew/pauseIntervals";
 
 /** `at` in seconds for readability; the type wants milliseconds. */
 function sample(seconds: number, water: number, pour: number): BrewSample {
     return {at: seconds * 1000, water, cup: water * 0.9, pour};
 }
+
+describe("confirmed pause exclusion", () => {
+    const intervals: PauseInterval[] = [
+        {from: 1000, to: 11_000, pour: 1, reason: "overflow"}
+    ];
+
+    it("subtracts pause time from a plateau anchored before the pause", () => {
+        const samples = [sample(0, 20, 1), sample(1, 20, 1), sample(12, 20, 1)];
+        expect(stallsInStage(samples, 1, 40, 2, intervals))
+            .toEqual([{atMl: 20, seconds: 2}]);
+        expect(stalledNow(samples, 1, 40, 2, intervals)).toBe(true);
+        expect(stallsFromSamples(samples, [40], intervals))
+            .toEqual([[{atMl: 20, seconds: 2}]]);
+        expect(stallsInStage([...samples, sample(13, 30, 1)], 1, 40, 2, intervals))
+            .toEqual([{atMl: 20, seconds: 3}]);
+    });
+
+    it("does not classify a pause as a stall or infer one from a gap", () => {
+        const samples = [sample(0, 20, 1), sample(1, 20, 1), sample(11, 20, 1)];
+        expect(stallsInStage(samples, 1, 40, 2, intervals)).toEqual([]);
+        expect(stalledNow(samples, 1, 40, 2, intervals)).toBe(false);
+        expect(stallsInStage(samples, 1, 40)).toEqual([{atMl: 20, seconds: 11}]);
+        expect(stallsInStage([sample(0, 20, 1), sample(12, 30, 1)], 1, 40, 2, intervals))
+            .toEqual([]);
+    });
+});
 
 describe("stallsInStage", () => {
     it("finds nothing in a stage where water never stopped", () => {

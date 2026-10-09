@@ -3,6 +3,8 @@ import React from "react";
 
 import LiveBrewBar from "@/components/LiveBrewBar";
 import {accents} from "@/constants/colors";
+import {OVERFLOW_PAUSED_HEADLINE} from "@/constants/brewCopy";
+import {plannedSeconds, traceAxisFor} from "@/library/brew/brewShape";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
 import {renderWithProviders} from "@/test-utils/render";
@@ -86,6 +88,31 @@ beforeEach(() => {
 });
 
 describe("LiveBrewBar", () => {
+    it("carries an open automatic pause and the full live axis into its real compact trace", async () => {
+        const r = recipe();
+        const samples = [
+            {at: 0, water: 10, cup: 0, pour: 1},
+            {at: 1000, water: 20, cup: 4, pour: 1}
+        ];
+        const pauseIntervals = [{from: 1700, to: 90_000, pour: 1, reason: "overflow" as const}];
+        const bypass = {volume: 20, temperature: 90, delivered: 0,
+            startedAt: null, state: "pending" as const};
+        mockRun = {
+            recipe: r, samples, elapsed: 90, holding: false, heldSeconds: 0,
+            phase: {name: "paused", pour: 1, pours: 1, pauseKind: "overflow",
+                was: {name: "pouring", pour: 1, pours: 1}},
+            pauseIntervals, bypass
+        };
+        const {getByTestId, getByText, queryByText} = await renderWithProviders(<LiveBrewBar />);
+        const band = getByTestId("trace-pause-overflow-0");
+        const axis = traceAxisFor(r.pours, samples, plannedSeconds(r.pours), bypass, pauseIntervals);
+        expect(Number(band.props.x)).toBeCloseTo(1.7 / axis.maxT * 86);
+        expect(Number(band.props.width)).toBeCloseTo(88.3 / axis.maxT * 86);
+        expect(Number(band.props.height)).toBe(34);
+        expect(getByText(OVERFLOW_PAUSED_HEADLINE)).toBeTruthy();
+        expect(queryByText("Grinding")).toBeNull();
+    });
+
     it("shows the running brew on any other screen", async () => {
         const {getByText} = await renderWithProviders(<LiveBrewBar />);
         expect(getByText(/ETHIOPIA GUJI/i)).toBeTruthy();

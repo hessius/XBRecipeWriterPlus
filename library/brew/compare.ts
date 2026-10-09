@@ -9,10 +9,12 @@ import {
     livePoints,
     plannedSeconds,
     planPoints,
+    splitAtPauses,
     toPath,
     type Box,
     type Point
 } from "./brewShape";
+import {intervalExtent, type PauseInterval} from "./pauseIntervals";
 import {NOISE_FLOOR_ML} from "./stalls";
 import {maxRateOf, retrospectiveFlowSeries, type FlowPoint} from "./flowRate";
 
@@ -245,7 +247,16 @@ export type CompareAxis = {
     referenceRate: FlowPoint[];
     subjectPours: ReturnType<typeof poursFromPlan>;
     referencePours: ReturnType<typeof poursFromPlan>;
+    /** Each lane's own recorded pauses; empty where that lane draws no trace. */
+    subjectPauses: PauseInterval[];
+    referencePauses: PauseInterval[];
 };
+
+// A lane with no drawn trace has no band to draw and must not stretch the
+// other lane's axis, so its stored intervals stay record metadata only.
+function drawnPauses(brew: BrewUnderComparison): PauseInterval[] {
+    return hasTrace(brew) ? brew.record.pauseIntervals ?? [] : [];
+}
 
 function rateSeriesFor({record, samples}: BrewUnderComparison): FlowPoint[] {
     if (!record.hasStream || samples.length === 0) return [];
@@ -267,13 +278,17 @@ export function compareAxis(
     const referencePours = poursFromPlan(reference.record.plan);
     const subjectRate = rateSeriesFor(subject);
     const referenceRate = rateSeriesFor(reference);
+    const subjectPauses = drawnPauses(subject);
+    const referencePauses = drawnPauses(reference);
     return {
         maxT: Math.max(
             1,
             lastSecond(subject.samples),
             lastSecond(reference.samples),
             plannedSeconds(subjectPours),
-            plannedSeconds(referencePours)
+            plannedSeconds(referencePours),
+            intervalExtent(subjectPauses),
+            intervalExtent(referencePauses)
         ),
         maxV: Math.max(
             1,
@@ -286,7 +301,9 @@ export function compareAxis(
         subjectRate,
         referenceRate,
         subjectPours,
-        referencePours
+        referencePours,
+        subjectPauses,
+        referencePauses
     };
 }
 
@@ -301,6 +318,7 @@ export type Comparison = {
     drift: {grade: PlanDrift; fields: PlanStageField[]};
     rows: CompareRow[];
     cupGap: Point[];
+    cupGapRuns: Point[][];
 };
 
 /** What a row says where a brew never recorded the figure. */
@@ -344,19 +362,54 @@ function valueAt(points: Point[], t: number): number | null {
  * It stops where the shorter stream stops. Extrapolating past the end of a
  * brew would draw a gap that grew after one of the brews was over.
  */
-export function cupGap(subject: BrewSample[], reference: BrewSample[]): Point[] {
-    const a = livePoints(subject, "cup");
-    const b = livePoints(reference, "cup");
-    if (a.length < 2 || b.length < 2) return [];
-    const end = Math.floor(Math.min(a[a.length - 1].t, b[b.length - 1].t));
-    const gap: Point[] = [];
-    for (let t = 0; t <= end; t++) {
-        const here = valueAt(a, t);
-        const there = valueAt(b, t);
-        if (here === null || there === null) continue;
-        gap.push({t, v: Math.round((here - there) * 10) / 10});
+export function cupGap(
+    subject: BrewSample[], reference: BrewSample[],
+    subjectPauses: readonly PauseInterval[] = [],
+    referencePauses: readonly PauseInterval[] = []
+): Point[] {
+    return cupGapRuns(subject, reference, subjectPauses, referencePauses).flat();
+}
+
+type ObservedOverlap = {a: Point[]; b: Point[]; from: number; to: number};
+
+function observedOverlaps(
+    subject: Point[], reference: Point[],
+    subjectPauses: readonly PauseInterval[], referencePauses: readonly PauseInterval[]
+): ObservedOverlap[] {
+    const overlaps: ObservedOverlap[] = [];
+    const subjectRuns = splitAtPauses(subject, subjectPauses);
+    const referenceRuns = splitAtPauses(reference, referencePauses);
+    for (const a of subjectRuns) {
+        if (a.length < 2) continue;
+        for (const b of referenceRuns) {
+            if (b.length < 2) continue;
+            const from = Math.max(a[0].t, b[0].t);
+            const to = Math.min(a[a.length - 1].t, b[b.length - 1].t);
+            if (to > from) overlaps.push({a, b, from, to});
+        }
     }
-    return gap;
+    return overlaps;
+}
+
+/** Separate one-second difference runs; a missing span is never a connecting segment. */
+export function cupGapRuns(
+    subject: BrewSample[], reference: BrewSample[],
+    subjectPauses: readonly PauseInterval[] = [],
+    referencePauses: readonly PauseInterval[] = []
+): Point[][] {
+    return observedOverlaps(
+        livePoints(subject, "cup"), livePoints(reference, "cup"), subjectPauses, referencePauses
+    ).map(({a, b, from, to}) => {
+        const gap: Point[] = [];
+        for (let t = Math.ceil(from); t <= Math.floor(to); t++) {
+            const here = valueAt(a, t);
+            const there = valueAt(b, t);
+            if (here !== null && there !== null) {
+                gap.push({t, v: Math.round((here - there) * 10) / 10});
+            }
+        }
+        return gap;
+    }).filter((run) => run.length > 0);
 }
 
 function clipAt(points: Point[], end: number): Point[] {
@@ -373,12 +426,8 @@ function clipAt(points: Point[], end: number): Point[] {
             return clipped;
         }
 
-        const before = points[i - 1];
-        if (before === undefined) return [];
-        const span = point.t - before.t;
-        const v = span <= 0
-            ? point.v
-            : before.v + ((end - before.t) / span) * (point.v - before.v);
+        const v = valueAt(points, end);
+        if (v === null) return [];
         clipped.push({t: end, v: Math.round(v * 10) / 10});
         return clipped;
     }
@@ -393,12 +442,28 @@ function clipAt(points: Point[], end: number): Point[] {
  * fill, so this uses the same common-extent rule as `cupGap`.
  */
 export function gapBand(subject: Point[], reference: Point[]): Point[] {
-    if (subject.length < 2 || reference.length < 2) return [];
-    const end = Math.min(subject[subject.length - 1].t, reference[reference.length - 1].t);
-    const subjectLeg = clipAt(subject, end);
-    const referenceLeg = clipAt(reference, end);
-    if (subjectLeg.length < 2 || referenceLeg.length < 2) return [];
-    return [...subjectLeg, ...referenceLeg.reverse()];
+    return gapBands(subject, reference)[0] ?? [];
+}
+
+function clipSpan(points: Point[], from: number, to: number): Point[] {
+    const clipped = clipAt(points, to).filter((point) => point.t >= from);
+    if (clipped.length > 0 && clipped[0].t > from) {
+        const v = valueAt(points, from);
+        if (v !== null) clipped.unshift({t: from, v: Math.round(v * 10) / 10});
+    }
+    return clipped;
+}
+
+/** One closed polygon per shared observed span, never across an automatic gap. */
+export function gapBands(
+    subject: Point[], reference: Point[],
+    subjectPauses: readonly PauseInterval[] = [],
+    referencePauses: readonly PauseInterval[] = []
+): Point[][] {
+    return observedOverlaps(subject, reference, subjectPauses, referencePauses)
+        .map(({a, b, from, to}) => [
+            ...clipSpan(a, from, to), ...clipSpan(b, from, to).reverse()
+        ]);
 }
 
 /**
@@ -510,12 +575,18 @@ function ledger(subject: StoredBrew, reference: StoredBrew): CompareRow[] {
 export function compareBrews(
     subject: BrewUnderComparison, reference: BrewUnderComparison
 ): Comparison {
+    const gapRuns = cupGapRuns(
+        hasTrace(subject) ? subject.samples : [],
+        hasTrace(reference) ? reference.samples : [],
+        drawnPauses(subject), drawnPauses(reference)
+    );
     return {
         subject: subject.record,
         reference: reference.record,
         pour: pourVerdict(subject.record, reference.record),
         drift: planDrift(subject.record.plan, reference.record.plan),
         rows: ledger(subject.record, reference.record),
-        cupGap: cupGap(subject.samples, reference.samples)
+        cupGap: gapRuns.flat(),
+        cupGapRuns: gapRuns
     };
 }

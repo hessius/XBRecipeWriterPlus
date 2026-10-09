@@ -1642,3 +1642,93 @@ describe("the action bar", () => {
             .toBeTruthy();
     });
 });
+
+describe("custom overflow protection", () => {
+    const LIMIT = "Retained-water limit in grams";
+    const config = {retainedGrams: 70, checkSeconds: 30 as const};
+
+    it("is not offered on Omni or any dripper but Other", async () => {
+        await renderEditor({cupType: CUP_TYPE.OMNI});
+
+        expect(screen.queryByLabelText(LIMIT)).toBeNull();
+        expect(screen.queryByText(/Keep XBRW\+\+ open/)).toBeNull();
+    });
+
+    it("sits right after the brewer choice, empty, with no caution until configured", async () => {
+        await renderEditor({cupType: CUP_TYPE.OTHER});
+
+        expect(screen.getByLabelText(LIMIT).props.value).toBe("");
+        expect(screen.queryByText(/Keep XBRW\+\+ open/)).toBeNull();
+        const rows = screen.getByTestId("brew-deck").children
+            .filter((child) => typeof child !== "string");
+        const holds = (testID?: string, text?: string) => rows.findIndex((row) =>
+            testID !== undefined
+                ? row.props.testID === testID || within(row).queryByTestId(testID) !== null
+                : within(row).queryByText(text!) !== null);
+        expect(holds("overflow-section")).toBe(holds(undefined, "Brewer") + 1);
+    });
+
+    it("configures from the field, shows the caution, and brews with the config at no extra step", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor({cupType: CUP_TYPE.OTHER});
+
+        await fireEvent.changeText(screen.getByLabelText(LIMIT), "70");
+        await fireEvent.press(screen.getByLabelText("30 S"));
+        expect(screen.getByText(/Keep XBRW\+\+ open/)).toBeOnTheScreen();
+
+        await fireEvent.press(screen.getByLabelText("Brew"));
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        const params = mockPush.mock.calls[0][0].params;
+        expect(JSON.parse(params.recipeJSON).overflowProtection).toEqual(config);
+    });
+
+    it("keeps an existing config, hidden, when the brewer changes, and shows it on return", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor({cupType: CUP_TYPE.OTHER, overflowProtection: config});
+        expect(screen.getByLabelText(LIMIT).props.value).toBe("70");
+
+        await fireEvent.press(screen.getByLabelText("OMNI"));
+        expect(screen.queryByLabelText(LIMIT)).toBeNull();
+
+        await fireEvent.press(screen.getByLabelText("OTHER"));
+        expect(screen.getByLabelText(LIMIT).props.value).toBe("70");
+        expect(screen.getByLabelText("30 S")).toBeChecked();
+    });
+
+    it("an invalid entry disables the stored config instead of leaving it armed behind the text", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor({cupType: CUP_TYPE.OTHER, overflowProtection: config});
+
+        await fireEvent.changeText(screen.getByLabelText(LIMIT), "7x");
+        await fireEvent.press(screen.getByLabelText("Brew"));
+
+        expect(screen.getByText("Enter a whole number of grams above 0.")).toBeOnTheScreen();
+        expect(JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON))
+            .not.toHaveProperty("overflowProtection");
+    });
+
+    it("turning it off removes the config from the recipe that brews", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor({cupType: CUP_TYPE.OTHER, overflowProtection: config});
+
+        await fireEvent.press(screen.getByLabelText("Turn off overflow protection"));
+        await fireEvent.press(screen.getByLabelText("Brew"));
+
+        expect(JSON.parse(mockPush.mock.calls[0][0].params.recipeJSON))
+            .not.toHaveProperty("overflowProtection");
+    });
+
+    it("a quick edit brew carries the saved config with the adjustments", async () => {
+        mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};
+        await renderEditor({cupType: CUP_TYPE.OTHER, overflowProtection: config});
+
+        await fireEvent.press(screen.getByLabelText("Quick edit brew"));
+        await fireEvent.press(screen.getByLabelText("Increase Quick edit dose"));
+        await fireEvent.press(screen.getByLabelText("Brew"));
+
+        const params = mockPush.mock.calls[0][0].params;
+        expect(params.quickEditAdjustments).toBeDefined();
+        expect(JSON.parse(params.recipeJSON).overflowProtection).toEqual(config);
+    });
+});

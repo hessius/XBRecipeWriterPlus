@@ -4,6 +4,8 @@ import {OVER} from "@/constants/brewCopy";
 import {useBrewRun} from "@/hooks/useBrewRun";
 import type {BrewStore} from "@/hooks/useBrewRun";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
+import type {OverflowSnapshot} from "@/library/brew/OverflowController";
+import type {PauseInterval} from "@/library/brew/pauseIntervals";
 import type {Stall} from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
 import type {BypassView} from "@/library/brew/bypassState";
@@ -30,6 +32,10 @@ export type LiveBrewSnapshot = {
     bypass?: BypassView;
     /** The row the recorder wrote for a finished brew. */
     record?: BrewRecord;
+    overflow?: OverflowSnapshot;
+    /** Epoch ms the owner last published `overflow` at; drives its countdown. */
+    overflowNow?: number;
+    pauseIntervals?: PauseInterval[];
     /**
      * When this attempt began, stamped by the provider the moment `start`
      * registers it. Read by a "Copy diagnostic log" press to scope the log
@@ -159,7 +165,8 @@ export function LiveBrewProvider({children, store}: {
     // navigator: swapping the component above it — or re-keying it for a new
     // run, which is what this used to do — unmounts and remounts every screen
     // in the app, so starting a brew would throw away the navigation stack it
-    // was started from.
+    // was started from. Dismiss retires the generation too, disposing its
+    // controller even if nobody starts another brew.
     return (
         <RunOwner
             recipe={current.recipe}
@@ -169,7 +176,7 @@ export function LiveBrewProvider({children, store}: {
             startedAt={current.startedAt}
             store={store}
             onStart={begin}
-            onDismiss={() => setCurrent((was) => ({...was, recipe: null}))}
+            onDismiss={() => setCurrent((was) => ({...was, recipe: null, runId: was.runId + 1}))}
             ratingNoteOpen={ratingNoteOpen}
             setRatingNoteOpen={setRatingNoteOpen}
         >
@@ -204,7 +211,8 @@ function RunOwner({
     const {phase, error, samples, elapsed, stageElapsed, activeIndex, holding,
            heldSeconds, stalls, stageWater, pauseElapsed, brew, startBrew,
            pauseBrew, resumeBrew,
-           cancelBrew, canOfferProMode, switchToProAndRetry, bypass, record} = result;
+           cancelBrew, canOfferProMode, switchToProAndRetry, bypass, record,
+           overflow, overflowNow, pauseIntervals} = result;
 
     // Command the machine exactly once, on the first mount of this RunOwner.
     // How many screens are showing this run in full. A count rather than a
@@ -241,6 +249,7 @@ function RunOwner({
     const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
         holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, startedAt, quickEdit,
+        overflow, overflowNow, pauseIntervals,
     };
     const quickEditFor = (
         next: Recipe,

@@ -22,6 +22,7 @@ import RecipeOverflowSheet from "@/components/RecipeOverflowSheet";
 import RenameSheet from "@/components/RenameSheet";
 import RevertSheet from "@/components/RevertSheet";
 import QuickEditPanel from "@/components/QuickEditPanel";
+import OverflowSection from "@/components/OverflowSection";
 import SegmentedRow from "@/components/SegmentedRow";
 import SplitBrewButton from "@/components/SplitBrewButton";
 import StageProfile from "@/components/StageProfile";
@@ -55,6 +56,7 @@ import {
     quickEditProblems,
     type QuickEditAdjustments
 } from "@/library/quickEdit";
+import type {OverflowProtection} from "@/library/brew/overflowConfig";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import {shareBlockReason} from "@/library/shareLink";
@@ -118,6 +120,8 @@ type BrewDeckProps = {
     dispatch: Dispatch;
     /** Raises a too-fine imported grind to the card minimum. */
     coarsenGrindToMinimum: () => void;
+    /** Sets or clears the Other dripper's custom overflow protection. */
+    setOverflowProtection: (config?: OverflowProtection) => void;
 };
 
 /**
@@ -143,7 +147,8 @@ type BrewDeckProps = {
  * body is a new type on every render and would remount its whole subtree.
  */
 function BrewDeck({
-    recipe, accent, balanceTarget, showHint, dispatch, coarsenGrindToMinimum
+    recipe, accent, balanceTarget, showHint, dispatch, coarsenGrindToMinimum,
+    setOverflowProtection
 }: BrewDeckProps) {
     "use no memo";
 
@@ -171,8 +176,8 @@ function BrewDeck({
     const showBypass = recipe.bypassEnabled && !isTea;
 
     return (
-        <YStack marginTop="$3" backgroundColor={palette.surface} borderRadius="$5"
-                overflow="hidden">
+        <YStack testID="brew-deck" marginTop="$3" backgroundColor={palette.surface}
+                borderRadius="$5" overflow="hidden">
             <XStack alignItems="baseline" gap="$2" flexWrap="wrap"
                     paddingHorizontal="$4" paddingTop="$4" paddingBottom="$3">
                 <DotMatrixText testID="brew-target" fontSize={22} weight="bold" color={accent}>
@@ -310,6 +315,15 @@ function BrewDeck({
                               options={CUP_OPTIONS} accent={accent}
                               showHint={showHint}
                               onChange={(value) => dispatch(RECIPE_LABELS.CUP, value)}/>
+            )}
+
+            {/* Only Other has no machine-side overflow stop. A config kept from
+                an earlier Other stays on the recipe while another brewer is
+                chosen; it is simply not shown or run. Keyed on the recipe so
+                a different recipe opens its own draft. */}
+            {!isTea && recipe.cupType === CUP_TYPE.OTHER && (
+                <OverflowSection key={recipe.uuid} config={recipe.overflowProtection}
+                                 onChange={setOverflowProtection}/>
             )}
 
             {!isTea && (
@@ -925,7 +939,7 @@ export default function EditRecipe(
         hasPendingEdits, recipeInLibrary, toggleFavourite, editTags,
         editInputComplete, setVolumeError, setInputError, editStage,
         setBypassEnabled, editBypass, addPour, deletePour, autoAdjustPourVolumes,
-        coarsenGrindToMinimum, xidLookupFailed, externalEpoch, setXidFocused
+        coarsenGrindToMinimum, setOverflowProtection, xidLookupFailed, externalEpoch, setXidFocused
     } = useRecipeEditor({
         recipeJSON: recipeJSON as string | undefined,
         temperatureUnit,
@@ -1395,7 +1409,8 @@ export default function EditRecipe(
                 {deck === "brew" ? (
                     <BrewDeck recipe={recipe} accent={accent} balanceTarget={balance.target}
                               showHint={showHint} dispatch={dispatch}
-                              coarsenGrindToMinimum={coarsenGrindToMinimum}/>
+                              coarsenGrindToMinimum={coarsenGrindToMinimum}
+                              setOverflowProtection={setOverflowProtection}/>
                 ) : deck === "about" ? (
                     <AboutDeck recipe={recipe} accent={accent}
                                showAvatar={showRecipeAvatars} brews={brewSummary}
