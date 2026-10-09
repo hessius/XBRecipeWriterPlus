@@ -1252,6 +1252,80 @@ function flatDrawdown(
 }
 
 describe("live flow and drawdown", () => {
+    it.each(["record", "run fallback"] as const)(
+        "drawdown pause regression: keeps live and finished capture DELAY at 10 seconds using %s intervals",
+        async (source) => {
+            const owner = new Recipe();
+            owner.pours = [new Pour(1, 120, 93, 40, 0, 0, 0)];
+            owner.cupType = CUP_TYPE.OTHER;
+            owner.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
+            mockOwnerRecipe = owner;
+            mockView = "1";
+            mockRecipeJSON = undefined;
+            mockStartedAt = 1_791_576_000_000;
+            const pouringAt = mockStartedAt + 12_000;
+            const intervals = [
+                {from: 40_700, to: 55_700, pour: 1, reason: "overflow" as const}
+            ];
+            mockPauseIntervals = intervals;
+            mockSamples = [
+                {at: 0, water: 0, cup: 0, pour: 1},
+                {at: 30_000, water: 90, cup: 70, pour: 1},
+                {at: 40_000, water: 120, cup: 100, pour: 1},
+                {at: 40_700, water: 120, cup: 100, pour: 1},
+                {at: 55_700, water: 120, cup: 110, pour: 1},
+                {at: 60_000, water: 120, cup: 115, pour: 1}
+            ];
+            mockElapsed = 60;
+            mockPhase = {name: "settling"};
+            const finished: StoredBrew = {
+                ...record,
+                startedAt: mockStartedAt,
+                pouringAt,
+                endedAt: pouringAt + 60_000,
+                pours: 1,
+                waterTotal: 120,
+                cupTotal: 115,
+                cupAtDrawdown: 100,
+                drawdownAt: drawdownFrom(mockSamples, 1),
+                pausedSeconds: 15,
+                ...(source === "record" ? {pauseIntervals: intervals} : {})
+            };
+            (Sharing.shareAsync as jest.Mock).mockClear();
+            const {rerender} = await renderWithProviders(
+                <Brew historyStore={{all: () => [finished], samples: () => mockSamples}} />
+            );
+            expect(screen.getByLabelText("Drawdown, 20 seconds")).toBeOnTheScreen();
+            expect(screen.getByLabelText("Delay, 10 seconds")).toBeOnTheScreen();
+            expect(finished.drawdownAt).toBe(40_000);
+
+            mockRecord = finished;
+            mockPhase = {name: "done"};
+            mockActiveIndex = 1;
+            delete owner.overflowProtection;
+            // The persisted record wins over a stale run view when it has intervals.
+            if (source === "record") {
+                mockPauseIntervals = [
+                    {from: 10_000, to: 25_000, pour: 1, reason: "manual"}
+                ];
+            }
+            await rerender(
+                <Brew historyStore={{all: () => [finished], samples: () => mockSamples}} />
+            );
+            const capture = within(screen.getByTestId("viewshot"));
+            expect(capture.getByLabelText(/^Drawdown, 20 seconds(?:,|$)/)).toBeOnTheScreen();
+            expect(capture.getByLabelText("Delay, 10 seconds")).toBeOnTheScreen();
+            expect(summaryProps.delay).toBe(10);
+            await fireEvent.press(screen.getByLabelText("Save as image"));
+            await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledWith(
+                "file:///mock/brew.png", expect.objectContaining({mimeType: "image/png"})
+            ));
+            expect(capture.getByLabelText("Delay, 10 seconds")).toBeOnTheScreen();
+            expect(mockStart).not.toHaveBeenCalled();
+            expect(mockPush).not.toHaveBeenCalled();
+        }
+    );
+
     it.each([["overflow", 0], ["manual", 0], ["overflow", 10]] as const)(
         "excludes a confirmed %s pause from live delay but preserves %i seconds of real delay",
         async (reason, delay) => {

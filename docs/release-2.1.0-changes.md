@@ -165,7 +165,13 @@ transport path. The spec records inclusive boundaries, confirmed interval epochs
 first-water conversion and same-`runId` preflight ownership replacement for both
 protection and recorder.
 
-### Final commands and results
+### Task 10 commands and results (before the final drawdown fix)
+
+These full-suite/Doctor results remain valid evidence for the prior Task 10
+head, before `49e8558d` changed finished/history delay arithmetic. They are not
+a full validation of the latest head; the parent will rerun the latest full
+suite. The narrow follow-up below deliberately does not repeat the full suite
+or the Story layout sweep.
 
 All commands ran serially using the repository's existing Jest worker pool and
 both projects. Read-only process checks found no other Jest/tsc/Doctor validation
@@ -229,6 +235,62 @@ log blocks, not an ESLint warning count or a claim of native correctness.
 Verbose logs and the literal selector list remain in session artifacts, not the
 repository (`task10-targeted-final.log`, `task10-typecheck-final.log`,
 `task10-lint-final.log`, `task10-full-final.log`, `task10-doctor-final.log`).
+
+### Final drawdown-pause arithmetic regression follow-up
+
+Production fix `49e8558d` is unchanged by this test-only follow-up. The
+counterexample has a 30-second plan, sample-relative `drawdownAt = 40,000 ms`,
+one overflow interval `40,700-55,700 ms`, and completion at `60,000 ms` with
+`pausedSeconds = 15`. `startedAt` and `pouringAt` are distinct epoch timestamps;
+neither is added to the interval or drawdown boundary. Recorded drawdown is
+`(endedAt - pouringAt - drawdownAt) / 1000 = 20 s`, including that tail pause.
+Subtracting drawdown from elapsed already cancels time after the boundary.
+Only pause overlap **before** drawdown comes off DELAY:
+`60 - 20 - 30 - 0 = 10 s`, not null. A `35,000-50,000 ms` straddling pause
+has 5 seconds before the boundary and therefore DELAY 5 s, not null.
+
+Eight new integration cases run on each platform (16 executions). They render
+the real `BrewSummary`: live-to-done convergence and the finished image capture,
+record-interval priority over a stale run view plus the run fallback, and
+ordinary/history and full Story summaries with deleted or edited recipes.
+The record's stored plan and intervals win over current recipe/configuration;
+removing live configuration does not erase the finished figure. Full Story cases
+also press Share, inspect DELAY inside the actual ViewShot subtree at the mocked
+native capture call, and assert the PNG URI passed to sharing. These remain
+rendered-tree/export-wiring checks, not native PNG or hardware verification.
+
+Regression proof used `apply_patch` to temporarily replace **only** the two
+finished/history helper callsites and their imports with the pre-fix total-pause
+argument. With no test/helper changes, all 16 new executions failed on missing
+DELAY (including independently selected ordinary and full Story panels), while
+the 6 existing live-delay executions passed. The production callsites were
+restored exactly; their final diff is empty.
+
+```bash
+npm test -- --ci --runTestsByPath \
+  app/__tests__/brew.test.tsx app/__tests__/brewRecord.test.tsx \
+  -t 'drawdown pause regression|excludes a confirmed'
+npm test -- --ci --runTestsByPath library/brew/__tests__/brewShape.test.ts
+npm run typecheck
+npx eslint app/__tests__/brew.test.tsx app/__tests__/brewRecord.test.tsx
+git diff --check
+```
+
+| Narrow follow-up check | Observed result, both Jest projects |
+|------------------------|------------------------------------|
+| Route selector with reverted callsites (red) | Exit 1; 4 suites failed; 16 failed, 6 passed, 472 deselected, 0 snapshots. |
+| Same selector with restored callsites (green) | Exit 0; 4 suites passed; 22 passed, 472 deselected, 0 snapshots. |
+| Existing `brewShape` helper suite | Exit 0; 2 suites passed; 74 passed, 0 skipped, 0 snapshots. |
+| Typecheck | Exit 0; no diagnostics. |
+| Changed-test ESLint | Exit 0; 0 errors, 1 existing require-import warning at `brewRecord.test.tsx:85`. |
+| Diff whitespace and production restoration | Passed; no production-file diff. |
+
+Targeted total: **96 passed** (22 route and 74 arithmetic tests). Green route
+output retains 10 existing animation/act `console.error` blocks and no
+`console.warn` blocks, not test failures. Logs are session artifacts named
+`finalbugdrawdowndoublepause-red.log`, `finalbugdrawdowndoublepause-green.log`
+and `finalbugdrawdowndoublepause-unit.log`. Latest full validation remains for
+the parent; all physical/native release gates below remain open.
 
 ### Unverified release gates and persistence
 

@@ -1424,6 +1424,80 @@ describe("brew record's story card", () => {
         );
     }
 
+    it.each([
+        {recipeState: "deleted", from: 40_700, to: 55_700, delay: 10},
+        {recipeState: "edited", from: 40_700, to: 55_700, delay: 10},
+        {recipeState: "deleted, pause straddles drawdown", from: 35_000, to: 50_000, delay: 5}
+    ].flatMap((scenario) => ["ordinary", "full Story"].map((panel) => ({...scenario, panel}))))(
+        "drawdown pause regression: preserves record DELAY $delay in $panel export with recipe $recipeState",
+        async ({recipeState, from, to, delay, panel}) => {
+            const pouringAt = 1_791_576_012_000;
+            const plan = planFromPours([new Pour(1, 120, 93, 40, 0, 0, 0)]);
+            mockOpened = {
+                record: makeBrewRecordFixture({
+                    startedAt: pouringAt - 12_000,
+                    pouringAt,
+                    endedAt: pouringAt + 60_000,
+                    pours: 1,
+                    waterTotal: 120,
+                    cupTotal: 115,
+                    cupAtDrawdown: 100,
+                    drawdownAt: 40_000,
+                    pausedSeconds: 15,
+                    pauseIntervals: [{from, to, pour: 1, reason: "overflow"}],
+                    plan,
+                    stageWater: [120],
+                    heldSeconds: 15
+                }),
+                samples: [
+                    {at: 0, water: 0, cup: 0, pour: 1},
+                    {at: 30_000, water: 90, cup: 70, pour: 1},
+                    {at: 40_000, water: 120, cup: 100, pour: 1},
+                    {at: 60_000, water: 120, cup: 115, pour: 1}
+                ]
+            };
+            const edited = new Recipe();
+            edited.pours = [new Pour(1, 240, 93, 40, 0, 0, 30)];
+            edited.overflowProtection = {retainedGrams: 200, checkSeconds: 45};
+            const recipeLookup: RecipeLookup = {
+                getRecipe: jest.fn(() => recipeState === "edited" ? edited : null)
+            };
+            (Sharing.shareAsync as jest.Mock).mockClear();
+            await renderWithProviders(<BrewRecord recipeLookup={recipeLookup}/>);
+
+            if (panel === "full Story") await openCard(600);
+            const capture = within(screen.getByTestId(
+                panel === "ordinary" ? "brew-capture" : "story-capture"
+            ));
+            expect(capture.getByLabelText(/^Drawdown, 20 seconds(?:,|$)/)).toBeOnTheScreen();
+            expect(capture.getByLabelText(`Delay, ${delay} seconds`)).toBeOnTheScreen();
+            expect(capture.getByTestId("trace-pause-overflow-0")).toBeOnTheScreen();
+            expect(summaryProps.delay).toBe(delay);
+            expect(summaryProps.plannedSeconds).toBe(30);
+            expect(summaryProps.pauseIntervals).toEqual(mockOpened.record.pauseIntervals);
+
+            if (panel === "full Story") {
+                const {mockCapture} = jest.requireMock<{mockCapture: jest.Mock}>(
+                    "react-native-view-shot"
+                );
+                mockCapture.mockClear();
+                mockCapture.mockImplementationOnce(async () => {
+                    const shot = within(within(screen.getByTestId("story-card-host"))
+                        .getByTestId("viewshot"));
+                    expect(shot.getByLabelText(`Delay, ${delay} seconds`)).toBeOnTheScreen();
+                    expect(shot.getByTestId("story-capture")).toBeOnTheScreen();
+                    return "file:///mock/brew.png";
+                });
+                await fireEvent.press(screen.getByLabelText("Share the card"));
+                await waitFor(() => expect(Sharing.shareAsync).toHaveBeenCalledWith(
+                    "file:///mock/brew.png", expect.objectContaining({mimeType: "image/png"})
+                ));
+                expect(mockCapture).toHaveBeenCalledTimes(1);
+                expect(capture.getByLabelText(`Delay, ${delay} seconds`)).toBeOnTheScreen();
+            }
+        }
+    );
+
     it("offers a story card on a brew that was watched", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
         expect(screen.getByLabelText("Share this brew as a story card")).toBeTruthy();
