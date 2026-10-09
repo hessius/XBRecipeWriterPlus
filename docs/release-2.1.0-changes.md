@@ -11,6 +11,17 @@ pause suppression now rolls back on native rejection and expires at the
 existing acknowledgement deadline; confirmed manual pauses remain manual.
 No additional automated review round was requested.
 
+PR #207 merged into `integration/2.1.0` as `81f4e05c` after final-head CI
+passed on `e0e01c7a`. Its three original Copilot findings are resolved; there
+was no additional automated review request. #202, #204, #205 and #206 were
+closed as already-integrated, with their existing merge references.
+Neither consolidation merge targeted `main`.
+
+The release worktree was fast-forwarded to `81f4e05c`, and an exact full-tree
+comparison with the tested/CI-green #207 head was empty. Post-merge typecheck,
+lint (0 errors, 27 warnings) and Expo Doctor (21/21) passed. The full combined
+run recorded below therefore validates the merged software tree as well.
+
 PR #207 finalization implements the previously disconnected production port:
 exclusive machine operations, actual connection identity/generation,
 bounded notification-driven receipts/completion, durable recovery reservations
