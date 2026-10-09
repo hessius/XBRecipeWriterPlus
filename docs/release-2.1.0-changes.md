@@ -221,8 +221,8 @@ initially failed all 6 cases; after the fix all 6 passed with 252 tests deselect
 by `-t 'excludes a confirmed'`. A test-harness purity lint error was corrected
 before final validation, without suppressing the lint rule.
 
-Passing tests are not warning-free: final targeted output contains 6 `console.warn`
-and 99 `console.error` blocks; full output contains 243 and 2,522 respectively.
+Passing tests are not warning-free: final targeted output contains 4 `console.warn`
+and 99 `console.error` blocks; full output contains 215 and 2,522 respectively.
 These include existing native-module/react-test-renderer, animation/act and
 intentional error-path diagnostics; they are not Jest test failures. Counts are
 log blocks, not an ESLint warning count or a claim of native correctness.
