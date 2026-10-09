@@ -208,7 +208,7 @@ export default function BrewTrace({
     const cup = livePoints(samples, "cup");
 
     const times = traceTimeParts(plannedSeconds, samples, bypass, pauseIntervals);
-    const {ranTo, bypassMl, bypassWide, bypassFrom} = times;
+    const {bypassMl, bypassWide, bypassFrom} = times;
     // The plan's final water level: where the target line ends, and the floor
     // the bypass box is stacked on.
     const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
