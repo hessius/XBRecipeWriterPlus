@@ -11,6 +11,7 @@ import {PermissionsAndroid, Platform} from "react-native";
 import BleManager from "react-native-ble-manager";
 
 import {
+    CONNECT_TIMEOUT_MS,
     DEVICE_INFO_SERVICE,
     MACHINE_SERVICE,
     MACHINE_WRITE_CHARACTERISTIC,
@@ -229,6 +230,110 @@ describe("connecting", () => {
 
         await expect(transport.connect("AA:BB:CC")).rejects.toThrow(/in use by another app/);
         expect(transport.isConnected()).toBe(false);
+    });
+
+    it("gives up on a connect sequence that never resolves", async () => {
+        jest.useFakeTimers();
+        try {
+            // Never resolves and never rejects — exactly the hang this
+            // timeout exists for, not merely a slow one.
+            (BleManager.connect as jest.Mock).mockReturnValue(new Promise(() => {}));
+            const transport = new BleTransport();
+
+            const connecting = transport.connect("AA:BB:CC");
+            const settled = connecting.catch((e: Error) => e.message);
+            await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS + 100);
+
+            expect(await settled).toMatch(/took too long/i);
+            expect(transport.isConnected()).toBe(false);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("forces a disconnect after the timeout, so the next attempt is not held", async () => {
+        jest.useFakeTimers();
+        try {
+            (BleManager.connect as jest.Mock).mockReturnValue(new Promise(() => {}));
+            const transport = new BleTransport();
+
+            const connecting = transport.connect("AA:BB:CC").catch(() => {});
+            await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS + 100);
+            await connecting;
+
+            expect(BleManager.disconnect).toHaveBeenCalledWith("AA:BB:CC");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("still connects when the sequence resolves just under the timeout", async () => {
+        // Regression guard: a timeout tight enough to clip a real, slow-but-
+        // healthy connect would trade one bug for a worse one.
+        jest.useFakeTimers();
+        try {
+            (BleManager.connect as jest.Mock).mockImplementation(
+                () => new Promise((resolve) => setTimeout(resolve, CONNECT_TIMEOUT_MS - 100))
+            );
+            const transport = new BleTransport();
+
+            const connecting = transport.connect("AA:BB:CC");
+            await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 50);
+            await connecting;
+
+            expect(transport.isConnected()).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("does not retroactively believe itself connected after reporting a timeout", async () => {
+        // The native connect sequence cannot actually be cancelled once it
+        // has timed out from the JS side, so if it then goes on to resolve
+        // for real, that lateness must not flip `isConnected()` to true
+        // about a link the caller was already told had failed. `connect()`
+        // has already thrown by the time this happens, so there is nothing
+        // left in that call for a late resolution to affect.
+        jest.useFakeTimers();
+        try {
+            let resolveConnect: () => void = () => {};
+            (BleManager.connect as jest.Mock).mockReturnValue(
+                new Promise<void>((resolve) => { resolveConnect = resolve; })
+            );
+            const transport = new BleTransport();
+
+            const connecting = transport.connect("AA:BB:CC");
+            const settled = connecting.catch((e: Error) => e.message);
+            await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS + 100);
+            expect(await settled).toMatch(/took too long/i);
+
+            // The native call finally "answers," well after the caller moved on.
+            resolveConnect();
+            await jest.advanceTimersByTimeAsync(0);
+
+            expect(transport.isConnected()).toBe(false);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("clears the timer once connected, so it cannot fire after a fast, healthy connect", async () => {
+        // Without this, every successful connect still leaves a timer armed
+        // for CONNECT_TIMEOUT_MS, doing nothing useful once it fires but
+        // never cleaned up either.
+        jest.useFakeTimers();
+        const clearSpy = jest.spyOn(global, "clearTimeout");
+        try {
+            (BleManager.connect as jest.Mock).mockResolvedValue(undefined);
+            const transport = new BleTransport();
+
+            await transport.connect("AA:BB:CC");
+
+            expect(clearSpy).toHaveBeenCalled();
+        } finally {
+            clearSpy.mockRestore();
+            jest.useRealTimers();
+        }
     });
 });
 
