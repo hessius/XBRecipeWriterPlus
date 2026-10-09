@@ -7,6 +7,7 @@ import {
 } from "@/library/bypassLimits";
 import {sharedSettings} from "@/hooks/useSetting";
 import {brewProblems, cardWriteProblems, outOfRangeProblems} from "@/library/cardLimits";
+import {isOverflowProtection, type OverflowProtection} from "@/library/brew/overflowConfig";
 import {CARD_GRIND_MIN} from "@/library/grindBands";
 import {asMachineModel} from "@/library/machine/machineModel";
 import {editsPendingSave, snapshotForSave} from "@/library/recipeDirty";
@@ -399,6 +400,11 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
                 (restoredRecipe as any)[field] = value;
             }
         }
+        // A local opt-in that no card or share link carries, so a restore must
+        // not quietly switch it off. Objects fail the length test above.
+        if (recipe.overflowProtection !== undefined) {
+            restoredRecipe.overflowProtection = {...recipe.overflowProtection};
+        }
         setRecipe(restoredRecipe);
         // The rows are uncontrolled and key on this counter, so bumping it here
         // is what makes a revert reset the visible ID and name text and refresh
@@ -743,6 +749,20 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         setKey((prev) => prev + 1);
     }
 
+    /**
+     * Set or clear the Other dripper's custom overflow protection.
+     *
+     * Only a whole, valid configuration is written; anything else is ignored so
+     * the section's inline error is the one place invalid input is reported.
+     * Clearing removes the property rather than storing a disabled shape.
+     */
+    function setOverflowProtection(config?: OverflowProtection) {
+        if (!recipe) return;
+        if (config !== undefined && !isOverflowProtection(config)) return;
+        writeOverflowProtection(recipe, config);
+        setKey((prev) => prev + 1);
+    }
+
     return {
         recipe,
         getRecipe,
@@ -770,6 +790,7 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
         editStage,
         setBypassEnabled,
         editBypass,
+        setOverflowProtection,
         persistRecipe,
         hasPendingEdits,
         recipeInLibrary,
@@ -794,6 +815,18 @@ export function useRecipeEditor({recipeJSON, temperatureUnit, onSaved}: Params) 
  * so the React Compiler's immutability check sees the mutation happen behind a
  * function boundary rather than directly on a value derived from state.
  */
+// Module scope, like the other recipe writers below: the compiler treats a
+// recipe held in state as frozen inside the hook body.
+function writeOverflowProtection(recipe: Recipe, config?: OverflowProtection) {
+    if (config === undefined) {
+        delete recipe.overflowProtection;
+        return;
+    }
+    recipe.overflowProtection = {
+        retainedGrams: config.retainedGrams, checkSeconds: config.checkSeconds
+    };
+}
+
 function applyStageField(pour: Pour, field: StageField, value: number) {
     if (field === "agitationBefore") pour.setAgitationBefore(value === 1);
     else if (field === "agitationAfter") pour.setAgitationAfter(value === 1);

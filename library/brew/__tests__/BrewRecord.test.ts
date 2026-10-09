@@ -9,6 +9,16 @@ function samples(rows: [number, number, number][]): BrewSample[] {
 }
 
 describe("summarise", () => {
+    it("subtracts only interval overlap on the sample clock, not the pause total twice", () => {
+        const stream = samples([[0, 0, 0], [134_000, 250, 244]]);
+        expect(summarise(stream, 120, 29, [
+            {from: 0, to: 0, pour: 0, reason: "manual"},
+            {from: 1000, to: 10_000, pour: 1, reason: "overflow"},
+            {from: 134_000, to: 154_000, pour: 1, reason: "manual"}
+        ])).toEqual({waterTotal: 250, cupTotal: 244, heldSeconds: 5, pausedSeconds: 29});
+        expect(summarise(stream, 120, 29, []).heldSeconds).toBe(14);
+    });
+
     it("reports the last water and cup figures, not the largest", () => {
         // The cup can lose weight: a drip settles, or the machine is nudged.
         // The record is what the brew ended at.

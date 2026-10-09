@@ -57,6 +57,15 @@ function brushRef(value: unknown): string | undefined {
         : undefined;
 }
 
+function svgColour(value: unknown): ReturnType<typeof processColor> {
+    if (typeof value === "number") return value;
+    if (typeof value === "string") return processColor(value);
+    if (typeof value === "object" && value !== null && "payload" in value) {
+        return svgColour(value.payload);
+    }
+    throw new Error("Expected a solid SVG colour");
+}
+
 function lastPathPoint(path: string): {x: number; y: number} {
     const [, x, y] = path.match(/L([0-9.]+) ([0-9.]+)$/) ?? [];
     if (x === undefined || y === undefined) {
@@ -982,5 +991,169 @@ describe("the bypass box", () => {
         const box = screen.getByTestId("trace-bypass");
         const pinned = Number(box.props.x);
         expect(pinned).toBeGreaterThan(0);
+    });
+});
+
+describe("BrewTrace pause bands", () => {
+    const intervals = [
+        {from: 10000, to: 25000, pour: 1, reason: "overflow" as const},
+        {from: 30000, to: 40000, pour: 1, reason: "manual" as const},
+    ];
+    const rows = samples([5000, 20, 0], [10000, 30, 0], [25000, 30, 0], [45000, 50, 10]);
+
+    it("draws one band per reason behind the channels, with distinct colours", async () => {
+        await draw({samples: rows, pauseIntervals: intervals, plannedSeconds: 50});
+        const overflow = screen.getByTestId("trace-pause-overflow-0");
+        const manual = screen.getByTestId("trace-pause-manual-1");
+        expect(svgColour(overflow.props.fill)).toBe(processColor(palette.warnMuted));
+        expect(svgColour(manual.props.fill)).toBe(processColor(palette.dim));
+        expect(svgColour(overflow.props.fill)).not.toBe(svgColour(manual.props.fill));
+        for (const band of [overflow, manual]) {
+            expect(svgColour(band.props.fill)).not.toBe(processColor(palette.warn));
+            expect(band.props.fillOpacity).toBe(0.18);
+        }
+        expect(screen.getAllByTestId(/^trace-(pause-|plan$|cup$|water$)/)
+            .map((node) => node.props.testID)).toEqual([
+            "trace-pause-overflow-0", "trace-pause-manual-1",
+            "trace-plan", "trace-cup", "trace-water",
+        ]);
+        expect(svgScalar(overflow.props.width)).toBeCloseTo(300 * 15 / 50);
+    });
+
+    it.each([false, true])("keeps exact small-chart geometry at large font scale, compact=%s",
+        async (compact) => {
+            const scale = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(3);
+            try {
+                const props = {
+                    compact, width: 86, height: 34, plannedSeconds: 100,
+                    axis: {maxT: 100, maxV: 200},
+                    samples: samples([0, 0, 0], [100000, 200, 100]),
+                };
+                const plain = await draw(props);
+                const plainHeight = plain.getByLabelText(/^Brew trace/).props.height;
+                const plainPlan = plain.getByTestId("trace-plan").props.d;
+                const paused = await draw({...props, pauseIntervals: intervals});
+                const plotHeight = compact ? 34 : 13;
+                expect(plainHeight).toBe(plotHeight);
+                expect(paused.getByLabelText(/^Brew trace/).props.height).toBe(plotHeight);
+                expect(paused.getByLabelText(/^Brew trace/).props.width).toBe(86);
+                expect(paused.getByTestId("trace-plan").props.d).toBe(plainPlan);
+                expect(paused.getByTestId("trace-plan").props.d).toBe(compact
+                    ? "M0 34 L8.6 27.2 L25.8 27.2 L60.2 0"
+                    : "M0 13 L8.6 10.4 L25.8 10.4 L60.2 0");
+                for (const [id, x, width] of [
+                    ["trace-pause-overflow-0", 8.6, 12.9],
+                    ["trace-pause-manual-1", 25.8, 8.6],
+                ] as const) {
+                    const band = paused.getByTestId(id);
+                    expect(svgScalar(band.props.x)).toBeCloseTo(x, 10);
+                    expect(svgScalar(band.props.width)).toBeCloseTo(width, 10);
+                    expect(svgScalar(band.props.y)).toBe(0);
+                    expect(svgScalar(band.props.height)).toBe(plotHeight);
+                    expect(band.props.fillOpacity).toBe(0.18);
+                }
+                expect(paused.getAllByTestId(/^trace-(pause-|plan$|cup$|water$)/)
+                    .map((node) => node.props.testID)).toEqual([
+                    "trace-pause-overflow-0", "trace-pause-manual-1", "trace-plan",
+                ]);
+                if (compact) {
+                    expect(paused.queryByTestId("trace-legend-row")).toBeNull();
+                    expect(paused.queryByTestId("trace-water-fill")).toBeNull();
+                    expect(paused.queryByTestId("trace-temp-0")).toBeNull();
+                } else {
+                    expect(StyleSheet.flatten(paused.getByTestId("trace-legend-row").props.style)
+                        .height).toBe(21);
+                }
+            } finally {
+                scale.mockRestore();
+            }
+        });
+
+    it("draws compact bands behind both channels on the imposed real-seconds axis", async () => {
+        await draw({compact: true, width: 400, height: 34,
+            axis: {maxT: 100, maxV: 200}, pauseIntervals: intervals,
+            samples: samples([0, 0, 0], [5000, 20, 10], [26000, 60, 40], [27000, 80, 50])});
+        expect(screen.getAllByTestId(/^trace-(pause-|plan$|cup$|water$)/)
+            .map((node) => node.props.testID)).toEqual([
+            "trace-pause-overflow-0", "trace-pause-manual-1",
+            "trace-plan", "trace-cup", "trace-water",
+        ]);
+        expect(svgColour(screen.getByTestId("trace-pause-overflow-0").props.fill))
+            .toBe(processColor(palette.warnMuted));
+        expect(svgColour(screen.getByTestId("trace-pause-manual-1").props.fill))
+            .toBe(processColor(palette.dim));
+        expect(screen.getByTestId("trace-water").props.d)
+            .toBe("M0 34 L20 30.6 M104 23.8 L108 20.4");
+        expect(screen.getByTestId("trace-cup").props.d)
+            .toBe("M0 34 L20 32.3 M104 27.2 L108 25.5");
+    });
+
+    it("closes a sparse fill at its own start after discarding the pre-pause singleton", async () => {
+        const scale = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1);
+        try {
+            await draw({width: 400, height: 155, axis: {maxT: 100, maxV: 200},
+                pauseIntervals: [intervals[0]],
+                samples: samples([0, 0, 0], [26000, 60, 40], [27000, 80, 50])});
+            expect(screen.getByTestId("trace-water-fill").props.d)
+                .toBe("M104 98 L108 84 L108 140 L104 140 Z");
+            expect(screen.getByTestId("trace-water").props.d).toBe("M104 98 L108 84");
+            expect(screen.getByTestId("trace-cup").props.d).toBe("M104 112 L108 105");
+        } finally {
+            scale.mockRestore();
+        }
+    });
+
+    it("closes every split fill at its first sample, including a late initial run", async () => {
+        const scale = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1);
+        try {
+            await draw({width: 400, height: 155, axis: {maxT: 100, maxV: 200},
+                pauseIntervals: [intervals[0]],
+                samples: samples([5000, 20, 10], [9000, 30, 20],
+                    [26000, 60, 40], [27000, 80, 50])});
+            expect(screen.getByTestId("trace-water-fill").props.d)
+                .toBe("M20 126 L36 119 L36 140 L20 140 Z M104 98 L108 84 L108 140 L104 140 Z");
+            expect(screen.getByTestId("trace-water").props.d)
+                .toBe("M20 126 L36 119 M104 98 L108 84");
+            expect(screen.getByTestId("trace-cup").props.d)
+                .toBe("M20 133 L36 126 M104 112 L108 105");
+        } finally {
+            scale.mockRestore();
+        }
+    });
+
+    it("preserves the legacy origin closure when an unpaused stream starts late", async () => {
+        const scale = jest.spyOn(PixelRatio, "getFontScale").mockReturnValue(1);
+        try {
+            await draw({width: 400, height: 155, axis: {maxT: 100, maxV: 200},
+                samples: samples([5000, 20, 10], [9000, 30, 20])});
+            expect(screen.getByTestId("trace-water-fill").props.d)
+                .toBe("M20 126 L36 119 L36 140 L0 140 Z");
+        } finally {
+            scale.mockRestore();
+        }
+    });
+
+    it("draws no bands without intervals and keeps the label", async () => {
+        await draw({samples: rows});
+        expect(screen.queryByTestId("trace-pause-overflow-0")).toBeNull();
+    });
+
+    it("says the pauses in the accessible label", async () => {
+        await draw({samples: rows, pauseIntervals: intervals, plannedSeconds: 50});
+        expect(screen.getByLabelText(/paused for overflow 15 seconds/i)).toBeTruthy();
+        expect(screen.getByLabelText(/paused by you 10 seconds/i)).toBeTruthy();
+    });
+
+    it("breaks the water line across an automatic pause", async () => {
+        await draw({samples: rows, pauseIntervals: intervals, plannedSeconds: 50});
+        const d = screen.getByTestId("trace-water").props.d as string;
+        expect(d.match(/M/g)).toHaveLength(2);
+    });
+
+    it("includes an open pause in the axis", async () => {
+        await draw({samples: samples([5000, 20, 0], [10000, 30, 0]), plannedSeconds: 10,
+            pauseIntervals: [{from: 10000, to: 50000, pour: 1, reason: "overflow"}]});
+        expect(svgScalar(screen.getByTestId("trace-pause-overflow-0").props.width))
+            .toBeCloseTo(300 * 40 / 50);
     });
 });

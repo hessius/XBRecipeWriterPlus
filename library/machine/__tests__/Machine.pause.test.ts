@@ -33,6 +33,135 @@ async function pouringMachine() {
 }
 
 describe("pausing a brew", () => {
+    it("clears request state on link reset even when no brew was active", async () => {
+        jest.useFakeTimers();
+        try {
+            const transport = new FakeTransport();
+            const machine = new Machine(transport, {frameGapMs: 0});
+            await machine.connect("AA:BB");
+            const before = jest.getTimerCount();
+            await machine.pauseBrew("overflow");
+            expect(jest.getTimerCount()).toBe(before + 1);
+            await machine.disconnect();
+            expect(jest.getTimerCount()).toBe(before);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("does not let a stale timeout closure clear a newer request", async () => {
+        const {transport, machine} = await pouringMachine();
+        const timeout = jest.spyOn(global, "setTimeout");
+        try {
+            await machine.pauseBrew("overflow");
+            const expire = timeout.mock.calls[0][0];
+            await machine.pauseBrew();
+            if (typeof expire !== "function") throw new Error("Expected a pause timeout callback");
+            expire();
+            transport.emit(event(40515));
+            expect(machine.phase.name).toBe("paused");
+            expect(machine.phase).not.toHaveProperty("pauseKind");
+        } finally {
+            timeout.mockRestore();
+        }
+    });
+
+    it("clears the native rejection's timer as well as its provenance", async () => {
+        jest.useFakeTimers();
+        try {
+            const {transport, machine} = await pouringMachine();
+            const before = jest.getTimerCount();
+            transport.failNextWrite = "radio refused";
+            await expect(machine.pauseBrew("overflow")).rejects.toThrow("radio refused");
+            expect(jest.getTimerCount()).toBe(before);
+            await machine.pauseBrew();
+            transport.emit(event(40515));
+            expect(machine.phase.name).toBe("paused");
+            expect(machine.phase).not.toHaveProperty("pauseKind");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    it("keeps the original resume phase across repeated confirmed pause requests", async () => {
+        const {transport, machine} = await pouringMachine();
+        await machine.pauseBrew("overflow");
+        transport.emit(event(40515));
+        await machine.pauseBrew("overflow");
+        transport.emit(event(40515));
+        expect(machine.phase).toMatchObject({
+            name: "paused", pour: 1, pours: 2, was: {name: "pouring"}
+        });
+        await machine.resumeBrew();
+        expect(machine.phase.name).toBe("pouring");
+    });
+
+    it("publishes overflow provenance only on confirmation, leaving manual shapes unchanged", async () => {
+        const {transport, machine} = await pouringMachine();
+        await machine.pauseBrew("overflow");
+        expect(machine.phase).not.toHaveProperty("pauseKind");
+        transport.emit(event(40515));
+        expect(machine.phase).toMatchObject({name: "paused", pauseKind: "overflow"});
+        await machine.resumeBrew();
+        await machine.pauseBrew();
+        transport.emit(event(40515));
+        expect(machine.phase.name).toBe("paused");
+        expect(machine.phase).not.toHaveProperty("pauseKind");
+    });
+
+    it("discards a rejected request and ignores its late confirmation", async () => {
+        const {transport, machine} = await pouringMachine();
+        transport.failNextWrite = "radio refused";
+        await expect(machine.pauseBrew("overflow")).rejects.toThrow("radio refused");
+        transport.emit(event(40515));
+        expect(machine.phase.name).toBe("pouring");
+    });
+
+    it("does not let an older rejected send clear a newer request", async () => {
+        const {transport, machine} = await pouringMachine();
+        let rejectOld!: (error: Error) => void;
+        const write = jest.spyOn(transport, "write").mockImplementationOnce(
+            () => new Promise<void>((_, reject) => { rejectOld = reject; })
+        );
+        const old = machine.pauseBrew();
+        const rejected = expect(old).rejects.toThrow("old send failed");
+        await machine.pauseBrew("overflow");
+        rejectOld(new Error("old send failed"));
+        await rejected;
+        transport.emit(event(40515));
+        expect(machine.phase).toMatchObject({name: "paused", pauseKind: "overflow"});
+        write.mockRestore();
+    });
+
+    it("lets a newer manual request supersede overflow provenance", async () => {
+        const {transport, machine} = await pouringMachine();
+        await machine.pauseBrew("overflow");
+        await machine.pauseBrew();
+        transport.emit(event(40515));
+        expect(machine.phase.name).toBe("paused");
+        expect(machine.phase).not.toHaveProperty("pauseKind");
+    });
+
+    it("ignores expired confirmation and gives a newer request its own timeout", async () => {
+        jest.useFakeTimers();
+        try {
+            const {transport, machine} = await pouringMachine();
+            await machine.pauseBrew("overflow");
+            jest.advanceTimersByTime(PAUSE_ACK_MS);
+            transport.emit(event(40515));
+            expect(machine.phase.name).toBe("pouring");
+            await machine.pauseBrew("overflow");
+            jest.advanceTimersByTime(PAUSE_ACK_MS - 1);
+            await machine.pauseBrew();
+            jest.advanceTimersByTime(1);
+            transport.emit(event(40515));
+            expect(machine.phase.name).toBe("paused");
+            expect(machine.phase).not.toHaveProperty("pauseKind");
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     it("sends 40518", async () => {
         const {transport, machine} = await pouringMachine();
 

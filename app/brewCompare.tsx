@@ -138,26 +138,29 @@ function GuardedComparison({
 }
 
 function SeparateCupGap({
-    points,
+    runs,
     width,
     maxT,
     colour
 }: {
-    points: Point[];
+    runs: Point[][];
     width: number;
     maxT: number;
     colour: string;
 }) {
-    if (points.length < 2) return null;
+    const drawable = runs.filter((run) => run.length >= 2);
+    if (drawable.length === 0) return null;
     const maxGap = Math.max(
         1,
-        points.reduce((max, point) => Math.max(max, Math.abs(point.v)), 0)
+        ...drawable.map((run) => run.reduce((max, point) => Math.max(max, Math.abs(point.v)), 0))
     );
     const baseline = maxGap;
     const box = {width, height: GAP_HEIGHT, maxT, maxV: maxGap * 2};
-    const top = points.map((point) => ({t: point.t, v: point.v + baseline}));
-    const bottom = [...points].reverse().map((point) => ({t: point.t, v: baseline}));
-    const d = `${toPath([...top, ...bottom], box)} Z`;
+    const d = drawable.map((points) => {
+        const top = points.map((point) => ({t: point.t, v: point.v + baseline}));
+        const bottom = [...points].reverse().map((point) => ({t: point.t, v: baseline}));
+        return `${toPath([...top, ...bottom], box)} Z`;
+    }).join(" ");
     const zeroY = GAP_HEIGHT / 2;
     return (
         <Svg width={width} height={GAP_HEIGHT} accessibilityRole="image"
@@ -392,6 +395,8 @@ export default function BrewCompareScreen() {
                                     maxV={axis.maxV}
                                     subjectPlan={subjectPlan}
                                     referencePlan={referencePlan}
+                                    subjectPauses={axis.subjectPauses}
+                                    referencePauses={axis.referencePauses}
                                 />
                             ) : (
                                 <YStack gap="$2">
@@ -414,6 +419,7 @@ export default function BrewCompareScreen() {
                                                 height={LANE_HEIGHT}
                                                 plannedSeconds={plannedSeconds(axis.subjectPours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
+                                                pauseIntervals={axis.subjectPauses}
                                             />
                                             {showRateLanes && (
                                                 <CompareRateLane
@@ -428,7 +434,7 @@ export default function BrewCompareScreen() {
                                         </YStack>
                                     )}
                                     <SeparateCupGap
-                                        points={comparison.cupGap}
+                                        runs={comparison.cupGapRuns}
                                         width={chartWidth}
                                         maxT={axis.maxT}
                                         colour={subject.record.accent}
@@ -453,6 +459,7 @@ export default function BrewCompareScreen() {
                                                 height={LANE_HEIGHT}
                                                 plannedSeconds={plannedSeconds(axis.referencePours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
+                                                pauseIntervals={axis.referencePauses}
                                             />
                                             {showRateLanes && (
                                                 <CompareRateLane

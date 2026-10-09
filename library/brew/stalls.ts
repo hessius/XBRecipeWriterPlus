@@ -1,4 +1,5 @@
 import type {BrewSample} from "./BrewRecord";
+import {pausedWithin, type PauseInterval} from "./pauseIntervals";
 
 /**
  * One moment the water stopped moving while the plan said it should be
@@ -98,7 +99,7 @@ export function stageWaterFrom(samples: BrewSample[], stage: number): number {
  */
 export function stallsInStage(
     samples: BrewSample[], stage: number, targetMl: number,
-    minSeconds: number = MIN_STALL_SECONDS
+    minSeconds: number = MIN_STALL_SECONDS, intervals: readonly PauseInterval[] = []
 ): Stall[] {
     const mine = samples.filter((s) => s.pour === stage);
     if (mine.length === 0) return [];
@@ -108,7 +109,7 @@ export function stallsInStage(
 
     const push = (anchorAt: number, anchorMl: number, endAt: number,
                   flatSeen: number): void => {
-        const seconds = (endAt - anchorAt) / 1000;
+        const seconds = (endAt - anchorAt - pausedWithin(intervals, anchorAt, endAt)) / 1000;
         if (flatSeen > 0 && seconds >= minSeconds) {
             stalls.push({atMl: round1(anchorMl - startMl), seconds: round1(seconds)});
         }
@@ -178,7 +179,7 @@ function scan(
  */
 export function stalledNow(
     samples: BrewSample[], stage: number, targetMl: number,
-    minSeconds: number = MIN_STALL_SECONDS
+    minSeconds: number = MIN_STALL_SECONDS, intervals: readonly PauseInterval[] = []
 ): boolean {
     const mine = samples.filter((s) => s.pour === stage);
     if (mine.length < 2) return false;
@@ -189,7 +190,8 @@ export function stalledNow(
     if (last.water - startMl + TARGET_TOLERANCE_ML >= targetMl) return false;
 
     const {anchorAt, flatSeen} = scan(mine);
-    return flatSeen > 0 && (last.at - anchorAt) / 1000 >= minSeconds;
+    return flatSeen > 0
+        && (last.at - anchorAt - pausedWithin(intervals, anchorAt, last.at)) / 1000 >= minSeconds;
 }
 
 /** One decimal. Millilitres arrive from a scale and carry more than they mean. */

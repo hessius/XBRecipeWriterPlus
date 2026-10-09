@@ -1,5 +1,6 @@
 import type {StoredBrew} from "@/library/BrewDatabase";
 import type {BrewSample, PlanStage} from "@/library/brew/BrewRecord";
+import type {PauseInterval} from "@/library/brew/pauseIntervals";
 import {
     COMPARE_TIME_TOLERANCE_SECONDS,
     COMPARE_WATER_TOLERANCE_ML,
@@ -7,6 +8,7 @@ import {
     compareBrews,
     cupGap,
     gapBand,
+    gapBands,
     hasTrace,
     planDrift,
     pourVerdict
@@ -247,6 +249,98 @@ describe("gapBand", () => {
             {t: 4, v: 24},
             {t: 0, v: 0}
         ]);
+    });
+
+    describe("observed cup comparison runs", () => {
+        const samples = stream([0, 0], [2, 20], [8, 80], [10, 100]);
+        const other = stream([0, 0], [10, 50]);
+        const pause: PauseInterval[] = [{from: 2000, to: 8000, pour: 1, reason: "overflow"}];
+        const before = [{t: 0, v: 0}, {t: 1, v: 5}, {t: 2, v: 10}];
+        const after = [{t: 8, v: 40}, {t: 9, v: 45}, {t: 10, v: 50}];
+
+        it.each(["subject", "reference"] as const)(
+            "does not interpolate an unsampled automatic pause in the %s",
+            (lane) => {
+                const a = {record: brew({pauseIntervals: pause}), samples};
+                const b = {record: brew({id: "b"}), samples: other};
+                const compared = lane === "subject" ? compareBrews(a, b) : compareBrews(b, a);
+                const sign = lane === "subject" ? 1 : -1;
+                const expected = [before, after].map((run) =>
+                    run.map(({t, v}) => ({t, v: v === 0 ? 0 : v * sign})));
+                expect(compared.cupGap).toEqual(expected.flat());
+                expect(compared).toEqual(expect.objectContaining({cupGapRuns: expected}));
+            }
+        );
+
+        it("intersects both lanes' observed spans without reconnecting after swap", () => {
+            const a = {record: brew({pauseIntervals: pause}), samples};
+            const b = {
+                record: brew({id: "b", pauseIntervals: [
+                    {from: 1000, to: 9000, pour: 1, reason: "overflow"}
+                ]}),
+                samples: stream([0, 0], [1, 5], [9, 45], [10, 50])
+            };
+            expect(compareBrews(a, b)).toEqual(expect.objectContaining({
+                cupGapRuns: [before.slice(0, 2), after.slice(1)]
+            }));
+            expect(compareBrews(b, a)).toEqual(expect.objectContaining({
+                cupGapRuns: [
+                    [{t: 0, v: 0}, {t: 1, v: -5}],
+                    [{t: 9, v: -45}, {t: 10, v: -50}]
+                ]
+            }));
+        });
+
+        it("keeps real samples within an automatic pause and manual continuity", () => {
+            const observed = stream([0, 0], [2, 20], [5, 50], [8, 80], [10, 100]);
+            const baseline = cupGap(observed, other);
+            expect(cupGap(observed, other, pause)).toEqual(baseline);
+            expect(cupGap(samples, other, [{...pause[0], reason: "manual"}]))
+                .toEqual(cupGap(samples, other));
+        });
+
+        it("does not compare a swept stream even if stale samples were supplied", () => {
+            const compared = compareBrews(
+                {record: brew({hasStream: false, pauseIntervals: pause}), samples},
+                {record: brew({id: "b"}), samples: other}
+            );
+            expect(compared.cupGap).toEqual([]);
+            expect(compared).toEqual(expect.objectContaining({cupGapRuns: []}));
+        });
+
+        it("clips polygons at the later stream start rather than inventing an earlier cup", () => {
+            expect(gapBand([{t: 0, v: 0}, {t: 10, v: 100}], [
+                {t: 4, v: 20}, {t: 8, v: 40}
+            ])).toEqual([
+                {t: 4, v: 40}, {t: 8, v: 80}, {t: 8, v: 40}, {t: 4, v: 20}
+            ]);
+        });
+
+        it("keeps legacy difference and polygon output when intervals are absent", () => {
+            const compared = compareBrews(
+                {record: brew(), samples},
+                {record: brew({id: "b"}), samples: other}
+            );
+            const expected = Array.from({length: 11}, (_, t) => ({t, v: t * 5}));
+            expect(compared.cupGap).toEqual(expected);
+            expect(compared.cupGapRuns).toEqual([expected]);
+            const a = samples.map((sample) => ({t: sample.at / 1000, v: sample.cup}));
+            const b = other.map((sample) => ({t: sample.at / 1000, v: sample.cup}));
+            expect(gapBands(a, b)).toEqual([[
+                {t: 0, v: 0}, {t: 2, v: 20}, {t: 8, v: 80}, {t: 10, v: 100},
+                {t: 10, v: 50}, {t: 0, v: 0}
+            ]]);
+        });
+
+        it("has no polygon or differences when the observed runs do not overlap", () => {
+            const a = stream([0, 0], [2, 20], [8, 80], [10, 100]);
+            const b = stream([3, 15], [7, 35]);
+            expect(cupGap(a, b, pause)).toEqual([]);
+            expect(gapBands(
+                a.map((sample) => ({t: sample.at / 1000, v: sample.cup})),
+                b.map((sample) => ({t: sample.at / 1000, v: sample.cup})), pause
+            )).toEqual([]);
+        });
     });
 
     it("uses only the common watched extent", () => {
@@ -573,5 +667,50 @@ describe("compareBrews", () => {
         expect(c.cupGap.length).toBeGreaterThan(0);
         expect(c.subject.id).toBe("a");
         expect(c.reference.id).toBe("b");
+    });
+});
+
+describe("compareAxis pause intervals", () => {
+    const stream = (lastAt: number): BrewSample[] => [
+        {at: 0, water: 0, cup: 0, pour: 1},
+        {at: lastAt, water: 100, cup: 90, pour: 1}
+    ];
+    const early = [{from: 10_000, to: 20_000, pour: 1, reason: "overflow" as const}];
+    const late = [
+        {from: 30_000, to: 45_000, pour: 1, reason: "manual" as const},
+        {from: 60_000, to: 95_000, pour: 1, reason: "overflow" as const}
+    ];
+
+    it("gives each lane its own intervals and spans both extents", () => {
+        const axis = compareAxis(
+            {record: brew({pauseIntervals: early}), samples: stream(40_000)},
+            {record: brew({id: "b", pauseIntervals: late}), samples: stream(50_000)}
+        );
+
+        expect(axis.maxT).toBe(95);
+        expect(axis.subjectPauses).toEqual(early);
+        expect(axis.referencePauses).toEqual(late);
+    });
+
+    it("lets the other lane's pause stretch the axis without appearing on this lane", () => {
+        const axis = compareAxis(
+            {record: brew(), samples: stream(40_000)},
+            {record: brew({id: "b", pauseIntervals: late}), samples: stream(50_000)}
+        );
+
+        expect(axis.maxT).toBe(95);
+        expect(axis.subjectPauses).toEqual([]);
+    });
+
+    it("does not let a record with no stream stretch the axis or carry a band", () => {
+        const swept = brew({id: "b", hasStream: false, pauseIntervals: late});
+        const axis = compareAxis(
+            {record: brew(), samples: stream(40_000)},
+            {record: swept, samples: []}
+        );
+
+        expect(axis.maxT).toBe(40);
+        expect(axis.referencePauses).toEqual([]);
+        expect(swept.pauseIntervals).toEqual(late);
     });
 });

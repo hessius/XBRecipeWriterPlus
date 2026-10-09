@@ -149,6 +149,24 @@ export function pausedNote(seconds: number | undefined): string | undefined {
 }
 
 /**
+ * Which pauses a record holds, by who made them, as counts alone.
+ *
+ * Counts and no seconds: `pausedNote` already states the total held time, and
+ * a second figure for the same time would be counted twice. Absent when the
+ * app paused nothing, since a manual pause is then all `pausedNote` says.
+ */
+export function pauseReasonsNote(
+    intervals: readonly {reason: "manual" | "overflow"}[] | undefined
+): string | undefined {
+    const list = intervals ?? [];
+    const overflow = list.filter((interval) => interval.reason === "overflow").length;
+    if (overflow === 0) return undefined;
+    const manual = list.length - overflow;
+    const automatic = `${overflow} AUTOMATIC OVERFLOW ${overflow === 1 ? "PAUSE" : "PAUSES"}`;
+    return manual === 0 ? automatic : `${automatic}, ${manual} MANUAL`;
+}
+
+/**
  * The phases from which PAUSE is worth offering.
  *
  * Narrower than "active", and deliberately so. 40518 is inert outside a
@@ -175,6 +193,70 @@ export const PAUSABLE: ReadonlySet<string> = new Set([
 export const PAUSED_NOTE =
     "The machine is holding the brew where it is. "
     + "Its own screen will not say so, and only this app can start it again.";
+
+/**
+ * Custom overflow protection, in the words the editor and the live brew share.
+ *
+ * The first is the price of the feature and is shown wherever it is on offer or
+ * running. The second is why a gram figure is not a fill level.
+ */
+export const OVERFLOW_FOREGROUND_CAUTION =
+    "Keep XBRW++ open while brewing. Leaving or closing the app disables custom overflow protection.";
+export const OVERFLOW_ESTIMATE_NOTE =
+    "Estimated water in the dripper includes water held by the grounds. It is not a measured fill level.";
+export const OVERFLOW_MANUAL_OVERRIDE = "Custom overflow protection is off for this brew.";
+
+export const OVERFLOW_INVALID_LIMIT = "Enter a whole number of grams above 0.";
+export const OVERFLOW_LIMIT_LABEL = "Retained-water limit in grams";
+export const OVERFLOW_LIMIT_PLACEHOLDER = "grams";
+export const OVERFLOW_OFF_LABEL = "Turn off overflow protection";
+export const OVERFLOW_OFF_ACTION = "OFF";
+export const OVERFLOW_ESTIMATE_UNAVAILABLE = "unavailable";
+export const OVERFLOW_WAITING_FOR_READINGS = "Waiting for fresh scale readings.";
+
+export function overflowIntervalLabel(seconds: number): string {
+    return `${seconds} S`;
+}
+
+export function overflowGramsText(grams: number): string {
+    return `${Math.round(grams)} g`;
+}
+
+export function overflowEstimateLine(estimate: string, sentence: boolean): string {
+    return `Estimated in the dripper: ${estimate}${sentence ? "." : ""}`;
+}
+
+export function overflowCountdownText(seconds: number): string {
+    return `Next check in ${seconds} s.`;
+}
+
+/** What the status says about the protection's state. One stable line per state: it is the spoken one. */
+/** The headline for a pause the app made itself, distinct from a manual one. */
+export const OVERFLOW_PAUSED_HEADLINE = "Paused for overflow.";
+
+/** The inline marker on the paused stage's rung, and what a screen reader hears. */
+export const RUNG_PAUSE_MARKER = {manual: "PAUSED", overflow: "DRAINING"} as const;
+export const RUNG_PAUSE_SPOKEN = {
+    manual: "paused",
+    overflow: "paused, draining",
+} as const;
+
+/** The spoken phrase for one pause band on the trace. */
+export function tracePauseSpoken(reason: "manual" | "overflow", seconds: number): string {
+    const who = reason === "overflow" ? "paused for overflow" : "paused by you";
+    return `${who} ${Math.round(seconds)} seconds`;
+}
+
+export const OVERFLOW_STATE_COPY = {
+    armed:           "Custom overflow protection is on.",
+    requesting:      "Pausing the brew. Waiting for the machine to confirm.",
+    holding:         "Paused for the dripper to drain.",
+    resuming:        "Resuming the brew.",
+    background:      "Custom overflow protection stopped because the app left the foreground.",
+    lostContact:     "Custom overflow protection stopped because contact with the machine was lost.",
+    manualOverride:  OVERFLOW_MANUAL_OVERRIDE,
+    error:           "Custom overflow protection could not hold the brew."
+} as const;
 
 /** The phases a brew can end in: nothing more will arrive from the machine. */
 export const OVER: ReadonlySet<string> = new Set([

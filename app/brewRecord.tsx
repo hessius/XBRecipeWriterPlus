@@ -46,13 +46,13 @@ import {
     storyTextScale,
     type StoryContentKey
 } from "@/library/brew/storyCard";
-import {plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
+import {pausedBeforeDrawdownSeconds, plannedSeconds, pourEndDelaySeconds} from "@/library/brew/brewShape";
 import {brewFigureAdjustmentLayout} from "@/library/brew/figureGeometry";
 import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {RECORD_ACTION_GAP, SCREEN_PADDING} from "@/constants/layout";
 import type {StoredBrew} from "@/library/BrewDatabase";
-import {HANDOFF_ALREADY_SENT, ENDED_ON_MACHINE_NOTE, pausedNote}
+import {HANDOFF_ALREADY_SENT, ENDED_ON_MACHINE_NOTE, pausedNote, pauseReasonsNote}
     from "@/constants/brewCopy";
 
 /** Minimal interface for looking up a recipe. Injected by tests. */
@@ -381,6 +381,9 @@ export default function BrewRecord({recipeLookup}: Props) {
             adjustedFromRatio: record.adjustedFromRatio
         },
         hasStream:         record.hasStream,
+        // The record's own, so a deleted recipe or a later edit cannot move
+        // them. A swept stream draws no trace, so nothing is drawn from them.
+        pauseIntervals:    record.pauseIntervals,
         samples,
         stages,
         accent,
@@ -408,11 +411,13 @@ export default function BrewRecord({recipeLookup}: Props) {
             durationSeconds,
             drawdown?.seconds ?? null,
             plannedSecs,
-            record.pausedSeconds ?? 0
+            pausedBeforeDrawdownSeconds(
+                record.pauseIntervals, record.drawdownAt, record.pausedSeconds)
         ),
         grind:             summaryGrind,
         adjustments
     };
+    const pauseReasons = pauseReasonsNote(record.pauseIntervals);
     const hasStoryRateChart = hasDrawableRateRun(summary.rateSeries);
     const hasStoryDetails = [
         summary.drawdown !== null,
@@ -554,6 +559,18 @@ export default function BrewRecord({recipeLookup}: Props) {
                                    weight="bold" letterSpacing={1.6}
                                    color={palette.muted}>
                         NOT WATCHED
+                    </DotMatrixText>
+                </YStack>
+            )}
+
+            {watched && pauseReasons !== undefined && (
+                // Outside the summary, and so outside the story card's height
+                // budget. It survives a swept stream because it is metadata.
+                <YStack paddingHorizontal={SCREEN_PADDING}>
+                    <DotMatrixText testID="record-pause-reasons" fontSize={11}
+                                   weight="bold" letterSpacing={1.6}
+                                   color={palette.dim}>
+                        {pauseReasons}
                     </DotMatrixText>
                 </YStack>
             )}

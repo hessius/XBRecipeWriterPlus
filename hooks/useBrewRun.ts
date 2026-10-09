@@ -2,10 +2,13 @@ import {useEffect, useRef, useState} from "react";
 
 import {OVER} from "@/constants/brewCopy";
 import {useBrew} from "@/hooks/useBrew";
+import {useOverflowProtection} from "@/hooks/useOverflowProtection";
 import {bypassRungState, type BypassView} from "@/library/brew/bypassState";
 import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import BrewRecorder from "@/library/brew/BrewRecorder";
+import type {PauseInterval} from "@/library/brew/pauseIntervals";
+import {overflowFor} from "@/library/brew/overflowConfig";
 import {readDialAfterBrew} from "@/library/brew/dialAfterBrew";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {stageOriginMl, stageWaterFrom, stalledNow, stallsInStage, type Stall}
@@ -30,6 +33,12 @@ const PUBLISH_MS = 250;
 
 /** One empty array, so "no samples yet" is a stable identity across renders. */
 const NO_SAMPLES: BrewSample[] = [];
+const NO_PAUSES: PauseInterval[] = [];
+
+function publishedSeconds(samples: readonly BrewSample[], intervals: PauseInterval[]): number {
+    const lastSampleAt = samples.length > 0 ? samples[samples.length - 1].at : 0;
+    return Math.max(lastSampleAt, intervals.at(-1)?.to ?? 0) / 1000;
+}
 
 // Re-exported from where it now lives: the live rungs and the recorded ladder
 // must not be able to drift apart, so there is one implementation and the
@@ -69,13 +78,17 @@ export function useBrewRun(
     const brewer = useBrew();
     const {machine} = brewer;
     const [published, setPublished] = useState<
-        {runId: number; samples: BrewSample[]; elapsed: number}
-    >({runId, samples: NO_SAMPLES, elapsed: 0});
+        {runId: number; samples: BrewSample[]; elapsed: number; pauseIntervals: PauseInterval[]}
+    >({runId, samples: NO_SAMPLES, elapsed: 0, pauseIntervals: NO_PAUSES});
     const [recorded, setRecorded] = useState<{runId: number; record: BrewRecord} | null>(null);
     const current = published.runId === runId;
     const samples = current ? published.samples : NO_SAMPLES;
     const elapsed = current ? published.elapsed : 0;
     const record = recorded?.runId === runId ? recorded.record : undefined;
+    const pauseIntervals = record?.pauseIntervals ?? (current ? published.pauseIntervals : NO_PAUSES);
+    const protection = useOverflowProtection({
+        machine, config: recipe === null ? undefined : overflowFor(recipe), runId
+    });
     // Track phase locally so React re-renders when it changes. The machine it
     // was heard from is remembered alongside it: a reconnect hands us a new
     // machine with a new recorder, and the phase the old one was left in
@@ -107,6 +120,10 @@ export function useBrewRun(
         : ours || OVER.has(machine.phase.name) ? {name: "waking"} : machine.phase;
     const recorder = useRef<BrewRecorder | null>(null);
     const database = useRef<BrewStore | null>(null);
+    const owner = useRef<{
+        recorder: BrewRecorder; machine: unknown; runId: number;
+        recipe: Recipe; quickEdit: QuickEditRecordAdjustments | undefined;
+    } | null>(null);
     // A brew's recipe is fixed at start. Hold the latest value in a ref so
     // the start effect (keyed on machine) sees the right recipe without being
     // re-triggered by a new Recipe object on every render.
@@ -126,15 +143,16 @@ export function useBrewRun(
         quickEditRef.current = quickEdit;
     }, [recipe, quickEdit]);
 
-    useEffect(() => {
-        const started = recipeRef.current;
-        if (started === null) return;
+    function openRecorder(
+        from: typeof machine, id: number, started: Recipe,
+        edits: QuickEditRecordAdjustments | undefined
+    ): BrewRecorder {
         const active = new BrewRecorder({
-            machine,
+            machine: from,
             recipe: started,
-            quickEdit: quickEditRef.current,
+            quickEdit: edits,
             onRecord: (record, taken, frames) => {
-                setRecorded({runId, record});
+                setRecorded({runId: id, record});
                 database.current?.insert(record, taken, frames);
                 // After the insert, and not awaited. The reading is a BLE
                 // round trip that beeps, and the brew is over: holding the
@@ -143,7 +161,7 @@ export function useBrewRun(
                 const store = database.current;
                 if (store?.recordDialAfter === undefined) return;
                 const save = store.recordDialAfter.bind(store);
-                void readDialAfterBrew(machine, record, save).catch(() => {
+                void readDialAfterBrew(from, record, save).catch(() => {
                     // A machine that will not answer is not an error. The
                     // record simply has no post-brew reading, which is what
                     // its absence already means.
@@ -151,8 +169,34 @@ export function useBrewRun(
             }
         });
         recorder.current = active;
+        owner.current = {recorder: active, machine: from, runId: id, recipe: started, quickEdit: edits};
         active.start();
-        return () => active.stop();
+        return active;
+    }
+
+    // A blocked pre-flight refusal stops its recorder, so the automatic second
+    // attempt needs a fresh one on the same machine and run, with the recipe
+    // and quick edits the run began with. Stale callbacks do nothing.
+    function replaceRecorder(from: typeof machine, id: number): void {
+        const held = owner.current;
+        if (held === null || held.machine !== from || held.runId !== id) return;
+        held.recorder.stop();
+        openRecorder(from, id, held.recipe, held.quickEdit);
+    }
+
+    useEffect(() => {
+        const started = recipeRef.current;
+        if (started === null) return;
+        const active = openRecorder(machine, runId, started, quickEditRef.current);
+        return () => {
+            active.stop();
+            // The retry may have replaced it; the replacement is ours too.
+            const held = owner.current;
+            if (held !== null && held.machine === machine && held.runId === runId) {
+                held.recorder.stop();
+                owner.current = null;
+            }
+        };
         // recipe via ref: a brew's recipe is fixed at start, and the identity
         // of the object should not restart the recorder on every render.
         // `runId` is what deliberately does restart it, for a second brew or a
@@ -172,30 +216,35 @@ export function useBrewRun(
     // is still moving, so the live trace has to keep publishing through it —
     // this is the part of the brew that BREWER_STOP used to throw away.
     const settling = phase.name === "settling";
+    const paused = phase.name === "paused";
     const over = OVER.has(phase.name);
 
     useEffect(() => {
-        if (!pouring && !bypassing && !settling) return;
+        if (!pouring && !bypassing && !settling && !paused) return;
         const tick = setInterval(() => {
             const taken = recorder.current?.samples ?? [];
+            const intervals = recorder.current?.pauseIntervals ?? [];
             setPublished({
                 runId,
                 samples: [...taken],
-                elapsed: taken.length > 0 ? taken[taken.length - 1].at / 1000 : 0
+                pauseIntervals: intervals,
+                elapsed: publishedSeconds(taken, intervals)
             });
         }, PUBLISH_MS);
         return () => clearInterval(tick);
-    }, [pouring, bypassing, settling, runId]);
+    }, [pouring, bypassing, settling, paused, runId]);
 
     // One last copy on the way out, so the finished chart is the whole brew and
     // not whatever the last tick happened to catch.
     useEffect(() => {
         if (!over) return;
         const taken = recorder.current?.samples ?? [];
+        const intervals = recorder.current?.pauseIntervals ?? [];
         setPublished({
             runId,
             samples: [...taken],
-            elapsed: taken.length > 0 ? taken[taken.length - 1].at / 1000 : 0
+            pauseIntervals: intervals,
+            elapsed: publishedSeconds(taken, intervals)
         });
     }, [over, runId]);
 
@@ -229,7 +278,7 @@ export function useBrewRun(
     // and not just the live one, because a stall stays visible after the stage
     // that suffered it is finished.
     const stalls: Stall[][] = pours.map((pour, i) =>
-        stallsInStage(samples, i + 1, Math.max(pour.volume, 0))
+        stallsInStage(samples, i + 1, Math.max(pour.volume, 0), undefined, pauseIntervals)
     );
     const stageWater: number[] = pours.map((_, i) => stageWaterFrom(samples, i + 1));
 
@@ -255,7 +304,7 @@ export function useBrewRun(
     // stage that has reached its target, so the planned rest is covered there
     // rather than by a second condition that could disagree with it.
     const holding = activeIndex !== null && pouring
-        && stalledNow(samples, activeIndex + 1, liveTarget);
+        && stalledNow(samples, activeIndex + 1, liveTarget, undefined, pauseIntervals);
 
     // The bypass, as one object for the three views that draw it.
     //
@@ -290,11 +339,34 @@ export function useBrewRun(
             })
           };
 
+    async function brew(next: Recipe): Promise<void> {
+        await brewer.brew(next, () => {
+            protection.preflightRetry();
+            replaceRecorder(machine, runId);
+        });
+    }
+
+    async function pauseBrew(): Promise<void> {
+        const rollback = protection.manualPause();
+        await brewer.pauseBrew(rollback);
+    }
+
+    async function resumeBrew(): Promise<void> {
+        protection.manualResume();
+        await brewer.resumeBrew();
+    }
+
+    async function cancelBrew(): Promise<void> {
+        protection.cancel();
+        await brewer.cancelBrew();
+    }
+
     return {
         // `phase` after the spread on purpose: the sanitised local reading, not
         // the brewer's raw one, is what callers should see.
-        ...brewer, phase, samples, elapsed, stageElapsed, activeIndex, holding,
-        heldSeconds, stalls, stageWater, pauseElapsed, bypass, record
+        ...brewer, phase, samples, pauseIntervals, elapsed, stageElapsed, activeIndex, holding,
+        heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
+        overflow: protection.overflow, overflowNow: protection.now, brew, pauseBrew, resumeBrew, cancelBrew
     };
 }
 

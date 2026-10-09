@@ -177,3 +177,22 @@ describe("rebuild cost", () => {
         )).toEqual([{n: 500}]);
     });
 });
+
+describe("dripper overflow protection in storage", () => {
+    it("is absent on old blobs and kept through a duplicate", () => {
+        const config = {retainedGrams: 40, checkSeconds: 45};
+        const withConfig = JSON.stringify({...JSON.parse(legacyBlob("uuid-c", "Other", 1)), overflowProtection: config});
+        buildLegacyDatabase([legacyBlob("uuid-a", "Old", 0), withConfig]);
+
+        const db = new RecipeDatabase();
+        const all = db.retrieveAllRecipes() ?? [];
+        expect(all.find((r) => r.uuid === "uuid-a")?.overflowProtection).toBeUndefined();
+        const configured = all.find((r) => r.uuid === "uuid-c")!;
+        expect(configured.overflowProtection).toEqual(config);
+
+        db.duplicateRecipe(configured);
+        const copies = (db.retrieveAllRecipes() ?? []).filter((r) => r.uuid !== "uuid-c" && r.overflowProtection);
+        expect(copies).toHaveLength(1);
+        expect(copies[0].overflowProtection).toEqual(config);
+    });
+});

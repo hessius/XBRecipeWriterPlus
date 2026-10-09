@@ -7,10 +7,12 @@ import {XStack, YStack} from "tamagui";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
-import {MINI_FAILURE_WHY, OVER} from "@/constants/brewCopy";
+import {MINI_FAILURE_WHY, OVER, OVERFLOW_PAUSED_HEADLINE} from "@/constants/brewCopy";
 import {palette} from "@/constants/colors";
 import {DURATION} from "@/constants/motion";
 import type {BrewSample} from "@/library/brew/BrewRecord";
+import type {BypassView} from "@/library/brew/bypassState";
+import type {PauseInterval} from "@/library/brew/pauseIntervals";
 import {formatBrewClock} from "@/library/brew/brewFormat";
 import {plannedSeconds} from "@/library/brew/brewShape";
 import type {BrewPhase} from "@/library/machine/Machine";
@@ -21,6 +23,8 @@ type Props = {
     dose: number;
     pours: Pour[];
     samples: BrewSample[];
+    pauseIntervals?: readonly PauseInterval[];
+    bypass?: BypassView;
     accent: string;
     phase: BrewPhase;
     elapsed: number;
@@ -81,6 +85,14 @@ function say(props: Props): {title: string; detail: string; line: string} {
         };
     }
 
+    if (phase.name === "paused") {
+        return {
+            title: phase.pauseKind === "overflow" ? OVERFLOW_PAUSED_HEADLINE : "Paused",
+            detail: `${upper} · ${formatBrewClock(elapsed)} · TAP TO SEE IT`,
+            line: palette.warn
+        };
+    }
+
     if (holding) {
         return {
             title: "Waiting for the cup",
@@ -134,7 +146,7 @@ function say(props: Props): {title: string; detail: string; line: string} {
  * record and the bar is the way into it.
  */
 export default function BrewMiniBar(props: Props) {
-    const {pours, samples, phase, holding, onOpen, onDismiss} = props;
+    const {pours, samples, pauseIntervals, bypass, phase, holding, onOpen, onDismiss} = props;
     const {title, detail, line} = say(props);
     const over = OVER.has(phase.name);
     const insets = useSafeAreaInsets();
@@ -171,6 +183,8 @@ export default function BrewMiniBar(props: Props) {
                     <BrewTrace
                         pours={pours}
                         samples={samples}
+                        pauseIntervals={pauseIntervals}
+                        bypass={bypass}
                         accent={line}
                         width={TRACE_WIDTH}
                         height={TRACE_HEIGHT}

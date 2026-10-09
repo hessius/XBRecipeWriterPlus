@@ -1,5 +1,6 @@
 import {
     pausedNote,
+    pauseReasonsNote,
     BLOCKED_HEADLINE,
     BLOCKED_WATER_HEADLINE,
     FAILURE_COPY,
@@ -92,5 +93,25 @@ describe("pausedNote", () => {
 
     it("says how long the brew was held, in whole seconds", () => {
         expect(pausedNote(42.6)).toBe("PAUSED FOR 43 S");
+    });
+});
+
+describe("pauseReasonsNote", () => {
+    const overflow = {reason: "overflow" as const};
+    const manual = {reason: "manual" as const};
+
+    it("says nothing when the app paused nothing", () => {
+        expect(pauseReasonsNote(undefined)).toBeUndefined();
+        expect(pauseReasonsNote([manual])).toBeUndefined();
+    });
+
+    it("counts automatic pauses and carries no seconds", () => {
+        expect(pauseReasonsNote([overflow])).toBe("1 AUTOMATIC OVERFLOW PAUSE");
+        expect(pauseReasonsNote([overflow, overflow])).toBe("2 AUTOMATIC OVERFLOW PAUSES");
+    });
+
+    it("adds the manual count for a mixed brew", () => {
+        expect(pauseReasonsNote([overflow, manual, overflow]))
+            .toBe("2 AUTOMATIC OVERFLOW PAUSES, 1 MANUAL");
     });
 });

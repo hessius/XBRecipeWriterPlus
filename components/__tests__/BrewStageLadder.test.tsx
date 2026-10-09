@@ -419,3 +419,17 @@ describe("BrewStageLadder's stage selection", () => {
             .toBe("transparent");
     });
 });
+
+describe("ladder pause kind", () => {
+    it("hands the pause kind to the active rung only", async () => {
+        const pours = [new Pour(1, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 0),
+                       new Pour(2, 40, 93, 40, AGITATION.ALL_OFF, POUR_PATTERN.CENTERED, 0)];
+        await renderWithProviders(
+            <BrewStageLadder pours={pours} accent={palette.brand} activeIndex={0}
+                barHeight={11} rungGap={8} scrolls={false} fill={false}
+                stageWater={[20, 0]} stalls={[[], []]} pauseElapsed={0}
+                pauseKind="overflow" />
+        );
+        expect(screen.getAllByText("DRAINING")).toHaveLength(1);
+    });
+});
