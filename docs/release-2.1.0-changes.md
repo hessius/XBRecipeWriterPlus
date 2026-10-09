@@ -410,6 +410,77 @@ unmeasured and code-only receipt ambiguity/unknown-receipt recovery still
 require hardware evidence. No automatic reset or replay was added. Parent
 integration and its full release validation remain separate: integration/2.1.0
 is checked out in another worktree, excluded from this task.
+
+### Bounded P2: slot-refused live attempt ownership
+
+Follow-up on `integration/finalize-easy-mode-slots`, based on merge head
+`de2ea66e` (including reviewed overflow #209 at `3c6f0230`). An incomplete
+slot journal correctly refused configuration with `SlotOperationError`, before
+`Machine.brew` or any brew frame. But `useBrew` only published an error: the
+provider's synthetic `waking` attempt never ended. Recovery could clear the
+reservation without clearing that phantom owner, so later explicit starts were
+ignored and neither CANCEL nor mini-bar dismissal could retire it.
+
+`useBrew` now reports that specific refusal to its attempt owner, including the
+explicit PRO retry entry and the existing preflight retry's final catch.
+`useBrewRun` checks the machine and run generation, stops its recorder without
+emitting, cancels/disposes its overflow controller and timer, unsubscribes its
+phase listener, and publishes an **app-local** `failed/blocked/busy` snapshot
+with the original recovery instruction. This uses the existing visible refusal,
+retry and dismissal UI; it never changes `Machine.phase` or writes a history row.
+Later hardware phases cannot revive that refused attempt, and a retired
+callback cannot end the next explicit generation.
+
+The durable journal and transport exclusion remain authoritative until safe
+recovery. Recovery sends only its stored slot frames, and clearing the journal
+does not replay rejected settings or brew commands. The next explicit start
+applies current configuration and sends exactly one recipe/commit. No provider
+generation bump or automatic retry was added to the refusal/recovery path.
+Existing preflight recorder/controller replacement and manual-pause failure
+rollback from #209 are preserved.
+
+Seven new cases run on each platform: ordinary and overflow-configured
+refusal/recovery, both start entries against an independently running real
+Machine, and stale callback delivery after a new explicit generation. The
+provider integration uses real `useBrew`, `useBrewRun`, `useLiveBrew`,
+`useMachine`, the installed slot port and SQLite stores. It checks zero refused
+attempt traffic/reconnects, terminal/dismissible ownership, no recording even
+when another real brew subsequently finishes, released controller listeners
+and intervals, continuing reservation/busy exclusion, atomic stored slot
+completion, no implicit replay, and one later real `8001`/`8002` sequence.
+The existing slot suites retain the three-receipts-plus-SLOTS_SAVED atomic gate.
+
+Test-first runs reproduced eight `waking` failures across both platforms.
+Removing only the PRO-entry refusal callback separately reproduced four more
+`waking` failures; restoring it passed. Final targeted validation:
+
+```bash
+npx jest --runTestsByPath \
+  hooks/__tests__/{machineSlotOwner.test.tsx,useBrew.test.ts,useBrewRun.test.ts,useLiveBrew.test.tsx,useMachine.test.ts,useMachine.persistence.test.ts,useOverflowProtection.test.ts,useEasyModeSlots.test.ts} \
+  library/slots/__tests__/{machineSlotPort,slotWriter,SlotDatabase,slotModel}.test.ts \
+  library/machine/__tests__/{Machine,Machine.pause,Machine.bypass,Transport}.test.ts \
+  --runInBand --silent
+npm run typecheck
+npx eslint hooks/useBrew.ts hooks/useBrewRun.ts hooks/useOverflowProtection.ts \
+  hooks/__tests__/machineSlotOwner.test.tsx hooks/__tests__/useLiveBrew.test.tsx
+git diff --check
+```
+
+**32 project suites / 1,016 tests passed**, both iOS and Android, no skips or
+snapshots (24.884 s). The narrow provider selector passed 12 executions; the
+generation callback adds two more in the combined run. Typecheck and whitespace
+passed; changed-code lint has zero errors and the existing `openRecorder`
+exhaustive-deps warning. Logs are session artifacts `slot-owner-refusal-red.log`,
+`slot-owner-pro-refusal-red.log`, `slot-owner-refusal-green.log` and
+`slot-owner-refusal-targeted.log`. Local self-review found no unresolved software
+finding in this bounded fix. Prior feature checkpoints/counts above are retained,
+not superseded by these narrower checks.
+
+No agents, other worktrees, push, PR, main changes, deployment or merge were used.
+Machine frame bytes, timing budgets, recovery protocol, native version and
+approved design/specification documents are unchanged. The full parent
+integration gate and previously listed physical/native release gates remain open.
+
 ## Custom overflow v1 completion (Task 10)
 
 Implemented locally from head `67990e1` in the specified `custom-overflow-v1`

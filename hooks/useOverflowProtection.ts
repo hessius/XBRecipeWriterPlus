@@ -10,10 +10,11 @@ type OverflowMachine = Pick<Machine,
     "onNotification" | "onPhase" | "pauseBrew" | "resumeBrew" | "phase">;
 
 /** One controller per run, above route lifetimes, fed by the raw machine stream. */
-export function useOverflowProtection({machine, config, runId}: {
+export function useOverflowProtection({machine, config, runId, enabled = true}: {
     machine: OverflowMachine;
     config: OverflowProtection | undefined;
     runId: number;
+    enabled?: boolean;
 }): {
     overflow: OverflowSnapshot | undefined;
     /** Epoch ms of the latest publication; advances each tick while holding. */
@@ -35,7 +36,7 @@ export function useOverflowProtection({machine, config, runId}: {
     useEffect(() => { configRef.current = config; }, [config]);
 
     useEffect(() => {
-        if (configRef.current === undefined) return;
+        if (!enabled || configRef.current === undefined) return;
         const fixed = {...configRef.current};
         let alive = true;
         const create = () => new OverflowController({
@@ -87,7 +88,7 @@ export function useOverflowProtection({machine, config, runId}: {
             if (handle.current === controller) handle.current = null;
             if (retry.current?.restart === preflightRetry) retry.current = null;
         };
-    }, [machine, runId]);
+    }, [machine, runId, enabled]);
 
     const current = published?.from === machine && published.runId === runId ? published : null;
     return {

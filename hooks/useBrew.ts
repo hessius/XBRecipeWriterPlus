@@ -24,8 +24,9 @@ export type Brewer = {
     error: string | null;
     /** The link itself, for a recorder that needs the raw notification stream. */
     machine: Machine;
-    /** The callback runs only before the automatic, pre-delivery second attempt. */
-    brew: (recipe: Recipe, onPreflightRetry?: () => void) => Promise<void>;
+    /** Retry re-arms ownership; a slot refusal retires only the app's unsent attempt. */
+    brew: (recipe: Recipe, onPreflightRetry?: () => void,
+           onSlotRefusal?: (error: SlotOperationError) => void) => Promise<void>;
     /**
      * Commit a recipe that was uploaded but held back, because the user has
      * auto-start off. Only meaningful in the `readyToStart` phase.
@@ -41,7 +42,8 @@ export type Brewer = {
      * and only once — the app never changes a machine's mode without asking.
      */
     canOfferProMode: () => boolean;
-    switchToProAndRetry: (recipe: Recipe) => Promise<void>;
+    switchToProAndRetry: (recipe: Recipe,
+                          onSlotRefusal?: (error: SlotOperationError) => void) => Promise<void>;
 };
 
 /**
@@ -117,7 +119,8 @@ export function useBrew(injected?: Machine): Brewer {
         return !isActiveBrewPhase(phase);
     }
 
-    async function brew(recipe: Recipe, onPreflightRetry?: () => void): Promise<void> {
+    async function brew(recipe: Recipe, onPreflightRetry?: () => void,
+                        onSlotRefusal?: (error: SlotOperationError) => void): Promise<void> {
         setError(null);
         try {
             await attempt(recipe);
@@ -125,6 +128,7 @@ export function useBrew(injected?: Machine): Brewer {
         } catch (e) {
             if (!worthRelinking(e)) {
                 setError((e as Error).message);
+                if (e instanceof SlotOperationError) onSlotRefusal?.(e);
                 return;
             }
         }
@@ -137,6 +141,7 @@ export function useBrew(injected?: Machine): Brewer {
             await attempt(recipe);
         } catch (e) {
             setError((e as Error).message);
+            if (e instanceof SlotOperationError) onSlotRefusal?.(e);
         }
     }
 
@@ -184,12 +189,14 @@ export function useBrew(injected?: Machine): Brewer {
         return machine.canOfferProMode();
     }
 
-    async function switchToProAndRetry(recipe: Recipe): Promise<void> {
+    async function switchToProAndRetry(recipe: Recipe,
+                                      onSlotRefusal?: (error: SlotOperationError) => void): Promise<void> {
         setError(null);
         try {
             await machine.switchToProAndRetry(recipe);
         } catch (e) {
             setError((e as Error).message);
+            if (e instanceof SlotOperationError) onSlotRefusal?.(e);
         }
     }
 

@@ -2,16 +2,19 @@ import React from "react";
 import {AppState, type AppStateStatus} from "react-native";
 import {act, fireEvent, renderHook, screen} from "@testing-library/react-native";
 import {renderWithProviders} from "@/test-utils/render";
+import {FRAME_GAP_MS} from "@/constants/machine";
 import {useMachine, sharedMachine, __resetSharedMachine} from "@/hooks/useMachine";
 import {sharedSlotDatabase, useEasyModeSlots} from "@/hooks/useEasyModeSlots";
 import {sharedSettings} from "@/hooks/useSetting";
+import {LiveBrewProvider, useLiveBrew} from "@/hooks/useLiveBrew";
+import BrewDatabase from "@/library/BrewDatabase";
 import {unavailableSlotPort, writeSlots, recoverSlots} from "@/library/slots/slotWriter";
 import {prepareSet, snapshotRecipe} from "@/library/slots/slotModel";
 import {SlotDatabase} from "@/library/slots/SlotDatabase";
 import {appDatabase} from "@/library/appDatabase";
 import {FakeTransport} from "@/library/machine/__tests__/FakeTransport";
-import {kermit, notification, status} from "@/library/machine/__tests__/protocolFixtures";
-import {buildType1} from "@/library/machine/protocol";
+import {event, float32, kermit, notification, status} from "@/library/machine/__tests__/protocolFixtures";
+import {buildType1, MACHINE_STATE} from "@/library/machine/protocol";
 import {coffee} from "@/library/slots/__tests__/fixtures";
 import EasyModeScreen from "@/app/easyMode";
 
@@ -25,7 +28,6 @@ jest.mock("expo-sqlite", () => ({
     openDatabaseSync: () => jest.requireActual("@/test-utils/sqlite").createTestDatabase()
 }));
 jest.mock("@/hooks/useSetting", () => jest.requireActual("@/test-utils/settingsMock").settingsMock());
-jest.mock("@/hooks/useLiveBrew", () => ({useLiveBrew: () => ({ratingNoteOpen: false})}));
 jest.mock("@/hooks/useRecipeLibrary", () => ({
     useRecipeLibrary: () => ({allRecipes: () => []})
 }));
@@ -80,6 +82,8 @@ beforeEach(() => {
         return {remove: () => { changes.delete(handler); }};
     });
     sharedSettings().set("machineDeviceId", "one");
+    sharedSettings().set("machineAutoStart", false);
+    sharedSettings().set("bypassTempEncoding", "scaled");
 });
 
 afterEach(async () => {
@@ -125,6 +129,149 @@ it("installs the durable restart reservation before the shared owner can connect
     expect(store.read("one").journal?.id).toBe("prior");
     expect(mockRadio.slots).toEqual([]);
 });
+
+it.each([false, true])(
+    "ends a refused app attempt without recording or replay, overflow configured: %s", async (configured) => {
+        const store = journal();
+        await connect();
+        const machine = sharedMachine();
+        const connectSpy = jest.spyOn(mockRadio, "connect");
+        const disconnectSpy = jest.spyOn(mockRadio, "disconnect");
+        const db = new BrewDatabase();
+        const insert = jest.spyOn(db, "insert");
+        const {result} = await renderHook(() => ({live: useLiveBrew(), link: useMachine()}), {
+            wrapper: ({children}) => <LiveBrewProvider store={db}>{children}</LiveBrewProvider>
+        });
+        let unwatch!: () => void;
+        await act(async () => { unwatch = result.current.live.watch(); });
+        const intervals = jest.spyOn(global, "setInterval");
+        const clearIntervals = jest.spyOn(global, "clearInterval");
+        const frames = mockRadio.written.length;
+        const recipe = coffee();
+        recipe.cupType = 1;
+        if (configured) recipe.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
+        await act(async () => { result.current.live.start(recipe); await flush(); });
+        expect(result.current.live.error).toMatch(/incomplete Easy Mode/i);
+        expect(result.current.live.run?.phase).toEqual({
+            name: "failed", reason: "blocked", block: "busy",
+            detail: result.current.live.error
+        });
+        expect(machine.phase).toEqual({name: "idle"});
+        expect(store.read("one").journal?.id).toBe("prior");
+        expect(store.read("one").written).toBeNull();
+        expect(mockRadio.written).toHaveLength(frames);
+        expect(connectSpy).not.toHaveBeenCalled();
+        expect(disconnectSpy).not.toHaveBeenCalled();
+        expect(insert).not.toHaveBeenCalled();
+        for (const timer of intervals.mock.results) {
+            expect(clearIntervals).toHaveBeenCalledWith(timer.value);
+        }
+        expect(changes.size).toBe(1);
+        await expect(machine.send(buildType1(3500))).rejects.toThrow(/Easy Mode/i);
+
+        // Later machine telemetry is not the refused app attempt's brew.
+        await act(async () => {
+            mockRadio.emit(status(MACHINE_STATE.STARTING));
+            mockRadio.emit(event(40510, 1));
+            mockRadio.emit(notification(0x4B, 0x00, float32(100000)));
+            mockRadio.emit(notification(0x15, 0x00, float32(0)));
+            await jest.advanceTimersByTimeAsync(1000);
+            mockRadio.emit(notification(0x4B, 0x00, float32(100000)));
+            mockRadio.emit(notification(0x15, 0x00, float32(0)));
+        });
+        expect(result.current.live.run?.phase.name).toBe("failed");
+        expect(mockRadio.sent).not.toContain(40518);
+        expect(mockRadio.sent).not.toContain(40524);
+        expect(insert).not.toHaveBeenCalled();
+        const port = result.current.link.slotPort ?? unavailableSlotPort;
+        await expect(port.acquire(machine.slotIdentity!)).rejects.toThrow(/brew|busy/i);
+        await act(async () => { mockRadio.emit(status(0x01)); });
+        expect(insert).not.toHaveBeenCalled();
+        expect(db.all()).toEqual([]);
+
+        await act(async () => {
+            sharedSettings().set("machineAutoStart", true);
+            sharedSettings().set("bypassTempEncoding", "plain");
+        });
+        await act(async () => {
+            const recovering = recoverSlots(store, machine.slotIdentity!, port);
+            await jest.advanceTimersByTimeAsync(4000);
+            await recovering;
+        });
+        expect(store.read("one").journal).toBeNull();
+        expect(new SlotDatabase(appDatabase()).read("one").written?.slots)
+            .toEqual(store.read("one").drafts);
+        expect(mockRadio.slots.map(frame => frame[10])).toEqual([0, 1, 2]);
+        expect(mockRadio.sent).not.toContain(8001);
+        expect(mockRadio.sent).not.toContain(8002);
+        expect(machine.bypassTempEncoding).toBe("scaled");
+        expect(result.current.live.run?.phase.name).toBe("failed");
+        await act(async () => { result.current.live.start(recipe); });
+        await act(async () => { await jest.advanceTimersByTimeAsync(6 * FRAME_GAP_MS); });
+        expect(result.current.live.error).toBeNull();
+        expect(mockRadio.sent.filter(code => code === 8001)).toHaveLength(1);
+        expect(mockRadio.sent.filter(code => code === 8002)).toHaveLength(1);
+        expect(machine.bypassTempEncoding).toBe("plain");
+        expect(result.current.live.run?.phase.name).not.toBe("failed");
+        await act(async () => {
+            result.current.live.start(recipe);
+            await jest.advanceTimersByTimeAsync(1000);
+        });
+        expect(mockRadio.sent.filter(code => code === 8001)).toHaveLength(1);
+        expect(mockRadio.sent.filter(code => code === 8002)).toHaveLength(1);
+        await act(async () => { unwatch(); });
+    }
+);
+
+it.each([
+    {configured: false, method: "start"},
+    {configured: true, method: "start"},
+    {configured: false, method: "startInPro"},
+    {configured: true, method: "startInPro"}
+] as const)(
+    "dismisses only the refused $method owner, preserving a real busy machine, overflow configured: $configured",
+    async ({configured, method}) => {
+        draft();
+        await connect();
+        const machine = sharedMachine();
+        const brewing = machine.brew(coffee("Already running"));
+        await jest.advanceTimersByTimeAsync(6 * FRAME_GAP_MS);
+        await brewing;
+        mockRadio.emit(status(MACHINE_STATE.STARTING));
+        expect(machine.phase.name).toBe("grinding");
+        journal();
+        const db = new BrewDatabase();
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => <LiveBrewProvider store={db}>{children}</LiveBrewProvider>
+        });
+        const recipe = coffee();
+        recipe.cupType = 1;
+        if (configured) recipe.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
+        const frames = mockRadio.written.length;
+        await act(async () => { result.current[method](recipe); await flush(); });
+        expect(result.current.run?.phase.name).toBe("failed");
+        expect(machine.phase).toEqual({name: "grinding"});
+        await act(async () => {
+            mockRadio.emit(event(40510, 0));
+            mockRadio.emit(notification(0x4B, 0x00, float32(100000)));
+            mockRadio.emit(notification(0x15, 0x00, float32(0)));
+            await jest.advanceTimersByTimeAsync(1000);
+            mockRadio.emit(notification(0x4B, 0x00, float32(100000)));
+            mockRadio.emit(notification(0x15, 0x00, float32(0)));
+        });
+        expect(machine.phase).toEqual({name: "pouring", pour: 1, pours: 1});
+        expect(result.current.run?.phase.name).toBe("failed");
+        await act(async () => { result.current.dismiss(); });
+        expect(result.current.run).toBeNull();
+        expect(machine.phase).toEqual({name: "pouring", pour: 1, pours: 1});
+        expect(mockRadio.written).toHaveLength(frames);
+        expect(db.all()).toEqual([]);
+        expect(sharedSlotDatabase().read("one").journal?.id).toBe("prior");
+        await expect(machine.cancelBrew()).rejects.toThrow(/Easy Mode/i);
+        await act(async () => { mockRadio.emit(event(40512)); });
+        expect(db.all()).toEqual([]);
+    }
+);
 
 it("wires the real route to the installed shared port, actual identity and atomic completion", async () => {
     const store = draft();
