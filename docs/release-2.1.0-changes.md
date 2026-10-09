@@ -101,6 +101,12 @@ The software-first order and parallel-session boundaries are recorded in
 Hardware is unavailable during this session. Build software and scripted
 machine tests now; do not treat their results as physical verification.
 
+Custom overflow v1 must caution at enable/configuration and protected-brew
+initiation: keep XBRW++ open because leaving/closing the app disables protection.
+Use persistent inline copy, not a confirmation or extra tap. Include phone
+locking/backgrounding in coverage; internal app navigation must preserve the
+live owner's protection. Foreground recovery must not issue stale resumes.
+
 ## Automated validation
 
 Validated locally on 2026-10-09, rather than relying only on the individual

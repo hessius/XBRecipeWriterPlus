@@ -67,6 +67,22 @@ Do not claim the feature guarantees that a cup cannot overflow.
 
 ### Presentation and recording
 
+Show a persistent inline caution alongside the enable/configuration controls:
+"Keep XBRW++ open while brewing. Leaving or closing the app disables custom
+overflow protection."
+
+Repeat that caution when initiating a protected brew, on the brew screen
+before water starts, and keep it visible during the active brew. No modal,
+confirmation checkbox, extra tap or delay before brewing. Do not rely on a
+brief toast as the only warning. Unprotected brews do not show this caution.
+
+"Leaving the app" means backgrounding, closing or locking the phone, not
+navigating between screens inside XBRW++. Protection belongs to the live run
+owner above the navigator, so internal navigation must not disable it.
+V1 must not present background protection as available; returning to the
+foreground must reconcile machine state and fresh telemetry before restoring
+automatic control, never blindly fire an overdue resume.
+
 The live UI explains that the cup threshold caused the pause and shows time
 until the next check. Explain an extension if the cup remains above the
 threshold, and distinguish unavailable readings from a measured full cup.
@@ -154,7 +170,11 @@ decision.
 
 Scripted tests should cover automatic pause confirmation, repeated extensions,
 fresh below-threshold resume, rearming, missing data, manual pauses, cancellation,
-late callbacks, link loss and record/backup compatibility. Slot tests should
+late callbacks, link loss and record/backup compatibility. Check that the
+caution appears both at configuration and protected-brew initiation without
+an extra interaction, is absent for unprotected brews, and that internal
+navigation preserves protection while background/foreground transitions never
+claim uninterrupted coverage or dispatch a stale resume. Slot tests should
 cover complete prevalidation, ordering, acknowledgement/failure paths,
 durable recovery, staleness and concurrent-operation exclusion.
 
