@@ -80,6 +80,9 @@ it is excluded from stall detection.
 ## Manual intervention and invalidation
 
 A manual PAUSE must never be automatically resumed.
+Once a confirmed ordinary pause returns to running, including through a
+machine-origin resume, protection re-arms with fresh crossing evidence.
+Running events before pause confirmation do not lift manual-pause suppression.
 
 Manual RESUME during an automatic pause disables automatic protection for the
 rest of that brew and explains that override visibly. This avoids immediate

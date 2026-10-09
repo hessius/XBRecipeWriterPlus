@@ -140,6 +140,56 @@ describe("OverflowController", () => {
         expect(h.pause).toHaveBeenCalledTimes(1);
     });
 
+    it.each([false, true])("re-arms after a confirmed ordinary pause resumes at the machine (manual request=%s)", requested => {
+        const h = harness();
+        h.pair(1000);
+        if (requested) h.controller.manualPause();
+        h.controller.phase({...paused, pauseKind: undefined});
+        h.pair(1500);
+        h.pair(2000);
+        h.controller.tick();
+        expect(h.pause).not.toHaveBeenCalled();
+        expect(h.resume).not.toHaveBeenCalled();
+
+        h.controller.phase(pouring); // Machine restores `was` on unsolicited 40516.
+        h.pair(2500);
+        expect(h.pause).not.toHaveBeenCalled();
+        h.pair(3000);
+        h.pair(3500);
+        expect(h.controller.snapshot.mode).toBe("requesting");
+        expect(h.pause).toHaveBeenCalledTimes(1);
+        expect(h.resume).not.toHaveBeenCalled();
+    });
+
+    it.each([pouring, {name: "pouring", pour: 2, pours: 2}] as const)(
+        "keeps a pending manual pause suppressed on a pouring event (pour=$pour)", phase => {
+            const h = harness();
+            h.pair(1000);
+            h.controller.manualPause();
+            h.controller.phase(phase);
+            h.pair(1500);
+            h.pair(2000);
+            h.controller.tick();
+            expect(h.controller.snapshot).toMatchObject({mode: "armed", nextCheckAt: null});
+            expect(h.pause).not.toHaveBeenCalled();
+            expect(h.resume).not.toHaveBeenCalled();
+        }
+    );
+
+    it("does not clear manual suppression when a late overflow pause resumes at the machine", () => {
+        const h = harness();
+        h.request();
+        h.controller.manualPause();
+        h.controller.phase(paused);
+        h.controller.phase(pouring);
+        h.pair(2000);
+        h.pair(2500);
+        h.controller.tick();
+        expect(h.controller.snapshot).toMatchObject({mode: "armed", nextCheckAt: null});
+        expect(h.pause).toHaveBeenCalledTimes(1);
+        expect(h.resume).not.toHaveBeenCalled();
+    });
+
     it.each(["requesting", "holding", "resuming"] as const)("manual resume disables automatic ownership in %s", async mode => {
         const h = harness();
         const pending = deferred();
@@ -587,6 +637,15 @@ describe("OverflowController", () => {
         });
         h.low();
         h.controller.tick();
+        h.controller.manualResume();
+        h.controller.phase(pouring);
+        h.pair(18000);
+        h.pair(18500);
+        h.controller.tick();
+        expect(h.controller.snapshot).toMatchObject({
+            mode: "disabled", disabledReason: "manualOverride", nextCheckAt: null
+        });
+        expect(h.pause).toHaveBeenCalledTimes(1);
         expect(h.resume).not.toHaveBeenCalled();
     });
 

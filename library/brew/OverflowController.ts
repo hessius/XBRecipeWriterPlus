@@ -107,6 +107,9 @@ export class OverflowController {
             this.disable("manualOverride");
             return;
         }
+        if (previous.name === "paused" && previous.pauseKind !== "overflow" && phase.name !== "paused") {
+            this.manualPaused = false;
+        }
         const samePour = previous.name === "pouring" && phase.name === "pouring"
             && previous.pour === phase.pour && previous.pours === phase.pours;
         if (previous.name !== phase.name || (phase.name === "pouring" && !samePour)) {
