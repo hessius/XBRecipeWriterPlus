@@ -30,7 +30,7 @@ The package numbers refer to
 | 6: Quick edits | On main via #196/#197 | One-brew dose, ratio, grind and temperature offset; shared home/editor panel; changed keys only; comparison metadata in history. Check reset-to-baseline, discard-on-close, saturation, tea without ratio, grinder-off baseline, and the single editor BREW action. |
 | 7: Hardware spike | Initial questions answered via #198 | 40518 pauses, 40524 resumes without restarting; 8019 instead abandons the recipe for a water pour. Easy Mode batch behaviour documented. Pause latency, overshoot and reconnect survival still require measurement below. |
 | 8: Pause/resume | Prototype integrated from #202; hardware-blocked | Pause is acknowledged rather than inferred from ARMED; resume is optimistic; pause time is recorded, backed up and excluded from held-time/delay; paused readings are omitted; ladder/bypass remain in place. |
-| 9: Custom overflow protection | Not implemented | Depends on reliable pause and measured valve-stop overshoot. The pause spec describes the intended feature, not shipped code. |
+| 9: Custom overflow protection | Approved v1; not implemented | Threshold-triggered automatic pause, with resume checks every 15/30/45 seconds (default 15). Extend while at/above threshold; resume and re-arm on a fresh below-threshold reading. Include live UI, graph intervals and ladder state. Hardware verification gates release, not development. |
 | 10: Easy Mode slots | Promoted to implementation scope on 2026-10-09 | Ship a dedicated three-slot screen, recipe-context entry and library markers. Warn that every write replaces all three slots and leaves the machine in EASY. Slots are write-only, so last-written state must not imply read-back verification. Detailed design and implementation remain to be completed. |
 
 ## Additional 2.0 feedback and integration changes
@@ -69,8 +69,8 @@ Original review threads and PR metadata were not changed.
 
 1. Measure real 40515 acknowledgement latency before choosing PAUSE_ACK_MS
    (currently a 3-second guess).
-2. Measure water overshoot after PAUSE at a known flow rate before building
-   custom overflow protection. Do not promise overflow prevention.
+2. Verify water overshoot after PAUSE before release. V1 can be built without
+   adaptive timing or an overshoot model; do not promise overflow prevention.
 3. Verify pause through backgrounding, BLE loss and reconnect, plus machine-button
    interventions, missed acknowledgements and terminal/fault events.
 4. Capture a stream where water was already flat before PAUSE. The recorder's
@@ -79,8 +79,8 @@ Original review threads and PR metadata were not changed.
 5. Exercise short-tank stopping and pre-brew connection retry/timeout on hardware.
 6. Complete native dose/ratio and Story Card layout, export, VoiceOver and
    TalkBack checks, including narrow widths and large text.
-7. Confirm Beanconqueror's public release before package 4; decide explicitly
-   whether package 9 is required for 2.1.0 or deferred.
+7. Confirm Beanconqueror's public release before package 4. Package 9 is in
+   planned 2.1.0 scope under the approved fixed-check-interval v1 design.
 8. Implement and verify the three-slot writer. Prepare all three valid blobs
    before sending A; recover incomplete batches without pretending a sent frame
    proves storage; verify distinct ratios, grinder on/off, interrupted writes,
@@ -93,6 +93,13 @@ acknowledgement-loss or persistence/recovery design.
 
 Full release testing should cover both iOS and Android. NFC regressions require
 physical devices and genuine cards; neither simulator proves card safety.
+
+## Approved development order
+
+The software-first order and parallel-session boundaries are recorded in
+`docs/superpowers/specs/2026-10-09-release-2-1-0-delivery-design.md`.
+Hardware is unavailable during this session. Build software and scripted
+machine tests now; do not treat their results as physical verification.
 
 ## Automated validation
 
