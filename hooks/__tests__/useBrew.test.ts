@@ -200,7 +200,7 @@ describe("overflow protection through useBrew's real preflight retry", () => {
         const resume = jest.spyOn(machine, "resumeBrew");
         const store = {insert: jest.fn()};
         const hook = await renderHook(() => useBrewRun(r, store, 7));
-        return {transport, machine, r, phases, pause, resume, ...hook};
+        return {transport, machine, r, phases, pause, resume, store, ...hook};
     }
 
     async function pair(transport: FakeTransport, water = 100, cup = 0) {
@@ -269,6 +269,74 @@ describe("overflow protection through useBrew's real preflight retry", () => {
             expect(h.transport.sent.filter(code => code === 8002)).toHaveLength(1);
         }
     );
+
+    it.each([
+        ["noVitals", true], ["notConnected", true], ["noVitals", false], ["notConnected", false]
+    ] as const)(
+        "records the whole retried %s brew (configured: %s) exactly once", async (block, configured) => {
+            const h = await setup(block, configured);
+            await act(async () => {
+                const brewing = h.result.current.brew(h.r);
+                await jest.advanceTimersByTimeAsync(100);
+                await brewing;
+            });
+            // The blocked first attempt wrote nothing.
+            expect(h.store.insert).not.toHaveBeenCalled();
+            await act(async () => {
+                h.transport.emit(status(0x22));
+                h.transport.emit(event(40507));
+            });
+            await pair(h.transport);
+            await advance(500);
+            await pair(h.transport, 120);
+            if (configured) {
+                await act(async () => { h.transport.emit(event(40515)); });
+                await advance(2000);
+                expect(h.result.current.pauseIntervals.at(-1)).toMatchObject({reason: "overflow"});
+                const open = h.result.current.pauseIntervals.at(-1)!;
+                await advance(1000);
+                expect(h.result.current.pauseIntervals.at(-1)!.to).toBeGreaterThan(open.to);
+                expect(h.result.current.samples.length).toBeGreaterThan(0);
+                await act(async () => { await h.result.current.resumeBrew(); });
+                await act(async () => { h.transport.emit(event(40516)); });
+            }
+            await act(async () => { await h.result.current.cancelBrew(); });
+            expect(h.store.insert).toHaveBeenCalledTimes(1);
+            const [record, samples] = h.store.insert.mock.calls[0];
+            expect(samples.length).toBeGreaterThan(0);
+            if (configured) {
+                expect(record.pauseIntervals).toEqual([expect.objectContaining({reason: "overflow"})]);
+            }
+            expect(h.result.current.record).toBeDefined();
+        }
+    );
+
+    it("stops the replacement recorder on teardown so nothing is inserted afterwards", async () => {
+        const h = await setup("noVitals");
+        await act(async () => {
+            const brewing = h.result.current.brew(h.r);
+            await jest.advanceTimersByTimeAsync(100);
+            await brewing;
+        });
+        await h.unmount();
+        await act(async () => { h.transport.emit(event(40507)); });
+        await pair(h.transport);
+        await act(async () => { h.transport.emit(event(40513)); });
+        expect(h.store.insert).not.toHaveBeenCalled();
+    });
+
+    it("ignores a stale retry callback from another run", async () => {
+        const h = await setup("noVitals");
+        const attempts = jest.spyOn(h.machine, "brew");
+        const pending = h.result.current.brew(h.r);
+        await h.rerender({});
+        await act(async () => { await jest.advanceTimersByTimeAsync(100); await pending; });
+        expect(attempts).toHaveBeenCalledTimes(2);
+        await act(async () => { h.transport.emit(event(40507)); });
+        await pair(h.transport);
+        await act(async () => { await h.result.current.cancelBrew(); });
+        expect(h.store.insert).toHaveBeenCalledTimes(1);
+    });
 
     it.each(["background", "lostContact"] as const)(
         "does not re-arm after %s during an actual brew", async reason => {

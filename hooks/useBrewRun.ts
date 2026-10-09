@@ -120,6 +120,10 @@ export function useBrewRun(
         : ours || OVER.has(machine.phase.name) ? {name: "waking"} : machine.phase;
     const recorder = useRef<BrewRecorder | null>(null);
     const database = useRef<BrewStore | null>(null);
+    const owner = useRef<{
+        recorder: BrewRecorder; machine: unknown; runId: number;
+        recipe: Recipe; quickEdit: QuickEditRecordAdjustments | undefined;
+    } | null>(null);
     // A brew's recipe is fixed at start. Hold the latest value in a ref so
     // the start effect (keyed on machine) sees the right recipe without being
     // re-triggered by a new Recipe object on every render.
@@ -139,15 +143,16 @@ export function useBrewRun(
         quickEditRef.current = quickEdit;
     }, [recipe, quickEdit]);
 
-    useEffect(() => {
-        const started = recipeRef.current;
-        if (started === null) return;
+    function openRecorder(
+        from: typeof machine, id: number, started: Recipe,
+        edits: QuickEditRecordAdjustments | undefined
+    ): BrewRecorder {
         const active = new BrewRecorder({
-            machine,
+            machine: from,
             recipe: started,
-            quickEdit: quickEditRef.current,
+            quickEdit: edits,
             onRecord: (record, taken, frames) => {
-                setRecorded({runId, record});
+                setRecorded({runId: id, record});
                 database.current?.insert(record, taken, frames);
                 // After the insert, and not awaited. The reading is a BLE
                 // round trip that beeps, and the brew is over: holding the
@@ -156,7 +161,7 @@ export function useBrewRun(
                 const store = database.current;
                 if (store?.recordDialAfter === undefined) return;
                 const save = store.recordDialAfter.bind(store);
-                void readDialAfterBrew(machine, record, save).catch(() => {
+                void readDialAfterBrew(from, record, save).catch(() => {
                     // A machine that will not answer is not an error. The
                     // record simply has no post-brew reading, which is what
                     // its absence already means.
@@ -164,8 +169,34 @@ export function useBrewRun(
             }
         });
         recorder.current = active;
+        owner.current = {recorder: active, machine: from, runId: id, recipe: started, quickEdit: edits};
         active.start();
-        return () => active.stop();
+        return active;
+    }
+
+    // A blocked pre-flight refusal stops its recorder, so the automatic second
+    // attempt needs a fresh one on the same machine and run, with the recipe
+    // and quick edits the run began with. Stale callbacks do nothing.
+    function replaceRecorder(from: typeof machine, id: number): void {
+        const held = owner.current;
+        if (held === null || held.machine !== from || held.runId !== id) return;
+        held.recorder.stop();
+        openRecorder(from, id, held.recipe, held.quickEdit);
+    }
+
+    useEffect(() => {
+        const started = recipeRef.current;
+        if (started === null) return;
+        const active = openRecorder(machine, runId, started, quickEditRef.current);
+        return () => {
+            active.stop();
+            // The retry may have replaced it; the replacement is ours too.
+            const held = owner.current;
+            if (held !== null && held.machine === machine && held.runId === runId) {
+                held.recorder.stop();
+                owner.current = null;
+            }
+        };
         // recipe via ref: a brew's recipe is fixed at start, and the identity
         // of the object should not restart the recorder on every render.
         // `runId` is what deliberately does restart it, for a second brew or a
@@ -309,7 +340,10 @@ export function useBrewRun(
           };
 
     async function brew(next: Recipe): Promise<void> {
-        await brewer.brew(next, protection.preflightRetry);
+        await brewer.brew(next, () => {
+            protection.preflightRetry();
+            replaceRecorder(machine, runId);
+        });
     }
 
     async function pauseBrew(): Promise<void> {
