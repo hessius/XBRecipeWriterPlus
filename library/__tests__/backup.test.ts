@@ -773,6 +773,72 @@ function backupFileWithBrewFields(extra: Record<string, unknown>): string {
 }
 
 describe("brew history through a backup", () => {
+    it("round trips pause intervals without changing the backup version", () => {
+        const pauseIntervals: NonNullable<BrewRecord["pauseIntervals"]> = [
+            {from: 0, to: 1000, pour: 0, reason: "manual"},
+            {from: 1000, to: 190_000, pour: 3, reason: "overflow"}
+        ];
+        const text = buildBackup([recipeNamed("A", "u1")], {}, "2.6.0",
+                                 [brewNamed("b1", {pauseIntervals})]);
+        expect(JSON.parse(text).version).toBe(1);
+        const result = parseBackup(text);
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews[0].pauseIntervals).toEqual(pauseIntervals);
+        expect(result.payload.skippedBrews).toBe(0);
+    });
+
+    it.each([undefined, []])("omits an empty or legacy pause list (%p)", (pauseIntervals) => {
+        const brew = reviveBrew(brewNamed("b1", {pauseIntervals}));
+        expect(brew).not.toBeNull();
+        expect(brew).not.toHaveProperty("pauseIntervals");
+    });
+
+    it.each([undefined, 0])("falls back to startedAt without first water (%p)", (pouringAt) => {
+        const pauseIntervals: NonNullable<BrewRecord["pauseIntervals"]> = [
+            {from: 190_000, to: 200_000, pour: 3, reason: "overflow"}
+        ];
+        expect(reviveBrew(brewNamed("b1", {pouringAt, pauseIntervals})))
+            .toMatchObject({pauseIntervals});
+    });
+
+    it.each([
+        ["null", null],
+        ["object", {}],
+        ["nested array", [[]]],
+        ["null entry", [null]],
+        ["missing field", [{from: 0, to: 1, pour: 1}]],
+        ["negative time", [{from: -1, to: 1, pour: 1, reason: "manual"}]],
+        ["backwards time", [{from: 2, to: 1, pour: 1, reason: "manual"}]],
+        ["nonfinite start", [{from: Infinity, to: 1, pour: 1, reason: "manual"}]],
+        ["nonfinite end", [{from: 0, to: NaN, pour: 1, reason: "manual"}]],
+        ["wrong reason", [{from: 0, to: 1, pour: 1, reason: "automatic"}]],
+        ["fractional pour", [{from: 0, to: 1, pour: 1.5, reason: "manual"}]],
+        ["unsafe pour", [{from: 0, to: 1, pour: Number.MAX_SAFE_INTEGER + 1, reason: "manual"}]],
+        ["negative pour", [{from: 0, to: 1, pour: -1, reason: "manual"}]],
+        ["pour beyond bypass", [{from: 0, to: 1, pour: 4, reason: "manual"}]],
+        ["end after brew", [{from: 0, to: 190_001, pour: 1, reason: "manual"}]],
+        ["overlap", [
+            {from: 0, to: 10, pour: 1, reason: "manual"},
+            {from: 9, to: 20, pour: 2, reason: "overflow"}
+        ]],
+        ["unsorted", [
+            {from: 10, to: 20, pour: 1, reason: "manual"},
+            {from: 0, to: 5, pour: 2, reason: "overflow"}
+        ]]
+    ])("rejects and reports a pause list with %s", (_label, pauseIntervals) => {
+        expect(reviveBrew({...brewNamed("b1"), pauseIntervals})).toBeNull();
+        const envelope = JSON.parse(backupFileWithBrewFields({pauseIntervals}));
+        envelope.brews.push(brewNamed("good"));
+        const result = parseBackup(JSON.stringify(envelope));
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews.map((brew) => brew.id)).toEqual(["good"]);
+        expect(result.payload.skippedBrews).toBe(1);
+        expect(result.payload.recipes).toHaveLength(1);
+        expect(result.payload.skipped).toBe(0);
+    });
+
     it("carries a rating and a note back out again", () => {
         const text = buildBackup([recipeNamed("A", "u1")], {}, "2.6.0",
                                  [brewNamed("b1", {rating: 4, note: "Too sour"})]);

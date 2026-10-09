@@ -9,6 +9,7 @@ import {
 } from "@/library/brew/brewPopulation";
 import type {BrewFailure} from "./machine/Machine";
 import {isRating} from "./brew/BrewRecord";
+import {isPauseIntervals} from "./brew/pauseIntervals";
 import {
     BEAN_FIELDS,
     isFermentation,
@@ -109,6 +110,8 @@ type BrewRow = {
     cupTotal: number;
     heldSeconds: number;
     pausedSeconds: number | null;
+    /** JSON, pause timing retained independently of the sample stream. */
+    pauseIntervals: string;
     /** JSON, one list of stalls per stage. `[]` on rows written before it. */
     stalls: string | null;
     /** JSON, the plan as it stood. `[]` on rows written before it. */
@@ -195,6 +198,7 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
                 cupTotal REAL NOT NULL,
                 heldSeconds INTEGER NOT NULL,
                 pausedSeconds INTEGER NOT NULL DEFAULT 0,
+                pauseIntervals TEXT NOT NULL DEFAULT '[]',
                 stalls TEXT NOT NULL DEFAULT '[]',
                 plan TEXT NOT NULL DEFAULT '[]',
                 stageWater TEXT NOT NULL DEFAULT '[]',
@@ -252,10 +256,12 @@ export function ensureBrewTables(db: SQLite.SQLiteDatabase): void {
     // pause existed should say. The sentinel and the truth coincide here, so
     // unlike `cupAtDrawdown` there is nothing for `hydrate` to translate back
     // into absence beyond omitting the key.
-    try {
+    const columns = db.getAllSync<{name: string}>("PRAGMA table_info(brews);");
+    if (!columns.some((column) => column.name === "pausedSeconds")) {
         db.execSync("ALTER TABLE brews ADD COLUMN pausedSeconds INTEGER NOT NULL DEFAULT 0;");
-    } catch {
-        // Already there.
+    }
+    if (!columns.some((column) => column.name === "pauseIntervals")) {
+        db.execSync("ALTER TABLE brews ADD COLUMN pauseIntervals TEXT NOT NULL DEFAULT '[]';");
     }
     // Rows written before the drawdown was measured keep the 0 default, which
     // `drawdownSeconds` reads as "not measured" rather than "no drawdown".
@@ -518,7 +524,8 @@ class BrewDatabase {
             `INSERT INTO brews (id, recipeUuid, recipeName, accent, startedAt, pouringAt,
                                 drawdownAt, cupAtDrawdown,
                                 endedAt, outcome, failure, pours, waterTotal, cupTotal,
-                                heldSeconds, pausedSeconds, stalls, plan, stageWater, bypass,
+                                heldSeconds, pausedSeconds, pauseIntervals,
+                                stalls, plan, stageWater, bypass,
                                 rating, note, pinned, watched,
                                 adjustedFromDose, adjustedFromRatio,
                                 adjustedFromGrind, adjustedTempOffset,
@@ -526,7 +533,7 @@ class BrewDatabase {
                                 grindSize, grinderRpm, grinderUsed,
                                 dialBefore, dialAfter, coffee, recipeUrl,
                                 origin, roast, process, fermentation, sentAt, hasStream)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
             [
                 record.id, record.recipeUuid, record.recipeName, record.accent,
@@ -539,6 +546,7 @@ class BrewDatabase {
                 record.endedAt, record.outcome, record.failure,
                 record.pours, record.waterTotal, record.cupTotal, record.heldSeconds,
                 record.pausedSeconds ?? 0,
+                JSON.stringify(record.pauseIntervals ?? []),
                 JSON.stringify(record.stalls ?? []),
                 JSON.stringify(record.plan ?? []),
                 JSON.stringify(record.stageWater ?? []),
@@ -1173,6 +1181,16 @@ class BrewDatabase {
 }
 
 function hydrate(row: BrewRow): StoredBrew {
+    let pauseIntervals: unknown;
+    try {
+        pauseIntervals = JSON.parse(row.pauseIntervals);
+    } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
+        throw new Error(`Invalid stored pauseIntervals for brew ${row.id}: invalid JSON.`);
+    }
+    if (!isPauseIntervals(pauseIntervals)) {
+        throw new Error(`Invalid stored pauseIntervals for brew ${row.id}: invalid intervals.`);
+    }
     const stalls = jsonOf<Stall[]>(row.stalls);
     const plan = jsonOf<PlanStage>(row.plan);
     const stageWater = jsonOf<number>(row.stageWater);
@@ -1199,6 +1217,7 @@ function hydrate(row: BrewRow): StoredBrew {
         // Emitted only when somebody paused, so an ordinary brew serialises
         // byte for byte the way it did before this column existed.
         ...((row.pausedSeconds ?? 0) > 0 ? {pausedSeconds: row.pausedSeconds ?? 0} : {}),
+        ...(pauseIntervals.length > 0 ? {pauseIntervals} : {}),
         ...(stalls.length > 0 ? {stalls} : {}),
         ...(plan.length > 0 ? {plan} : {}),
         ...(stageWater.length > 0 ? {stageWater} : {}),
