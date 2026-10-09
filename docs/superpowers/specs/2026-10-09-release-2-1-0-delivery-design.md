@@ -40,6 +40,12 @@ Physical verification remains required before shipping.
 
 ## Package 9: approved automatic overflow v1
 
+The later detailed design in
+`2026-10-09-custom-overflow-v1-design.md` supersedes this section's
+receiving-cup threshold wording. Protect the dripper using estimated retained
+water, with an explicit per-recipe limit. Collected coffee weight normally
+rises during drain-down and cannot be used as the resume-below-limit signal.
+
 ### Policy
 
 Protection is opt-in for a configured cup threshold and applies to

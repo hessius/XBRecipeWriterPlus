@@ -30,7 +30,7 @@ The package numbers refer to
 | 6: Quick edits | On main via #196/#197 | One-brew dose, ratio, grind and temperature offset; shared home/editor panel; changed keys only; comparison metadata in history. Check reset-to-baseline, discard-on-close, saturation, tea without ratio, grinder-off baseline, and the single editor BREW action. |
 | 7: Hardware spike | Initial questions answered via #198 | 40518 pauses, 40524 resumes without restarting; 8019 instead abandons the recipe for a water pour. Easy Mode batch behaviour documented. Pause latency, overshoot and reconnect survival still require measurement below. |
 | 8: Pause/resume | Prototype integrated from #202; hardware-blocked | Pause is acknowledged rather than inferred from ARMED; resume is optimistic; pause time is recorded, backed up and excluded from held-time/delay; paused readings are omitted; ladder/bypass remain in place. |
-| 9: Custom overflow protection | Approved v1; not implemented | Threshold-triggered automatic pause, with resume checks every 15/30/45 seconds (default 15). Extend while at/above threshold; resume and re-arm on a fresh below-threshold reading. Include live UI, graph intervals and ladder state. Hardware verification gates release, not development. |
+| 9: Custom overflow protection | Detailed v1 design approved; not implemented | Protect the dripper using estimated retained water (brew water minus collected coffee), not receiving-cup weight. Explicit per-recipe limit beside OTHER controls; check every 15/30/45 seconds, default 15. Extend while high/unavailable; resume and re-arm when freshly below. Manual RESUME overrides protection for that brew. Include UI, graph and ladder state. Hardware verification gates release, not development. |
 | 10: Easy Mode slots | Promoted to implementation scope on 2026-10-09 | Ship a dedicated three-slot screen, recipe-context entry and library markers. Warn that every write replaces all three slots and leaves the machine in EASY. Slots are write-only, so last-written state must not imply read-back verification. Detailed design and implementation remain to be completed. |
 
 ## Additional 2.0 feedback and integration changes
@@ -106,6 +106,11 @@ initiation: keep XBRW++ open because leaving/closing the app disables protection
 Use persistent inline copy, not a confirmation or extra tap. Include phone
 locking/backgrounding in coverage; internal app navigation must preserve the
 live owner's protection. Foreground recovery must not issue stale resumes.
+
+The detailed package 9 design is
+`docs/superpowers/specs/2026-10-09-custom-overflow-v1-design.md`.
+It corrects earlier receiving-cup wording: collected coffee normally rises
+during drain-down; the dripper's retained-water estimate can fall.
 
 ## Automated validation
 
