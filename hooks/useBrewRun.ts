@@ -308,6 +308,10 @@ export function useBrewRun(
             })
           };
 
+    async function brew(next: Recipe): Promise<void> {
+        await brewer.brew(next, protection.preflightRetry);
+    }
+
     async function pauseBrew(): Promise<void> {
         protection.manualPause();
         await brewer.pauseBrew();
@@ -328,7 +332,7 @@ export function useBrewRun(
         // the brewer's raw one, is what callers should see.
         ...brewer, phase, samples, pauseIntervals, elapsed, stageElapsed, activeIndex, holding,
         heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
-        overflow: protection.overflow, pauseBrew, resumeBrew, cancelBrew
+        overflow: protection.overflow, brew, pauseBrew, resumeBrew, cancelBrew
     };
 }
 

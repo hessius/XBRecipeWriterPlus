@@ -7,12 +7,16 @@
  * nothing changed in between. The retry is deliberately narrow, and these
  * cases are mostly about what it refuses to retry.
  */
-import {act, renderHook} from "@testing-library/react-native";
+import {act, cleanup, renderHook} from "@testing-library/react-native";
+import {AppState, type AppStateStatus} from "react-native";
 
 import {useBrew} from "@/hooks/useBrew";
+import {useBrewRun} from "@/hooks/useBrewRun";
 import {BluetoothPermissionError, RadioUnavailableError} from "@/library/machine/errors";
-import type Machine from "@/library/machine/Machine";
+import Machine from "@/library/machine/Machine";
 import type {BrewPhase} from "@/library/machine/Machine";
+import {FakeTransport, machineInfoFrame} from "@/library/machine/__tests__/FakeTransport";
+import {event, float32, notification, status} from "@/library/machine/__tests__/protocolFixtures";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
 
@@ -21,11 +25,12 @@ jest.mock("@/hooks/useSetting", () => ({
 }));
 
 const mockConnect = jest.fn(async () => {});
+let mockSharedMachine: Machine;
 
 jest.mock("@/hooks/useMachine", () => ({
     __esModule: true,
     useMachine: (injected: unknown) => ({
-        machine: injected,
+        machine: injected ?? mockSharedMachine,
         connect: mockConnect,
         status: "connected",
         error: null,
@@ -135,6 +140,175 @@ describe("a brew that failed on the link", () => {
         await run(machine);
 
         expect(machine.attempts).toBe(2);
+    });
+});
+
+describe("overflow protection through useBrew's real preflight retry", () => {
+    const appStateDescriptor = Object.getOwnPropertyDescriptor(AppState, "currentState")!;
+    let appListeners: Set<(state: AppStateStatus) => void>;
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        Object.defineProperty(AppState, "currentState", {configurable: true, value: "active"});
+        appListeners = new Set();
+        jest.spyOn(AppState, "addEventListener").mockImplementation((_event, listener) => {
+            appListeners.add(listener);
+            return {remove: () => { appListeners.delete(listener); }};
+        });
+    });
+
+    afterEach(async () => {
+        await cleanup();
+        jest.restoreAllMocks();
+        mockConnect.mockReset();
+        Object.defineProperty(AppState, "currentState", appStateDescriptor);
+        jest.useRealTimers();
+    });
+
+    async function setup(block?: "noVitals" | "notConnected", configured = true) {
+        const transport = new FakeTransport();
+        const machine = new Machine(transport, {frameGapMs: 0, infoWaitMs: 1});
+        await machine.connect("AA:BB");
+        mockSharedMachine = machine;
+        mockConnect.mockImplementation(async () => { await machine.connect("AA:BB"); });
+        const r = brewable();
+        r.cupType = 1;
+        r.dosage = 15;
+        r.ratio = 16;
+        r.grindSize = 60;
+        r.pours[0].flowRate = 30;
+        if (configured) r.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
+        const phases: BrewPhase[] = [];
+        machine.onPhase(phase => {
+            phases.push(phase);
+            if (phase.name === "failed" && phase.reason === "blocked") {
+                transport.infoReply = machineInfoFrame();
+                if (configured) r.overflowProtection = {retainedGrams: 200, checkSeconds: 45};
+            }
+        });
+        if (block === "noVitals") {
+            machine.info = null;
+            transport.infoReply = null;
+        } else if (block === "notConnected") {
+            // Lose the link during the real preflight question, before brewBlock.
+            jest.spyOn(machine, "askHowItIsDoing").mockImplementationOnce(async () => {
+                transport.drop();
+                return false;
+            });
+        }
+        const pause = jest.spyOn(machine, "pauseBrew");
+        const resume = jest.spyOn(machine, "resumeBrew");
+        const store = {insert: jest.fn()};
+        const hook = await renderHook(() => useBrewRun(r, store, 7));
+        return {transport, machine, r, phases, pause, resume, ...hook};
+    }
+
+    async function pair(transport: FakeTransport, water = 100, cup = 0) {
+        await act(async () => {
+            transport.emit(notification(0x4B, 0x9E, float32(water * 1000)));
+            transport.emit(notification(0x15, 0x9E, float32(cup)));
+        });
+    }
+
+    async function advance(ms: number) {
+        await act(async () => { await jest.advanceTimersByTimeAsync(ms); });
+    }
+
+    it.each(["noVitals", "notConnected"] as const)(
+        "protects the successful second attempt after %s on the same machine/runId", async block => {
+            const h = await setup(block);
+            const attempts = jest.spyOn(h.machine, "brew");
+            const disconnect = jest.spyOn(h.machine, "disconnect");
+            await act(async () => {
+                const brewing = h.result.current.brew(h.r);
+                await jest.advanceTimersByTimeAsync(100);
+                await brewing;
+            });
+            expect(h.phases).toContainEqual(expect.objectContaining({
+                name: "failed", reason: "blocked", block
+            }));
+            expect(attempts).toHaveBeenCalledTimes(2);
+            expect(disconnect).toHaveBeenCalledTimes(1);
+            expect(h.result.current.error).toBeNull();
+            expect(h.transport.sent.filter(code => code === 8002)).toHaveLength(1);
+            expect(h.result.current.machine).toBe(h.machine);
+            const retriedSnapshot = h.result.current.overflow;
+            await act(async () => {
+                h.transport.emit(status(0x22));
+                h.transport.emit(event(40507));
+            });
+            await pair(h.transport);
+            await advance(500);
+            await pair(h.transport);
+            expect(h.pause).toHaveBeenCalledTimes(1);
+            expect(h.pause).toHaveBeenCalledWith("overflow");
+            expect(retriedSnapshot).toEqual({
+                mode: "armed", retainedGrams: null, nextCheckAt: null, telemetryAvailable: false
+            });
+            expect(h.result.current.overflow?.mode).toBe("requesting");
+            await act(async () => { h.transport.emit(event(40515)); });
+            expect(h.result.current.overflow?.nextCheckAt).toBe(Date.now() + 15_000);
+        }
+    );
+
+    it.each(["noVitals", "notConnected"] as const)(
+        "keeps an unconfigured %s retry without a protection owner", async block => {
+            const h = await setup(block, false);
+            await act(async () => {
+                const brewing = h.result.current.brew(h.r);
+                await jest.advanceTimersByTimeAsync(100);
+                await brewing;
+                h.transport.emit(event(40507));
+            });
+            await pair(h.transport);
+            await advance(500);
+            await pair(h.transport);
+            expect(h.result.current.overflow).toBeUndefined();
+            expect(appListeners.size).toBe(0);
+            expect(h.pause).not.toHaveBeenCalled();
+            expect(h.transport.sent.filter(code => code === 8002)).toHaveLength(1);
+        }
+    );
+
+    it.each(["background", "lostContact"] as const)(
+        "does not re-arm after %s during an actual brew", async reason => {
+            const h = await setup();
+            await act(async () => {
+                await h.result.current.brew(h.r);
+                h.transport.emit(event(40507));
+                if (reason === "background") {
+                    appListeners.forEach(listener => listener("inactive"));
+                    appListeners.forEach(listener => listener("active"));
+                } else {
+                    h.transport.drop();
+                    await h.machine.connect("AA:BB");
+                }
+                h.transport.emit(event(40507));
+            });
+            await pair(h.transport);
+            await advance(500);
+            await pair(h.transport);
+            expect(h.result.current.overflow?.disabledReason).toBe(reason);
+            expect(h.pause).not.toHaveBeenCalled();
+            expect(h.resume).not.toHaveBeenCalled();
+        }
+    );
+
+    it("keeps an actual recipe-send fault ended and visible without an automatic retry", async () => {
+        const h = await setup();
+        const attempts = jest.spyOn(h.machine, "brew");
+        h.transport.failWriteOf = {code: 8001, reason: "recipe write failed"};
+        await act(async () => { await h.result.current.brew(h.r); });
+        expect(attempts).toHaveBeenCalledTimes(1);
+        expect(mockConnect).not.toHaveBeenCalled();
+        expect(h.result.current.error).toBe("recipe write failed");
+        expect(h.machine.phase).toMatchObject({name: "failed", reason: "rejected"});
+        await act(async () => { h.transport.emit(event(40507)); });
+        await pair(h.transport);
+        await advance(500);
+        await pair(h.transport);
+        expect(h.result.current.overflow?.mode).toBe("ended");
+        expect(h.pause).not.toHaveBeenCalled();
     });
 });
 

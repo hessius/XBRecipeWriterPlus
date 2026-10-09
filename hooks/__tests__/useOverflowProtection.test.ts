@@ -68,6 +68,59 @@ afterEach(async () => {
 });
 
 describe("useOverflowProtection", () => {
+    it("replaces preflight ownership synchronously with the fixed run config and no stale phase", async () => {
+        const h = machine();
+        const intervals = jest.spyOn(global, "setInterval");
+        const {result, rerender} = await renderHook(
+            (props: {config: OverflowProtection}) =>
+                useOverflowProtection({machine: h.link, ...props, runId: 1}),
+            {initialProps: {config}}
+        );
+        await h.phase({name: "failed", reason: "blocked", block: "noVitals"});
+        expect(result.current.overflow?.mode).toBe("ended");
+        await rerender({config: {retainedGrams: 200, checkSeconds: 45}});
+        h.link.phase = pouring;
+        await act(async () => { result.current.preflightRetry(); });
+        expect(result.current.overflow).toEqual({
+            mode: "armed", retainedGrams: null, nextCheckAt: null, telemetryAvailable: false
+        });
+        expect(h.notifications.size).toBe(1);
+        expect(h.phases.size).toBe(1);
+        expect(appListeners.size).toBe(1);
+        expect(intervals).toHaveBeenCalledTimes(1);
+        await h.pair();
+        await advance(500);
+        await h.pair();
+        expect(h.link.pauseBrew).not.toHaveBeenCalled();
+        await h.phase(pouring);
+        await advance(250);
+        await h.pair();
+        await advance(500);
+        await h.pair();
+        expect(h.link.pauseBrew).toHaveBeenCalledTimes(1);
+        await h.phase(paused);
+        expect(result.current.overflow?.nextCheckAt).toBe(Date.now() + 15_000);
+    });
+
+    it("does not let an earlier attempt's retry reset a newer disabled run", async () => {
+        const h = machine();
+        const {result, rerender} = await renderHook(
+            ({runId}: {runId: number}) => useOverflowProtection({machine: h.link, config, runId}),
+            {initialProps: {runId: 1}}
+        );
+        const earlierRetry = result.current.preflightRetry;
+        await rerender({runId: 2});
+        await h.phase(pouring);
+        await appState("inactive");
+        await appState("active");
+        await act(async () => { earlierRetry(); });
+        expect(result.current.overflow?.disabledReason).toBe("background");
+        await h.pair();
+        await advance(500);
+        await h.pair();
+        expect(h.link.pauseBrew).not.toHaveBeenCalled();
+    });
+
     it("uses raw pairs, waits for confirmation, then resumes only on fresh sustained drainage", async () => {
         const h = machine();
         const {result} = await renderHook(() => useOverflowProtection({
@@ -219,14 +272,21 @@ describe("useOverflowProtection", () => {
         await h.pair();
         expect(h.link.pauseBrew).toHaveBeenCalledTimes(1);
         await h.phase(paused);
-        await rerender({config, runId: 2});
+        await rerender({config: {retainedGrams: 200, checkSeconds: 45}, runId: 2});
         expect(result.current.overflow?.mode).not.toBe("holding");
         expect(h.notifications.size).toBe(1);
         await h.phase(pouring);
         await h.pair();
         await advance(500);
         await h.pair();
+        expect(h.link.pauseBrew).toHaveBeenCalledTimes(1);
+        await advance(250);
+        await h.pair(250);
+        await advance(500);
+        await h.pair(250);
         expect(h.link.pauseBrew).toHaveBeenCalledTimes(2);
+        await h.phase(paused);
+        expect(result.current.overflow?.nextCheckAt).toBe(Date.now() + 45_000);
     });
 
     it("disposes pending native work, timers and even queued callbacks on unmount", async () => {

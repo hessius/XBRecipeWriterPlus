@@ -587,6 +587,13 @@ a second schema query. Add `pauseIntervals: string` to BrewRow.
   fixed-run config in a ref updated in an earlier effect, matching the existing
   recipe/quick-edit pattern. Do not register a controller when config is absent.
   Store the controller handle in a ref only for event-handler access.
+  `useBrew` also retries preflight `noVitals`/`notConnected` failures within the
+  same machine/runId. Notify protection after relinking has disconnected and
+  before the second attempt starts: dispose the spent controller and create a
+  fresh one synchronously, retaining the run's fixed config and subscriptions.
+  Ignore stale retry callbacks from other machines/runs and wait for newly heard
+  phases, never inheriting `machine.phase`. Actual brew faults and background/
+  lost-contact invalidation do not re-arm from later phase telemetry.
 
 Commands must go directly to the machine:
 
