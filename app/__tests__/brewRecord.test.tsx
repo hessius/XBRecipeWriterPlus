@@ -25,7 +25,7 @@ import {
     type BrewRecordOpenResult
 } from "@/test-utils/brewRecordMocks";
 import type {StoredBrew} from "@/library/BrewDatabase";
-import type Recipe from "@/library/Recipe";
+import Recipe from "@/library/Recipe";
 import Pour, {AGITATION, POUR_PATTERN} from "@/library/Pour";
 import {planFromPours} from "@/library/brew/BrewRecord";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
@@ -233,6 +233,72 @@ describe("brew record", () => {
         expect(screen.getByText("244")).toBeTruthy();
     });
 
+    it("captures recorded dose and ratio even when the recipe was deleted", async () => {
+        mockOpened = {
+            record: {...record, dose: 15, ratio: 16},
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={noRecipeLookup} />);
+
+        const capture = within(screen.getByTestId("brew-capture"));
+        const context = within(capture.getByTestId("brew-recipe-context"));
+        expect(context.getByText("15 G")).toBeTruthy();
+        expect(context.getByText("1:16")).toBeTruthy();
+    });
+
+    it("does not borrow dose or ratio from a surviving recipe for an old record", async () => {
+        const savedRecipe = new Recipe();
+        savedRecipe.dosage = 20;
+        savedRecipe.ratio = 18;
+        await renderWithProviders(
+            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => savedRecipe)}} />
+        );
+
+        expect(within(screen.getByTestId("brew-capture"))
+            .queryByTestId("brew-recipe-context")).toBeNull();
+    });
+
+    it("keeps recorded dose and ratio independent of the current saved recipe", async () => {
+        mockOpened = {
+            record: {...record, dose: 15, ratio: 16},
+            samples: []
+        };
+        const savedRecipe = new Recipe();
+        savedRecipe.dosage = 20;
+        savedRecipe.ratio = 18;
+        await renderWithProviders(
+            <BrewRecord recipeLookup={{getRecipe: jest.fn(() => savedRecipe)}} />
+        );
+
+        const context = within(within(screen.getByTestId("brew-capture"))
+            .getByTestId("brew-recipe-context"));
+        expect(context.getByText("15 G")).toBeTruthy();
+        expect(context.getByText("1:16")).toBeTruthy();
+        expect(context.queryByText("20 G")).toBeNull();
+        expect(context.queryByText("1:18")).toBeNull();
+    });
+
+    it("captures edited dose and ratio comparisons once in the recipe context", async () => {
+        mockOpened = {
+            record: {
+                ...record, dose: 16, ratio: 17,
+                adjustedFromDose: 15, adjustedFromRatio: 16
+            },
+            samples: []
+        };
+        await renderWithProviders(<BrewRecord recipeLookup={noRecipeLookup} />);
+
+        const capture = within(screen.getByTestId("brew-capture"));
+        const context = within(capture.getByTestId("brew-recipe-context"));
+        expect(context.getByText("16 G")).toBeTruthy();
+        expect(context.getByText("1:17")).toBeTruthy();
+        expect(context.getAllByText("RECIPE 15")).toHaveLength(1);
+        expect(context.getAllByText("RECIPE 1:16")).toHaveLength(1);
+        expect(capture.queryByTestId("figures-adjusted-dose")).toBeNull();
+        expect(capture.queryByTestId("figures-adjusted-ratio")).toBeNull();
+        expect(capture.queryByTestId("figures-adjustments-row")).toBeNull();
+    });
+
     it("does not call normal drawdown time a delay", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
         expect(screen.queryByText(/\+14 S/)).toBeNull();
@@ -414,12 +480,20 @@ describe("brew record", () => {
         };
         await renderWithProviders(<BrewRecord recipeLookup={mockLookup} />);
 
-        expect(summaryProps.adjustments).toEqual({
-            dose:        {value: 20, from: 18},
-            ratio:       {value: 18, from: 16},
-            grind:       {value: 61, from: 50},
-            temperature: {offset: 2, temperatures: [90, 92]}
-        });
+        const capture = within(screen.getByTestId("brew-capture"));
+        const context = within(capture.getByTestId("brew-recipe-context"));
+        expect(context.getByText("20 G")).toBeTruthy();
+        expect(context.getByText("1:18")).toBeTruthy();
+        expect(context.getByText("RECIPE 18")).toBeTruthy();
+        expect(context.getByText("RECIPE 1:16")).toBeTruthy();
+        expect(capture.getByTestId("figures-adjusted-grind")).toBeTruthy();
+        expect(capture.getByLabelText("Grind, 61, recipe 50")).toBeTruthy();
+        expect(capture.getByTestId("figures-adjusted-temperature")).toBeTruthy();
+        expect(capture.getByLabelText(
+            "Temperature, 90, 92 degrees, offset +2 degrees"
+        )).toBeTruthy();
+        expect(capture.queryByTestId("figures-adjusted-dose")).toBeNull();
+        expect(capture.queryByTestId("figures-adjusted-ratio")).toBeNull();
     });
 
     it("hands a saturating temperature quick edit to the summary as used temperatures", async () => {
@@ -1573,11 +1647,15 @@ describe("brew record's story card", () => {
         await openCard(375);
 
         expect(summaryProps.adjustments).toEqual({
-            dose:        {value: 31, from: 31},
-            ratio:       {value: 100, from: 100},
             grind:       {value: 81, from: 81},
             temperature: {offset: 60, temperatures: [39, 60, 80, 99]}
         });
+        const card = within(screen.getByTestId("brew-story-card"));
+        const context = within(card.getByTestId("brew-recipe-context"));
+        expect(context.getByText("31 G")).toBeTruthy();
+        expect(context.getByText("1:100")).toBeTruthy();
+        expect(card.queryByTestId("figures-adjusted-dose")).toBeNull();
+        expect(card.queryByTestId("figures-adjusted-ratio")).toBeNull();
         expect(screen.getAllByText("39 to 99").length).toBeGreaterThan(0);
         expect(screen.getAllByText("OFFSET +60").length).toBeGreaterThan(0);
         fontScale.mockRestore();

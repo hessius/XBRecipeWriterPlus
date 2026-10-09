@@ -342,30 +342,22 @@ describe("BrewFigures", () => {
             <BrewFigures contentWidth={DEFAULT_CONTENT_WIDTH}
                          water={240} cup={200} seconds={140} accent={TEST_ACCENT}
                          adjustments={{
-                             dose:        {value: 20, from: 18},
-                             ratio:       {value: 18, from: 16},
                              grind:       {value: 61, from: 50},
                              temperature: {offset: 2, temperatures: [90, 92]}
                          }} />
         );
 
         expect(screen.getByTestId("figures-adjustments-row")).toBeTruthy();
-        expect(screen.getByTestId("figures-adjusted-dose-recipe"))
+        expect(screen.getByTestId("figures-adjusted-grind-recipe"))
             .toHaveStyle({borderStyle: "dashed"});
-        expect(screen.getByText("DOSE")).toBeTruthy();
-        expect(screen.getByText("20")).toBeTruthy();
-        expect(screen.getByText("RECIPE 18")).toBeTruthy();
-        expect(screen.getByText("RATIO")).toBeTruthy();
-        expect(screen.getByText("1:18")).toBeTruthy();
-        expect(screen.getByText("RECIPE 16")).toBeTruthy();
+        expect(screen.queryByTestId("figures-adjusted-dose")).toBeNull();
+        expect(screen.queryByTestId("figures-adjusted-ratio")).toBeNull();
         expect(screen.getByText("TEMP")).toBeTruthy();
         expect(screen.getByText("90, 92")).toBeTruthy();
         expect(screen.getByText("OFFSET +2")).toBeTruthy();
         expect(screen.getByText("GRIND")).toBeTruthy();
         expect(screen.getByText("61")).toBeTruthy();
         expect(screen.getByText("RECIPE 50")).toBeTruthy();
-        expect(screen.getByLabelText("Dose, 20 grams, recipe 18 grams")).toBeTruthy();
-        expect(screen.getByLabelText("Ratio, 1:18, recipe 1:16")).toBeTruthy();
         expect(screen.getByLabelText(
             "Temperature, 90, 92 degrees, offset +2 degrees"
         )).toBeTruthy();
@@ -396,8 +388,6 @@ describe("BrewFigures", () => {
         mockWindowFontScale(DOTO_MAX_FONT_SCALE);
         const contentWidth = 375 - 56;
         const adjustments = {
-            dose:        {value: 20, from: 18},
-            ratio:       {value: 18, from: 16},
             grind:       {value: 61, from: 50},
             temperature: {offset: -2, temperatures: [88, 86, 84]}
         };
@@ -413,7 +403,7 @@ describe("BrewFigures", () => {
                          adjustments={adjustments} />
         );
 
-        expect(screen.getByTestId("figures-adjusted-dose"))
+        expect(screen.getByTestId("figures-adjusted-grind"))
             .toHaveStyle({width: expectedWidth});
         expect(screen.getByTestId("figures-adjusted-temperature"))
             .toHaveStyle({width: expectedWidth});

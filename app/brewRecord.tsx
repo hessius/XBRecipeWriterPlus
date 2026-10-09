@@ -67,13 +67,6 @@ function quickEditFigures(
 ): BrewFigureAdjustments | undefined {
     const adjustments: BrewFigureAdjustments = {};
 
-    if (record.adjustedFromDose !== undefined && record.dose !== undefined) {
-        adjustments.dose = {value: record.dose, from: record.adjustedFromDose};
-    }
-
-    if (record.adjustedFromRatio !== undefined && record.ratio !== undefined) {
-        adjustments.ratio = {value: record.ratio, from: record.adjustedFromRatio};
-    }
     if (record.adjustedFromGrind !== undefined && record.grindSize !== undefined) {
         adjustments.grind = {
             value:     record.grindSize,
@@ -379,6 +372,12 @@ export default function BrewRecord({recipeLookup}: Props) {
     // figures out a second time.
     const summary = {
         recipeName:        record.recipeName,
+        recipeInputs:      {
+            dose:              record.dose,
+            ratio:             record.ratio,
+            adjustedFromDose:  record.adjustedFromDose,
+            adjustedFromRatio: record.adjustedFromRatio
+        },
         hasStream:         record.hasStream,
         samples,
         stages,
