@@ -58,7 +58,7 @@ it("shows invalid incoming route data explicitly instead of seeding an invented 
     expect(screen.queryByText(/Choose a slot for/i)).toBeNull();
 });
 
-it.each(["uuid", "grindRPM", "grinder", "cupType", "bypassEnabled"])("refuses incoming recipes missing %s instead of inventing defaults", async (field) => {
+it.each(["uuid", "dosage", "grindRPM", "grinder", "cupType", "bypassEnabled"])("refuses incoming recipes missing %s instead of inventing defaults", async (field) => {
     const json = JSON.parse(JSON.stringify(mockAllRecipes[0]));
     delete json[field];
     mockParams = {recipeJSON: JSON.stringify(json)};

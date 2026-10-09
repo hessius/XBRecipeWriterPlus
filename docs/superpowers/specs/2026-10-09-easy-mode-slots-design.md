@@ -9,12 +9,11 @@ Own slot assignments, persistence, a dedicated A/B/C screen, recipe-context
 entry and library markers. No changes to NFC bytes, Recipe serialization,
 backup structures or the brew lifecycle.
 
-The pause/overflow session remains the named owner of `Machine.ts`,
-`protocol.ts` and global machine-operation exclusion. This session builds a
-typed slot port and scripted implementation tests, not an alternative machine
-state machine. Production transport wiring requires coordination with that
-owner. Until the agreed port is installed, real writes are explicitly blocked.
-This is an integration gate, not a finished production writer.
+The agreed bounded Machine/Transport port is installed by the shared owner
+before exposing Machine or opening a link. It is not an alternative machine
+state machine and does not change the pause/overflow owner's signatures. Real
+writes use this port; the unavailable port remains a typed fallback for consumers
+without an installed owner. Hardware gates below remain open.
 
 Do not merge into main, open a PR, request automated review or deploy.
 
@@ -25,7 +24,12 @@ complete replacement set; a per-recipe direct write would misrepresent the
 batch-of-three requirement.
 
 Use existing ScreenHeader, Tamagui controls, XbrwSheet and the central palette.
-The screen scrolls independently of its bottom write action. No new native
+The cards scroll independently of the bottom warning/action area. The complete
+overwrite warning is outside the card scroll, beside WRITE or recovery. The
+action area's height is bounded to 60% with intrinsic text/button sizing; at
+large text its contents scroll together, without clipping the warning or
+detaching a pinned button from it. This is the large-text fallback, not a
+confirmation or extra tap. Native layout checks remain required. No new native
 dependencies or changes to the existing sheet/navigation idiom.
 
 The machine panel offers an Easy Mode entry. Recipe actions in the library and
@@ -77,7 +81,9 @@ to list cards and shelf tiles from one shared slot read, not per-row SQL.
 
 New SQLite storage uses the existing `appDatabase()` connection and database
 file. Store drafts, last-written snapshots and an incomplete journal per
-remembered BLE device ID. Empty/unpaired identity has no writable machine set.
+BLE device ID. Remembered identity may select assignments while disconnected;
+sends always use the actual connected ID and reported serial. Empty/unpaired
+identity has no writable machine set.
 
 Bind a transaction to the reported machine serial when available. A conflicting
 serial blocks continuation. Never move a pending journal to another device,
@@ -102,6 +108,10 @@ does not establish equivalent tea/bypass behaviour. Do not silently omit an
 unsupported part of a recipe. These restrictions were explicitly approved.
 
 Reuse `brewProblems` and require finite, valid values for every encoded field.
+`readSlotRecipe` validates raw dosage against DOSE bounds before constructing a
+Recipe, for both incoming route JSON and persisted snapshots. Missing, null,
+zero, malformed and out-of-range dose must never become the constructor's
+15 g default. This does not change Recipe's own legacy migrations.
 Prepare all three blobs before sending A. Flags are `0x02`, proven to defer to
 the blob's grinder byte; grinder off therefore comes from the existing `0xFE`
 encoder sentinel. No speculative `0x04`, scale toggle, PRO switch or `11512`
@@ -136,11 +146,22 @@ specific integration block before journal creation or radio use.
 
 ### Bounded production-port clarification (2026-10-09)
 
-`installMachineSlotPort` is implemented separately from the approved domain/UI.
-Its early shared-owner installation, app-state forwarding and settings-forget
-notification contract are recorded in the package 10 handoff in
-`docs/release-2.1.0-changes.md`; route-effect installation is insufficient.
-The route remains unavailable until that owner/UI work is wired.
+`sharedMachine()` installs `installMachineSlotPort(machine, sharedSlotDatabase())`
+before assigning the singleton. The same owner holds the port/database and one
+AppState listener across navigation. Initial and current app state are forwarded
+before background disconnect logic; inactive, background and unknown state
+invalidate slot leases, while foreground never replays frames. The existing
+active-brew link retention remains unchanged.
+
+The route receives the installed port through `useMachine`, uses a readonly copy
+of `machine.slotIdentity` for sends and disables WRITE/recovery for held or
+active brews and conflicting serials. Remembered settings are not radio
+authority. Forget checks actual and remembered targets before disconnect or
+settings cleanup, notifies on refusal and preserves the journal. Ambient brew
+configuration refuses slot locks through the standard notification path, with
+no deferred settings replay or automatic brew reconnect retry. Settings are
+reapplied on an explicit new brew only. The package 10 finalization evidence is
+recorded in `docs/release-2.1.0-changes.md`.
 
 Command 11510's receipt status is byte 9 (C2 ACK), as documented in
 brAzzi64/xbloom-ble's PROTOCOL.md notification format; it carries no slot index.

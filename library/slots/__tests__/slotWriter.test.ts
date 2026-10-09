@@ -59,6 +59,23 @@ it("persists before sending A/B/C and only promotes after final machine evidence
     expect(store.read("one").journal).toBeNull();
 });
 
+it("captures an immutable target before awaiting acquisition instead of journaling a retargeted caller", async () => {
+    const {store} = ready();
+    const script = scripted(store);
+    const target = {...identity};
+    const acquire = script.port.acquire;
+    script.port.acquire = async (bound) => {
+        const lease = await acquire(bound);
+        target.deviceId = "different";
+        target.serial = "changed";
+        return lease;
+    };
+    await expect(writeSlots(store, target, script.port)).resolves.toBeUndefined();
+    expect(store.read("one").written).not.toBeNull();
+    expect(store.read("different").journal).toBeNull();
+    expect(script.sent).toEqual([0, 1, 2]);
+});
+
 it("does not create a journal for invalid sets or the unavailable production port", async () => {
     const {store} = ready();
     await expect(writeSlots(store, identity, unavailableSlotPort)).rejects.toThrow(/integrat/i);

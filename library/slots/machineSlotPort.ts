@@ -149,8 +149,9 @@ export function installMachineSlotPort(machine: Machine, store: SlotDatabase): S
         available: true,
         acquire: async (identity) => {
             // Synchronous exclusion and identity checks: never wait for a brew.
-            const session = machine.acquireSlotSession(identity);
-            return new MachineSlotLease(machine, store, identity, session);
+            const bound = Object.freeze({...identity});
+            const session = machine.acquireSlotSession(bound);
+            return new MachineSlotLease(machine, store, bound, session);
         }
     };
 }

@@ -5,7 +5,7 @@ import {pushPrepared} from "@/hooks/steadyRouter";
 import {notify} from "@/components/XbrwToast";
 import {SlotDatabase} from "@/library/slots/SlotDatabase";
 import {
-    emptySlotRecord, objectValue, readSnapshot, snapshotRecipe, type SlotIndex, type SlotRecord
+    emptySlotRecord, readSlotRecipe, snapshotRecipe, type SlotIndex, type SlotRecord
 } from "@/library/slots/slotModel";
 import {
     recoverSlots, writeSlots, unavailableSlotPort, type SlotIdentity, type SlotPort
@@ -60,13 +60,7 @@ export function incomingEasyModeRecipe(value: string | string[] | undefined): {
     if (value === undefined) return {error: null};
     try {
         if (typeof value !== "string") throw new Error("Supply one recipe.");
-        const parsed: unknown = JSON.parse(value);
-        if (!objectValue(parsed) || typeof parsed.uuid !== "string" || parsed.uuid.trim() === ""
-            || !Array.isArray(parsed.pours)) {
-            throw new Error("The recipe identity or stages are missing.");
-        }
-        const recipe = new Recipe(undefined, value);
-        readSnapshot({...snapshotRecipe(recipe), recipeJSON: value});
+        const recipe = readSlotRecipe(value);
         return {recipe, error: null};
     } catch (error) {
         return {error: `Incoming recipe could not be opened: ${

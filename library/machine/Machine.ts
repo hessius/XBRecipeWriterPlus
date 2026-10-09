@@ -9,7 +9,7 @@ import type Recipe from "@/library/Recipe";
 import type {SlotDatabase} from "@/library/slots/SlotDatabase";
 import type {SlotIdentity} from "@/library/slots/slotWriter";
 
-import {RadioUnavailableError} from "./errors";
+import {RadioUnavailableError, SlotOperationError} from "./errors";
 
 import {frameLogText, historyLine} from "./frameLog";
 import {
@@ -306,23 +306,21 @@ export default class Machine {
         const deviceId = this.transport.connectedDeviceId;
         if (!this.isConnected() || deviceId == null || deviceId !== this.connectedId) return null;
         const serial = this.info?.serial.trim();
-        return {deviceId, serial: serial === undefined || serial === "" ? null : serial};
+        return Object.freeze({deviceId, serial: serial === undefined || serial === "" ? null : serial});
     }
 
-    setAppState(state: string): void {
-        if (state === "background") this.backgrounded = true;
-        else if (state === "active") this.backgrounded = false;
-        else return;
+    setAppState(state: string | null): void {
+        this.backgrounded = state !== "active";
         if (this.backgrounded) this.slotSession?.invalidate(
             new Error("Easy Mode writing stopped because the app entered the background.")
         );
     }
 
     assertCanForgetDevice(deviceId: string): void {
-        if (this.slotStore === undefined) throw new Error("Install the shared Easy Mode database first.");
+        if (this.slotStore === undefined) return;
         if (this.slotStore.read(deviceId).journal !== null
             || (this.slotSession !== null && this.slotIdentity?.deviceId === deviceId)) {
-            throw new Error("Finish the incomplete Easy Mode write before forgetting this machine.");
+            throw new SlotOperationError("Finish the incomplete Easy Mode write before forgetting this machine.");
         }
     }
 
@@ -336,7 +334,7 @@ export default class Machine {
         const ids = [this.connectedId, this.transport.connectedDeviceId];
         if (this.slotSession !== null || ids.some((id) => id != null
             && this.slotStore?.read(id).journal != null)) {
-            throw new Error("Finish the incomplete Easy Mode write before using the machine.");
+            throw new SlotOperationError("Finish the incomplete Easy Mode write before using the machine.");
         }
     }
 

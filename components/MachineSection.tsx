@@ -7,6 +7,7 @@ import SettingsActionRow from "@/components/SettingsActionRow";
 import SettingsChoiceRow from "@/components/SettingsChoiceRow";
 import SettingsSection from "@/components/SettingsSection";
 import SettingsToggleRow from "@/components/SettingsToggleRow";
+import {notify} from "@/components/XbrwToast";
 import {palette} from "@/constants/colors";
 import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
@@ -95,7 +96,9 @@ export default function MachineSection({settings}: {settings?: Settings}) {
     // since then still reads Low here, and only a relaunch clears it.
     useEffect(() => {
         if (status !== "connected") return;
-        machine.askHowItIsDoing().catch(() => {});
+        machine.askHowItIsDoing().catch((error: unknown) => {
+            notify({tone: "error", message: error instanceof Error ? error.message : String(error)});
+        });
     }, [machine, status]);
 
     function onSecretPress() {

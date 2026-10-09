@@ -30,3 +30,10 @@ export class BluetoothPermissionError extends Error {
         this.canOpenSettings = canOpenSettings;
     }
 }
+
+export class SlotOperationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "SlotOperationError";
+    }
+}

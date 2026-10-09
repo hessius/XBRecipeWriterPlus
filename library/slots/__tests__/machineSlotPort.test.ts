@@ -359,6 +359,20 @@ it("will not clear a background invalidation until the app is active", async () 
     await expect(port.acquire(identity)).rejects.toThrow(/background/i);
 });
 
+it.each(["inactive", "unknown", null])("blocks a fresh lease in non-active AppState %p", async (state) => {
+    const {machine, port} = await ready();
+    machine.setAppState(state);
+    await expect(port.acquire(identity)).rejects.toThrow(/background|active/i);
+});
+
+it("returns a readonly identity copy rather than allowing a consumer to retarget the owner", async () => {
+    const {machine} = await ready();
+    const actual = machine.slotIdentity!;
+    expect(Object.isFrozen(actual)).toBe(true);
+    expect(machine.slotIdentity).not.toBe(actual);
+    expect(machine.slotIdentity).toEqual(identity);
+});
+
 it("does not create a journal when the lease invalidates before the writer begins", async () => {
     const {store, port, machine} = await ready();
     const invalidated = {

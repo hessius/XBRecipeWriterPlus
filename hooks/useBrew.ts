@@ -4,7 +4,8 @@ import {useMachine} from "@/hooks/useMachine";
 import {useSetting} from "@/hooks/useSetting";
 import type Machine from "@/library/machine/Machine";
 import {isActiveBrewPhase, type BrewPhase} from "@/library/machine/Machine";
-import {BluetoothPermissionError, RadioUnavailableError} from "@/library/machine/errors";
+import {BluetoothPermissionError, RadioUnavailableError, SlotOperationError} from "@/library/machine/errors";
+import {notify} from "@/components/XbrwToast";
 import type {BypassTempEncoding} from "@/library/machine/protocol";
 import type Recipe from "@/library/Recipe";
 
@@ -59,16 +60,22 @@ export function useBrew(injected?: Machine): Brewer {
     useEffect(() => {
         // `useSetting` widens the stored union to `string`, so it is narrowed
         // back to the encoding the machine expects on the way in.
-        machine.setBypassTempEncoding(bypassTempEncoding as BypassTempEncoding);
-    }, [machine, bypassTempEncoding]);
-    useEffect(() => {
-        machine.setAutoStart(autoStart);
-    }, [machine, autoStart]);
+        try {
+            machine.setBypassTempEncoding(bypassTempEncoding as BypassTempEncoding);
+            machine.setAutoStart(autoStart);
+        } catch (error) {
+            if (!(error instanceof SlotOperationError)) throw error;
+            notify({tone: "error", message: error.message});
+        }
+    }, [machine, bypassTempEncoding, autoStart]);
 
     async function attempt(recipe: Recipe): Promise<void> {
         // Lazy connect: this is the first moment the user has actually
         // reached for the machine, and it is the beep they are expecting.
         if (!machine.isConnected()) await connect();
+        // A refused ambient update is applied only on an explicit new brew.
+        machine.setBypassTempEncoding(bypassTempEncoding as BypassTempEncoding);
+        machine.setAutoStart(autoStart);
         await machine.brew(recipe);
     }
 
@@ -92,6 +99,7 @@ export function useBrew(injected?: Machine): Brewer {
         // second attempt, and `openLink` deliberately keeps the permission
         // check outside its own retrying so nobody is asked twice.
         if (e instanceof RadioUnavailableError) return false;
+        if (e instanceof SlotOperationError) return false;
         if (e instanceof BluetoothPermissionError) return false;
         const phase = machine.phase;
         // Every other failed phase is left alone, including `rejected`. The

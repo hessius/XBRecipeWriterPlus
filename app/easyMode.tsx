@@ -9,15 +9,21 @@ import {incomingEasyModeRecipe, useEasyModeSlots} from "@/hooks/useEasyModeSlots
 import EasyModeSlots from "@/components/EasyModeSlots";
 import ScreenHeader from "@/components/ScreenHeader";
 import {palette} from "@/constants/colors";
+import {isActiveBrewPhase} from "@/library/machine/Machine";
+import {unavailableSlotPort} from "@/library/slots/slotWriter";
 
 export default function EasyModeScreen() {
     const {recipeJSON} = useLocalSearchParams<{recipeJSON?: string | string[]}>();
-    const {remembered, machine, status} = useMachine();
+    const {remembered, machine, status, slotPort} = useMachine();
     const {ratingNoteOpen} = useLiveBrew();
     const library = useRecipeLibrary();
-    const slots = useEasyModeSlots({
-        deviceId: remembered, serial: machine.info?.serial.trim() || null
-    });
+    const actual = machine.slotIdentity ?? null;
+    const deviceId = actual?.deviceId ?? remembered;
+    const slots = useEasyModeSlots(
+        {deviceId, serial: actual?.serial ?? null}, slotPort ?? unavailableSlotPort
+    );
+    const serialMatches = slots.record.journal?.serial == null || actual === null
+        || slots.record.journal.serial === actual.serial;
     const [incoming] = useState(() => incomingEasyModeRecipe(recipeJSON));
     return (
         <YStack testID="easy-mode-screen" flex={1} backgroundColor={palette.base}
@@ -32,8 +38,10 @@ export default function EasyModeScreen() {
                                    </Text>
                                )}
                            </>}
-                           incoming={incoming.recipe} deviceId={remembered}
-                           connected={status === "connected"} available={slots.available}
+                           incoming={incoming.recipe} deviceId={deviceId}
+                           connected={status === "connected" && actual !== null}
+                           busy={machine.phase !== undefined && isActiveBrewPhase(machine.phase)}
+                           serialMatches={serialMatches} available={slots.available}
                            running={slots.running} error={slots.error}
                            onAssign={slots.assign} onWrite={slots.write}
                            onRecover={slots.recover}/>

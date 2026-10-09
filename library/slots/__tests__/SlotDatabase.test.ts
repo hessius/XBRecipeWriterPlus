@@ -104,3 +104,33 @@ it("rolls back persistence failures without publishing a changed snapshot", () =
     expect(store.read("one")).toBe(before);
     expect(new SlotDatabase(sql).read("one").drafts).toEqual([null, null, null]);
 });
+
+it.each([undefined, null, 0, "15", {}, -1, 32])(
+    "rejects raw stored dosage %p even when the bytes encode the constructor's 15 g default", (dosage) => {
+        const sql = createTestDatabase();
+        const store = new SlotDatabase(sql);
+        const saved = snapshotRecipe(coffee());
+        const raw = JSON.parse(saved.recipeJSON);
+        raw.dosage = dosage;
+        const corrupt = {...saved, recipeJSON: JSON.stringify(raw)};
+        expect(() => store.assign("one", 0, corrupt)).toThrow(/dose|dosage/i);
+        expect(store.read("one").drafts).toEqual([null, null, null]);
+        expect(store.read("one").journal).toBeNull();
+        sql.runSync("INSERT INTO easy_mode_slots VALUES (?, ?)", ["corrupt",
+            JSON.stringify({version: 1, drafts: [corrupt, null, null], written: null, journal: null})]);
+        expect(() => new SlotDatabase(sql).read("corrupt")).toThrow(/dose|dosage/i);
+    }
+);
+
+it.each([1, 15, 31])("round-trips an explicit valid raw dosage of %s", (dosage) => {
+    const sql = createTestDatabase();
+    const store = new SlotDatabase(sql);
+    const recipe = coffee();
+    recipe.dosage = dosage;
+    recipe.ratio = 5;
+    recipe.pours[0].volume = dosage * 5;
+    store.assign("one", 0, snapshotRecipe(recipe));
+    const saved = new SlotDatabase(sql).read("one").drafts[0]!;
+    expect(JSON.parse(saved.recipeJSON).dosage).toBe(dosage);
+    expect(saved.blob).toEqual(snapshotRecipe(recipe).blob);
+});

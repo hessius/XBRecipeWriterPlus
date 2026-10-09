@@ -4,7 +4,7 @@ import {
     prepareSet, readSnapshot, type SlotIndex, type SlotJournal
 } from "@/library/slots/slotModel";
 
-export type SlotIdentity = {deviceId: string; serial: string | null};
+export type SlotIdentity = {readonly deviceId: string; readonly serial: string | null};
 export interface SlotPort {
     available: boolean;
     acquire(identity: SlotIdentity): Promise<SlotLease>;
@@ -45,32 +45,33 @@ async function transmit(
     store: SlotDatabase, identity: SlotIdentity, port: SlotPort,
     journal: SlotJournal, isNew: boolean, now: () => number
 ): Promise<void> {
-    const lease = await port.acquire(identity);
+    const target = Object.freeze({...identity});
+    const lease = await port.acquire(target);
     let begun = !isNew;
     let completed = false;
     try {
         lease.assertCurrent?.();
         if (isNew) {
-            store.begin(identity.deviceId, journal);
+            store.begin(target.deviceId, journal);
             begun = true;
         }
         for (const index of [0, 1, 2] as const) {
             if (index < journal.acknowledged) continue;
             lease.assertCurrent?.();
-            store.dispatching(identity.deviceId, journal.id, index);
+            store.dispatching(target.deviceId, journal.id, index);
             await lease.sendAndConfirm(Uint8Array.from(journal.frames[index]), index);
             lease.assertCurrent?.();
-            store.acknowledge(identity.deviceId, journal.id, index);
+            store.acknowledge(target.deviceId, journal.id, index);
         }
         await lease.confirmSaved();
         lease.assertCurrent?.();
-        store.complete(identity.deviceId, journal.id, now());
+        store.complete(target.deviceId, journal.id, now());
         completed = true;
     } catch (error) {
         if (begun) {
             const message = error instanceof Error ? error.message : String(error);
             try {
-                store.fail(identity.deviceId, journal.id, message);
+                store.fail(target.deviceId, journal.id, message);
             } catch (storageError) {
                 throw new Error(`Could not persist the incomplete Easy Mode write: ${
                     storageError instanceof Error ? storageError.message : String(storageError)

@@ -31,7 +31,7 @@ The package numbers refer to
 | 7: Hardware spike | Initial questions answered via #198 | 40518 pauses, 40524 resumes without restarting; 8019 instead abandons the recipe for a water pour. Easy Mode batch behaviour documented. Pause latency, overshoot and reconnect survival still require measurement below. |
 | 8: Pause/resume | Prototype integrated from #202; hardware-blocked | Pause is acknowledged rather than inferred from ARMED; resume is optimistic; pause time is recorded, backed up and excluded from held-time/delay; paused readings are omitted; ladder/bypass remain in place. |
 | 9: Custom overflow protection | Approved v1; not implemented | Threshold-triggered automatic pause, with resume checks every 15/30/45 seconds (default 15). Extend while at/above threshold; resume and re-arm on a fresh below-threshold reading. Include live UI, graph intervals and ladder state. Hardware verification gates release, not development. |
-| 10: Easy Mode slots | Domain/UI and bounded production port implemented; owner/UI wiring and hardware verification pending | Persistent machine-bound A/B/C snapshots, whole-set replacement, coffee only, no bypass. The production port uses real Machine receipts, exclusive operation guards, connection-scoped observations and durable recovery exclusion. The route still defaults to the unavailable port until early shared-owner installation is wired; no real slot writes are enabled by this isolated change. |
+| 10: Easy Mode slots | Production software wired; hardware/native verification pending | Persistent machine-bound A/B/C snapshots, whole-set replacement, coffee only, no bypass. The shared owner installs the bounded port before exposing Machine or opening its link. The route uses the actual connected identity and installed port, with busy/serial guards, persistent overwrite copy and strict raw-dose validation. Receipts and recovery remain subject to the hardware gates below. |
 
 ## Additional 2.0 feedback and integration changes
 
@@ -124,14 +124,17 @@ The dedicated `/easyMode` screen has entries in the machine panel, library
 recipe actions and editor recipe actions. The picker reads `allRecipes()`,
 not the current search/shelf answer. Full sets require an explicit replacement
 choice; incomplete sets lock assignment and display the frozen recovery set.
-Incoming route JSON is validated without accepting constructor-invented
-grinder or brewer defaults.
+Incoming route JSON and persisted snapshots share `readSlotRecipe`, which
+validates raw dosage against the existing coffee DOSE bounds before the
+forgiving Recipe constructor can invent a default. Grinder, brewer, stages and
+prepared bytes are also validated. Legacy Recipe migrations are unchanged.
 
 `installMachineSlotPort(machine, sharedSlotDatabase())` now implements
-`SlotPort` / `SlotLease`. **Install it while constructing the shared Machine,
-before exposing the singleton or calling openLink, not in a route effect.**
-Retain that port independently of screen lifetimes and pass it to
-`useEasyModeSlots`; use `machine.slotIdentity`, not the remembered setting, for
+`SlotPort` / `SlotLease`. `sharedMachine()` installs it while constructing the
+shared Machine, **before exposing the singleton or calling openLink, not in a
+route effect**. It retains the port/database across navigation and passes it
+through `useMachine` to `useEasyModeSlots`. The route uses `machine.slotIdentity`,
+not the remembered setting, for
 the actual peripheral and freshly reported serial. A known serial cannot be
 replaced by null. Installation and reconnect read the per-device journal
 synchronously; ordinary operations are refused while that journal remains.
@@ -139,16 +142,31 @@ Connection setup alone may send the existing handshake (8100) and info probe
 (40521), so a reserved machine can reconnect and identify itself. Public probes
 are not a bypass during an attempt or incomplete journal.
 
-The parent owner must seed and forward current app state through
-`machine.setAppState` before its existing background/link handling. Background
-and disconnect invalidate an attempt synchronously, including a hung native
-write; returning to the foreground does not replay it. Call
-`machine.assertCanForgetDevice(id)` before settings forget/cleanup, notify on
-refusal, and preserve the machine-bound records. The route, active-brew disabled
-UI, raw-dosage validation and standalone-slot safety warning remain parent work.
-The ambient `useBrew` settings effects must also handle/gate reservation refusals
-from `setAutoStart` and `setBypassTempEncoding`, rather than throwing on mount or
-silently suppressing the error. No settings hook is changed by this port unit.
+The shared owner seeds and forwards AppState through `machine.setAppState`
+before its existing background/link handling. Any non-active or unknown state
+blocks acquisition and invalidates the attempt; only `background` gives back an
+idle link. Returning to the foreground reconnects where the existing lifecycle
+requires it but never replays slot frames. The AppState listener belongs to the
+singleton, not a route or each hook consumer.
+
+Settings forget checks both actual and remembered device IDs before disconnect
+or cleanup, notifies on an incomplete-write refusal and preserves the records.
+An offline route may display last-known assignments, but cannot send without
+the actual connected identity. A conflicting known serial, running brew or held
+brew disables WRITE and recovery with an explicit explanation.
+
+The complete A/B/C overwrite and EASY-mode warning lives with the bottom action,
+outside the card scroll. Its bounded action scroll keeps warning and button
+together when large text outgrows the space; neither gets a truncating fixed
+height or extra confirmation tap. Native layout/accessibility verification
+remains a gate, not something the renderer's style assertions can prove.
+
+`SlotOperationError` prevents ambient `useBrew` configuration effects from
+crashing or treating exclusion as a reason to reconnect and retry. Refused
+settings updates notify, are not queued behind slot completion, and are applied
+only on an explicit new brew. The local setters send no native commands.
+Settings refresh refusals also notify rather than disappearing in a catch.
+The single live RunOwner and pause/resume signatures are unchanged.
 
 Acquisition rejects busy operations immediately. A standalone console command
 also blocks slot acquisition until a fresh terminal machine state or reconnect:
@@ -235,9 +253,10 @@ Package 10's isolated worktree was additionally validated on 2026-10-09:
 - `git diff --check` passed; the shared Machine/protocol and Recipe/backup
   files remain unchanged from the integration base.
 
-No full release suite, new Expo Doctor run, native build or physical device
-verification was performed for package 10. Early owner/UI wiring and all
-physical/native release gates above remain open.
+At that isolated feature checkpoint, no full release suite, new Expo Doctor run,
+native build or physical device verification was performed for package 10.
+Owner/UI wiring was still open then; the finalization below closes the software
+wiring gate only. All physical/native release gates above remain open.
 
 The single Copilot review on #207 found three software issues, reproduced on
 both Jest platforms and corrected: recipe-context preparation now claims
@@ -270,3 +289,45 @@ standalone-action exclusion and stale native identity/handshake completion.
 No agents, full release suite, native build, deployment, push or merge were used.
 All hardware gates, code-only ACK ordering assumptions and parent wiring remain
 explicitly open; these counts are software evidence only.
+
+Owner/UI finalization was validated separately on 2026-10-09:
+
+```bash
+npx jest --runTestsByPath \
+  library/slots/__tests__/{machineSlotPort,slotWriter,SlotDatabase,slotModel}.test.ts \
+  library/machine/__tests__/{Machine,Machine.pause,Machine.bypass}.test.ts \
+  hooks/__tests__/{machineSlotOwner.test.tsx,useEasyModeSlots.test.ts,useMachine.test.ts,useMachine.persistence.test.ts,useBrew.test.ts,useBrewRun.test.ts,useLiveBrew.test.tsx} \
+  app/__tests__/easyMode.test.tsx \
+  components/__tests__/{EasyModeSlots,MachineSection,slotSurfaces}.test.tsx \
+  --runInBand --silent
+npm run typecheck
+git diff --name-only -- '*.ts' '*.tsx' | xargs npx eslint
+npx eslint hooks/__tests__/machineSlotOwner.test.tsx
+git diff --check
+```
+
+All 36 project suites and 874 tests passed across iOS and Android. Typecheck
+passed; changed-code lint had zero errors and the two existing
+`no-require-imports` warnings in the machine-section test harness. The new
+shared-owner suite uses real Machine, the installed port, actual notifications
+and real SQLite, including the route's A/B/C completion, busy/serial guards,
+non-active startup, background/drop, navigation, restart reservation, explicit
+recovery and settings-forget refusal. Test-first failures reproduced both
+raw-dose paths, displaced warning, missing owner wiring, ambient lock crash,
+unsafe brew retry, retargeting during acquisition and hidden settings refusal.
+
+The earlier independent production-port review selector covered **450 tests**,
+not the initially reported 492. That review run, the 704-test port finalization
+above and this 874-test owner run are distinct evidence sets.
+
+The three automated #207 review fixes are preserved. No new automated review
+round, agent, push, main merge, deployment, native build or full release suite
+was used. The new domain/UI/owner changes received local self-review; another
+independent review has not been performed. App version, native configuration,
+NFC/Recipe serialization and BACKUP_VERSION remain unchanged.
+
+Production software wiring is complete, but the 15-second budgets remain
+unmeasured and code-only receipt ambiguity/unknown-receipt recovery still
+require hardware evidence. No automatic reset or replay was added. Parent
+integration and its full release validation remain separate: integration/2.1.0
+is checked out in another worktree, excluded from this task.

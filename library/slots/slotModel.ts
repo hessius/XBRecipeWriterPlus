@@ -1,5 +1,5 @@
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
-import {brewProblems, GRIND_RPM} from "@/library/cardLimits";
+import {brewProblems, DOSE, GRIND_RPM} from "@/library/cardLimits";
 import {buildType2, encodeCoffeeBlob} from "@/library/machine/protocol";
 
 export const SLOT_NAMES = ["A", "B", "C"] as const;
@@ -76,6 +76,27 @@ export function objectValue(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export function readSlotRecipe(recipeJSON: string): Recipe {
+    const json: unknown = JSON.parse(recipeJSON);
+    if (!objectValue(json) || typeof json.uuid !== "string" || json.uuid.trim() === ""
+        || !Array.isArray(json.pours)) {
+        throw new Error("The recipe identity or stages are missing.");
+    }
+    if (typeof json.dosage !== "number" || !Number.isFinite(json.dosage)
+        || json.dosage < DOSE.min || json.dosage > DOSE.max) {
+        throw new Error(`The Easy Mode dose must be ${DOSE.min}-${DOSE.max} g.`);
+    }
+    if (typeof json.grinder !== "boolean" || typeof json.grindRPM !== "number") {
+        throw new Error("The Easy Mode snapshot's grinder settings are invalid.");
+    }
+    if (typeof json.cupType !== "number" || typeof json.bypassEnabled !== "boolean") {
+        throw new Error("The Easy Mode snapshot's brewer settings are invalid.");
+    }
+    const recipe = new Recipe(undefined, recipeJSON);
+    snapshotRecipe(recipe);
+    return recipe;
+}
+
 export function readSnapshot(value: unknown): SlotSnapshot {
     if (!objectValue(value) || typeof value.sourceUuid !== "string"
         || value.sourceUuid.trim() === "" || typeof value.name !== "string"
@@ -88,13 +109,7 @@ export function readSnapshot(value: unknown): SlotSnapshot {
     if (!objectValue(json) || json.uuid !== value.sourceUuid) {
         throw new Error("The Easy Mode snapshot identity is invalid.");
     }
-    if (typeof json.grinder !== "boolean" || typeof json.grindRPM !== "number") {
-        throw new Error("The Easy Mode snapshot's grinder settings are invalid.");
-    }
-    if (typeof json.cupType !== "number" || typeof json.bypassEnabled !== "boolean") {
-        throw new Error("The Easy Mode snapshot's brewer settings are invalid.");
-    }
-    const checked = snapshotRecipe(new Recipe(undefined, value.recipeJSON));
+    const checked = snapshotRecipe(readSlotRecipe(value.recipeJSON));
     if (!sameBytes(checked.blob, value.blob)) {
         throw new Error("The Easy Mode snapshot bytes do not match its recipe.");
     }

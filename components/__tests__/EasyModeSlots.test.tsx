@@ -1,5 +1,6 @@
 import React from "react";
-import {fireEvent, screen, waitFor} from "@testing-library/react-native";
+import {fireEvent, screen, waitFor, within} from "@testing-library/react-native";
+import {Dimensions, StyleSheet} from "react-native";
 import {renderWithProviders, SHEET_PRESS_TIMEOUT} from "@/test-utils/render";
 import EasyModeSlots from "@/components/EasyModeSlots";
 import {emptySlotRecord, prepareSet, snapshotRecipe} from "@/library/slots/slotModel";
@@ -19,6 +20,47 @@ it("shows unknown first-use contents, both side effects and an honest integratio
     expect(screen.getByText(/leaves your machine in EASY/i)).toBeOnTheScreen();
     expect(screen.getByText(SLOT_INTEGRATION_BLOCK)).toBeOnTheScreen();
     expect(screen.getByRole("button", {name: "Write all three slots"})).toBeDisabled();
+});
+
+it("keeps the full overwrite warning outside the card scroll and adjacent to WRITE with valid drafts", async () => {
+    const options = props();
+    const saved = snapshotRecipe(recipes[0]);
+    options.record.drafts = [saved, saved, saved];
+    await renderWithProviders(<EasyModeSlots {...options} available/>);
+    const warning = screen.getByText(/Writing replaces A, B and C and leaves your machine in EASY/);
+    expect(within(screen.getByTestId("easy-mode-cards")).queryByText(warning.props.children)).toBeNull();
+    const actions = within(screen.getByTestId("easy-mode-actions"));
+    expect(actions.getByText(warning.props.children)).toBeOnTheScreen();
+    expect(actions.getByRole("button", {name: "Write all three slots"})).toBeEnabled();
+    expect(warning.props.numberOfLines).toBeUndefined();
+});
+
+it.each([
+    {width: 320, height: 568, scale: 2, fontScale: 1},
+    {width: 320, height: 568, scale: 2, fontScale: 2},
+    {width: 320, height: 568, scale: 2, fontScale: 3},
+    {width: 393, height: 852, scale: 3, fontScale: 2}
+])("keeps intrinsic action sizing and bounded overflow at viewport %p", async (window) => {
+    const dimensions = jest.spyOn(Dimensions, "get").mockReturnValue(window);
+    const options = props();
+    const saved = snapshotRecipe(recipes[0]);
+    options.record.drafts = [saved, saved, saved];
+    try {
+        await renderWithProviders(<EasyModeSlots {...options} available/>);
+        const actions = screen.getByTestId("easy-mode-actions");
+        const style = StyleSheet.flatten(actions.props.style);
+        expect(style).toMatchObject({maxHeight: "60%", flexShrink: 1, flexGrow: 0});
+        expect(style.height).toBeUndefined();
+        expect(style.width).toBeUndefined();
+        const warning = within(actions).getByText(/Writing replaces A, B and C/);
+        expect(warning.props.numberOfLines).toBeUndefined();
+        expect(warning.props.allowFontScaling).not.toBe(false);
+        expect(within(actions).getByRole("button", {name: "Write all three slots"}))
+            .toHaveStyle({height: "auto"});
+        expect(screen.getByTestId("easy-mode-cards")).toHaveStyle({flex: 1, minHeight: 0});
+    } finally {
+        dimensions.mockRestore();
+    }
 });
 
 it("offers explicit full-set replacement without mutating an existing slot", async () => {

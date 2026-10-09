@@ -11,6 +11,11 @@ import {SLOT_INTEGRATION_BLOCK} from "@/library/slots/slotWriter";
 import XbrwSheet from "@/components/XbrwSheet";
 import {palette} from "@/constants/colors";
 
+const OVERWRITE_WARNING =
+    "Writing replaces A, B and C and leaves your machine in EASY. Changes made outside XBRW++ cannot be detected.";
+const BREW_BUSY = "The machine is busy with a running or held brew. Finish the brew before writing or recovering.";
+const SERIAL_BLOCK = "This incomplete write belongs to a different machine serial. Reconnect to its original machine.";
+
 export type EasyModeSlotsProps = {
     record: SlotRecord;
     recipes: readonly Recipe[];
@@ -18,6 +23,8 @@ export type EasyModeSlotsProps = {
     header?: React.ReactNode;
     deviceId: string;
     connected: boolean;
+    busy?: boolean;
+    serialMatches?: boolean;
     available: boolean;
     running: boolean;
     error: string | null;
@@ -54,7 +61,7 @@ function RecipeChoice({recipe, onPick}: {recipe: Recipe; onPick: () => void}) {
 
 export default function EasyModeSlots({
     record, recipes, incoming, header, deviceId, connected, available, running, error,
-    onAssign, onWrite, onRecover
+    busy = false, serialMatches = true, onAssign, onWrite, onRecover
 }: EasyModeSlotsProps) {
     const [picker, setPicker] = useState<SlotIndex | null>(null);
     const [incomingUsed, setIncomingUsed] = useState(false);
@@ -70,7 +77,8 @@ export default function EasyModeSlots({
             <View style={{flex: 1}} accessibilityElementsHidden={picker !== null}
                   importantForAccessibility={picker !== null ? "no-hide-descendants" : "auto"}>
                 {header}
-                <ScrollView contentContainerStyle={{padding: 16, gap: 16}}>
+                <ScrollView testID="easy-mode-cards" style={{flex: 1, minHeight: 0}}
+                            contentContainerStyle={{padding: 16, gap: 16}}>
                     <Text color={palette.dim} fontSize={14}>
                         {record.written === null
                             ? "The machine cannot tell us what is already in its slots."
@@ -170,32 +178,39 @@ export default function EasyModeSlots({
                             </YStack>
                         );
                     })}
-                    <Text color={palette.warn} fontSize={14}>
-                        Writing replaces A, B and C and leaves your machine in EASY. Changes made outside XBRW++ cannot be detected.
+                </ScrollView>
+                <ScrollView testID="easy-mode-actions" nestedScrollEnabled
+                            style={{flexGrow: 0, flexShrink: 1, maxHeight: "60%",
+                                backgroundColor: palette.surface}}
+                            contentContainerStyle={{padding: 16, gap: 12,
+                                paddingBottom: Math.max(insets.bottom, 16)}}>
+                    <Text selectable color={palette.warn} fontSize={14}>
+                        {OVERWRITE_WARNING}
                     </Text>
+                    {busy && <Text accessibilityRole="alert" color={palette.warn}>{BREW_BUSY}</Text>}
+                    {!serialMatches && <Text accessibilityRole="alert" color={palette.warn}>{SERIAL_BLOCK}</Text>}
                     {!available && <Text selectable color={palette.warn}>{SLOT_INTEGRATION_BLOCK}</Text>}
                     {!connected && deviceId !== "" && <Text color={palette.dim}>
                         Connect to this machine before writing or recovering.
                     </Text>}
                     {error !== null && <Text selectable accessibilityRole="alert"
                                                 color={palette.danger}>{error}</Text>}
-                </ScrollView>
-                <YStack padding="$4" paddingBottom={Math.max(insets.bottom, 16)}
-                        backgroundColor={palette.surface}>
                     {journal === null ? (
                         <Button accessibilityLabel="Write all three slots"
-                                disabled={!completeDraft || locked || !connected || !available}
+                                height="auto" minHeight="$4" paddingVertical="$3"
+                                disabled={!completeDraft || locked || !connected || !available || busy || !serialMatches}
                                 onPress={onWrite}>
                             {running ? "WRITING" : "WRITE ALL THREE"}
                         </Button>
                     ) : (
                         <Button accessibilityLabel="Recover incomplete write"
-                                disabled={!recoveryKnown || running || !connected || !available}
+                                height="auto" minHeight="$4" paddingVertical="$3"
+                                disabled={!recoveryKnown || running || !connected || !available || busy || !serialMatches}
                                 onPress={onRecover}>
                             COMPLETE THIS SET
                         </Button>
                     )}
-                </YStack>
+                </ScrollView>
             </View>
             <XbrwSheet open={picker !== null} onOpenChange={(open) => {
                 if (!open) setPicker(null);

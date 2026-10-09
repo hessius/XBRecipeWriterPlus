@@ -3,7 +3,7 @@ import {createTestDatabase} from "@/test-utils/sqlite";
 import {SlotDatabase} from "@/library/slots/SlotDatabase";
 import {coffee} from "@/library/slots/__tests__/fixtures";
 import {prepareSet, snapshotRecipe} from "@/library/slots/slotModel";
-import {openEasyModeRecipe, prepareEasyModeEntry, sharedSlotDatabase, useEasyModeSlots, useSlotRecord} from "@/hooks/useEasyModeSlots";
+import {incomingEasyModeRecipe, openEasyModeRecipe, prepareEasyModeEntry, sharedSlotDatabase, useEasyModeSlots, useSlotRecord} from "@/hooks/useEasyModeSlots";
 import {forgetLastMove, SETTLE_MS} from "@/hooks/steadyRouter";
 import type {SlotLease} from "@/library/slots/slotWriter";
 
@@ -18,6 +18,27 @@ jest.mock("expo-sqlite", () => ({
 beforeEach(() => {
     forgetLastMove();
     mockPush.mockClear();
+});
+
+it.each([undefined, null, 0, "15", {}, -1, 32])(
+    "refuses raw incoming dosage %p instead of opening a default-dose recipe", (dosage) => {
+        const raw = JSON.parse(JSON.stringify(coffee()));
+        raw.dosage = dosage;
+        const incoming = incomingEasyModeRecipe(JSON.stringify(raw));
+        expect(incoming.recipe).toBeUndefined();
+        expect(incoming.error).toMatch(/dose|dosage/i);
+    }
+);
+
+it.each([1, 15, 31])("preserves incoming raw dosage %s and its actual wire bytes", (dosage) => {
+    const recipe = coffee();
+    recipe.dosage = dosage;
+    recipe.ratio = 5;
+    recipe.pours[0].volume = dosage * 5;
+    const incoming = incomingEasyModeRecipe(JSON.stringify(recipe));
+    expect(incoming.error).toBeNull();
+    expect(incoming.recipe?.dosage).toBe(dosage);
+    expect(snapshotRecipe(incoming.recipe!).blob).toEqual(snapshotRecipe(recipe).blob);
 });
 
 it("assigns only once on rapid context taps but allows a deliberate repeat visit", () => {
