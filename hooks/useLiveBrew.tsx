@@ -30,6 +30,15 @@ export type LiveBrewSnapshot = {
     bypass?: BypassView;
     /** The row the recorder wrote for a finished brew. */
     record?: BrewRecord;
+    /**
+     * When this attempt began, stamped by the provider the moment `start`
+     * registers it. Read by a "Copy diagnostic log" press to scope the log
+     * to this attempt rather than the whole session — including when the
+     * screen is reopened from the mini bar (`view=1`) rather than having
+     * started the run itself, which is why this lives on the shared run
+     * rather than as a ref local to the brew screen.
+     */
+    startedAt: number;
 };
 
 type LiveBrew = {
@@ -128,8 +137,9 @@ export function LiveBrewProvider({children, store}: {
     // `runId` is bumped for every run so a second brew starts from nothing
     // rather than inheriting the last one's samples and spent recorder.
     const [current, setCurrent] = useState<
-        {recipe: Recipe | null; runId: number; pro: boolean; quickEdit?: QuickEditRecordAdjustments}
-    >({recipe: null, runId: 0, pro: false});
+        {recipe: Recipe | null; runId: number; pro: boolean;
+         quickEdit?: QuickEditRecordAdjustments; startedAt: number}
+    >({recipe: null, runId: 0, pro: false, startedAt: 0});
     const [ratingNoteOpen, setRatingNoteOpen] = useState(false);
 
     function begin(
@@ -137,7 +147,7 @@ export function LiveBrewProvider({children, store}: {
         pro: boolean = false,
         quickEdit?: QuickEditRecordAdjustments
     ): void {
-        setCurrent((was) => ({recipe, runId: was.runId + 1, pro, quickEdit}));
+        setCurrent((was) => ({recipe, runId: was.runId + 1, pro, quickEdit, startedAt: Date.now()}));
     }
 
     // One element, always, wrapping `children`. `children` here is the whole
@@ -151,6 +161,7 @@ export function LiveBrewProvider({children, store}: {
             runId={current.runId}
             pro={current.pro}
             quickEdit={current.quickEdit}
+            startedAt={current.startedAt}
             store={store}
             onStart={begin}
             onDismiss={() => setCurrent((was) => ({...was, recipe: null}))}
@@ -169,13 +180,14 @@ export function LiveBrewProvider({children, store}: {
  * shape of the tree never depends on whether a brew is running.
  */
 function RunOwner({
-    recipe, runId, pro, quickEdit, store, onStart, onDismiss, ratingNoteOpen,
+    recipe, runId, pro, quickEdit, startedAt, store, onStart, onDismiss, ratingNoteOpen,
     setRatingNoteOpen, children
 }: {
     recipe: Recipe | null;
     runId: number;
     pro: boolean;
     quickEdit?: QuickEditRecordAdjustments;
+    startedAt: number;
     store?: BrewStore;
     onStart: (recipe: Recipe, pro?: boolean, quickEdit?: QuickEditRecordAdjustments) => void;
     onDismiss: () => void;
@@ -222,7 +234,7 @@ function RunOwner({
 
     const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
-        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
+        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, startedAt,
     };
     const quickEditFor = (
         next: Recipe,

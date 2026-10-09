@@ -1,7 +1,7 @@
 import * as Clipboard from "expo-clipboard";
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
-import React, {useEffect, useRef, useState} from "react";
+import React, {useEffect, useState} from "react";
 import {KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View}
     from "react-native";
 import ViewShot from "react-native-view-shot";
@@ -213,22 +213,12 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
            error, watch, ratingNoteOpen} = useLiveBrew();
 
-    // When the attempt now showing began, so a "Copy diagnostic log" press
-    // can scope its history to this attempt rather than the whole session.
-    // Stamped on every call that starts a run, including a retry, so a
-    // second attempt's log does not carry the first attempt's history too.
-    const attemptStartedAt = useRef(0);
-    function startAttempt(target: Recipe, adjustments?: QuickEditRecordAdjustments) {
-        attemptStartedAt.current = Date.now();
-        start(target, adjustments);
-    }
-
     // Tell the provider to start a run for this recipe. `start` is idempotent:
     // if RunOwner is already mounted it replaces `start` with a no-op, so
     // re-mounting this screen while a brew is in flight never commands a second
     // brew (Finding 2).
     useEffect(() => {
-        if (!viewing) startAttempt(localRecipe, quickEditRecord);
+        if (!viewing) start(localRecipe, quickEditRecord);
         // localRecipe and viewing are stable for the life of this screen.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -358,9 +348,15 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
      * link narration, then the frame log — except scoped to this attempt
      * rather than the whole session, since that is what somebody reporting
      * "this one didn't start" actually needs to send.
+     *
+     * Read off the shared run rather than a local ref: reopening an
+     * already-failed run from the mini bar (`view=1`) never calls `start`
+     * itself, so a ref stamped only by this screen's own start calls would
+     * stay at its initial value and scope the log to nothing instead of the
+     * attempt.
      */
     function copyDiagnosticLog() {
-        const since = attemptStartedAt.current;
+        const since = run?.startedAt ?? 0;
         const connectionLines = machine.linkHistory
             .filter((event) => event.at >= since)
             .map((event) => `${new Date(event.at).toISOString().slice(11, 23)}  ${event.text}`);
@@ -675,7 +671,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // on the spent one brewed a coffee that no history row
                         // ever mentioned.
                         <Action label="Try again" color={palette.text}
-                                onPress={() => startAttempt(recipe, quickEditRecord)} />
+                                onPress={() => start(recipe, quickEditRecord)} />
                     )}
                     {offerPro && (
                         <Action label="Switch to Pro" color={palette.warn}
