@@ -169,9 +169,9 @@ protection and recorder.
 
 These full-suite/Doctor results remain valid evidence for the prior Task 10
 head, before `49e8558d` changed finished/history delay arithmetic. They are not
-a full validation of the latest head; the parent will rerun the latest full
-suite. The narrow follow-up below deliberately does not repeat the full suite
-or the Story layout sweep.
+a full validation of the latest head. The parent rerun after the final
+drawdown-pause follow-up is recorded below. The narrow follow-up itself did
+not repeat the full suite or the Story layout sweep.
 
 All commands ran serially using the repository's existing Jest worker pool and
 both projects. Read-only process checks found no other Jest/tsc/Doctor validation
@@ -237,6 +237,25 @@ repository (`task10-targeted-final.log`, `task10-typecheck-final.log`,
 `task10-lint-final.log`, `task10-full-final.log`, `task10-doctor-final.log`).
 
 ### Final drawdown-pause arithmetic regression follow-up
+
+#### Final parent validation
+
+After the bounded final quality review approved the drawdown fix and its
+screen/export regressions, the parent ran these commands serially against
+`f5ceb004`, with no concurrent Jest/typecheck process present:
+
+| Command | Observed result |
+|---------|-----------------|
+| `npm run typecheck` | Exit 0; no diagnostics. |
+| `npm run lint` | Exit 0; 0 errors, 27 warnings. |
+| `npx expo-doctor` | Exit 0; 21/21 checks passed. |
+| `npm test -- --ci` | Exit 0; 692 suites passed; 13,222 tests passed, 24 skipped, 13,246 total; 2/2 snapshots passed. Both iOS and Android, 321.853 s. |
+
+This full run includes the Story height sweep and supersedes the earlier
+full-suite result for the completed implementation. Logs remain in session
+artifacts: `overflow-parent-typecheck.log`, `overflow-parent-lint.log`,
+`overflow-parent-doctor.log`, and `overflow-parent-full.log`.
+Hardware and native release gates below remain unverified.
 
 Production fix `49e8558d` is unchanged by this test-only follow-up. The
 counterexample has a 30-second plan, sample-relative `drawdownAt = 40,000 ms`,
