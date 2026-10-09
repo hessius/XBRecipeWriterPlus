@@ -7,9 +7,13 @@ import {Linking} from "react-native";
 
 import Brew from "@/app/brew";
 import {SCREEN_PADDING} from "@/constants/layout";
-import {LONGEST_ACTIVE_HEADLINE, PAUSED_NOTE, RATING_CAN_WAIT} from "@/constants/brewCopy";
+import {
+    LONGEST_ACTIVE_HEADLINE, OVERFLOW_FOREGROUND_CAUTION, OVERFLOW_MANUAL_OVERRIDE,
+    PAUSED_NOTE, RATING_CAN_WAIT
+} from "@/constants/brewCopy";
 import {renderWithProviders} from "@/test-utils/render";
 import type {BrewPhase} from "@/library/machine/Machine";
+import type {OverflowSnapshot} from "@/library/brew/OverflowController";
 import type {StoredBrew} from "@/library/BrewDatabase";
 import {drawdownFrom, drawdownSeconds, type BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
@@ -69,6 +73,9 @@ let mockRecord: StoredBrew | undefined = undefined;
 let mockStartedAt = 0;
 let mockLinkHistory: {at: number; text: string}[] = [];
 let mockRunQuickEdit: QuickEditRecordAdjustments | undefined = undefined;
+let mockOverflow: OverflowSnapshot | undefined = undefined;
+let mockOverflowNow: number | undefined = undefined;
+let mockOwnerRecipe: Recipe | undefined = undefined;
 let mockBandAllocationArgs: [number, number][] = [];
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
@@ -138,7 +145,7 @@ jest.mock("@/library/brew/bands", () => {
 jest.mock("@/hooks/useLiveBrew", () => {
     const value = () => ({
         run: {
-            recipe: mockRecipe,
+            recipe: mockOwnerRecipe ?? mockRecipe,
             phase: mockPhase,
             samples: mockSamples,
             startedAt: mockStartedAt,
@@ -150,6 +157,8 @@ jest.mock("@/hooks/useLiveBrew", () => {
             bypass: mockBypass,
             record: mockRecord,
             quickEdit: mockRunQuickEdit,
+            overflow: mockOverflow,
+            overflowNow: mockOverflowNow,
         },
         start: mockStart,
         startInPro: mockStartInPro,
@@ -254,6 +263,11 @@ beforeEach(() => {
     mockStartedAt = 0;
     mockLinkHistory = [];
     mockRunQuickEdit = undefined;
+    mockOverflow = undefined;
+    mockOverflowNow = undefined;
+    mockOwnerRecipe = undefined;
+    delete mockRecipe.overflowProtection;
+    mockRecipe.cupType = originalRecipeInputs.cupType;
     mockBandAllocationArgs = [];
     mockFrameLogSince.mockClear();
     mockNotify.mockClear();
@@ -1472,5 +1486,128 @@ describe("Beanconqueror handoff on the finished brew", () => {
 
         await waitFor(() => expect(openURL).toHaveBeenCalledTimes(1));
         expect(screen.queryByTestId("bean-name-field")).toBeNull();
+    });
+});
+
+describe("brew route custom overflow protection", () => {
+    const armed: OverflowSnapshot = {
+        mode: "armed", retainedGrams: null, nextCheckAt: null, telemetryAvailable: false
+    };
+    const holding: OverflowSnapshot = {
+        mode: "holding", retainedGrams: 60, nextCheckAt: 20_000, telemetryAvailable: true
+    };
+
+    function protect(recipe: Recipe = mockRecipe) {
+        recipe.cupType = CUP_TYPE.OTHER;
+        recipe.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
+    }
+
+    it("draws no status and no caution for an unconfigured recipe", async () => {
+        await renderWithProviders(<Brew />);
+        expect(screen.queryByTestId("overflow-status")).toBeNull();
+        expect(screen.queryByText(OVERFLOW_FOREGROUND_CAUTION)).toBeNull();
+    });
+
+    it("draws none for an Omni recipe that kept a config, and its snapshot is ignored", async () => {
+        protect();
+        mockRecipe.cupType = CUP_TYPE.OMNI;
+        await renderWithProviders(<Brew />);
+        expect(screen.queryByTestId("overflow-status")).toBeNull();
+    });
+
+    it.each(["waking", "sending", "readyToStart"] as const)(
+        "shows the caution at once in %s, before any snapshot and with no first crossing",
+        async (phaseName) => {
+            protect();
+            mockPhase = namedPhase(phaseName);
+            await renderWithProviders(<Brew />);
+            expect(screen.getByText(OVERFLOW_FOREGROUND_CAUTION)).toBeOnTheScreen();
+        }
+    );
+
+    it("takes the owner's recipe over the route's", async () => {
+        // The route's recipe carries nothing; the run's owner is protected.
+        mockOwnerRecipe = new Recipe(undefined, JSON.stringify(mockRecipe));
+        protect(mockOwnerRecipe);
+        mockPhase = namedPhase("readyToStart");
+        await renderWithProviders(<Brew />);
+        expect(screen.getByText(OVERFLOW_FOREGROUND_CAUTION)).toBeOnTheScreen();
+    });
+
+    it("adds no control and no modal to a protected brew", async () => {
+        const labels = () => screen.getAllByRole("button").map((b) => b.props.accessibilityLabel);
+        const plain = await renderWithProviders(<Brew />);
+        const unprotected = labels();
+        await plain.unmount();
+
+        protect();
+        mockOverflow = armed;
+        await renderWithProviders(<Brew />);
+
+        expect(labels()).toEqual(unprotected);
+        expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("keeps the existing RESUME and CANCEL beside a distinct automatic pause label", async () => {
+        protect();
+        mockPhase = {name: "paused", pour: 1, pours: 1, was: {name: "pouring", pour: 1, pours: 1},
+                     pauseKind: "overflow"};
+        mockOverflow = holding;
+        mockOverflowNow = 15_000;
+        await renderWithProviders(<Brew />);
+
+        expect(screen.getByLabelText("Resume")).toBeOnTheScreen();
+        expect(screen.getByLabelText("Cancel")).toBeOnTheScreen();
+        expect(screen.getByText("Paused for the dripper to drain.")).toBeOnTheScreen();
+        expect(screen.getByText(/Next check in 5 s/)).toBeOnTheScreen();
+        expect(screen.getByText("Paused for overflow.")).toBeOnTheScreen();
+    });
+
+    it("leaves a manual pause's own note alone", async () => {
+        protect();
+        mockPhase = {name: "paused", pour: 1, pours: 1, was: {name: "pouring", pour: 1, pours: 1}};
+        mockOverflow = armed;
+        await renderWithProviders(<Brew />);
+        expect(screen.getByText(PAUSED_NOTE)).toBeOnTheScreen();
+        expect(screen.getByText("Paused.")).toBeOnTheScreen();
+    });
+
+    it.each([
+        [{mode: "disabled", disabledReason: "background"}, /left the foreground/],
+        [{mode: "disabled", disabledReason: "manualOverride"}, new RegExp(OVERFLOW_MANUAL_OVERRIDE)],
+        [{mode: "error", error: "Could not pause the brew for protection. Pause the machine manually."},
+         /Could not pause the brew/]
+    ] as const)("shows %j without the caution", async (partial, pattern) => {
+        protect();
+        mockOverflow = {...armed, ...partial} as OverflowSnapshot;
+        await renderWithProviders(<Brew />);
+        expect(screen.getByText(pattern)).toBeOnTheScreen();
+        expect(screen.queryByText(OVERFLOW_FOREGROUND_CAUTION)).toBeNull();
+    });
+
+    it("shows no active status once the run has ended", async () => {
+        protect();
+        mockPhase = {name: "cancelled"} as BrewPhase;
+        mockOverflow = {...armed, mode: "ended"};
+        await renderWithProviders(<Brew />);
+        expect(screen.queryByTestId("overflow-status")).toBeNull();
+    });
+
+    it("budgets the status outside the band region and bounds its height on a small screen", async () => {
+        protect();
+        mockOverflow = armed;
+        const spy = jest.spyOn(Dimensions, "get").mockReturnValue(
+            {width: 320, height: 568, scale: 2, fontScale: 2}
+        );
+        await renderWithProviders(<Brew />);
+
+        const region = screen.getByTestId("overflow-status-region");
+        const band = screen.getByTestId("brew-band-region");
+        expect(within(band).queryByTestId("overflow-status")).toBeNull();
+        expect(region.parent).toBe(band.parent?.parent);
+        const style = StyleSheet.flatten(region.props.style);
+        expect(style.flexGrow).toBe(0);
+        expect(style.maxHeight).toBeLessThanOrEqual(568 * 0.25);
+        spy.mockRestore();
     });
 });

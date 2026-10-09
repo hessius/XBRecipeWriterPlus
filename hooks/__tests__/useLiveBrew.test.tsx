@@ -125,6 +125,7 @@ describe("LiveBrewProvider", () => {
         await h.water(100);
         await h.cup(0);
         expect(api.run?.overflow?.mode).toBe("requesting");
+        expect(typeof api.run?.overflowNow).toBe("number");
         expect(api.run?.startedAt).toBe(startedAt);
         expect(api.run?.quickEdit).toEqual(quickEdit);
         const pouring: BrewPhase = {name: "pouring", pour: 1, pours: 2};

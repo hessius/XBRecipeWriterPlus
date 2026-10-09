@@ -33,6 +33,8 @@ export type LiveBrewSnapshot = {
     /** The row the recorder wrote for a finished brew. */
     record?: BrewRecord;
     overflow?: OverflowSnapshot;
+    /** Epoch ms the owner last published `overflow` at; drives its countdown. */
+    overflowNow?: number;
     pauseIntervals?: PauseInterval[];
     /**
      * When this attempt began, stamped by the provider the moment `start`
@@ -210,7 +212,7 @@ function RunOwner({
            heldSeconds, stalls, stageWater, pauseElapsed, brew, startBrew,
            pauseBrew, resumeBrew,
            cancelBrew, canOfferProMode, switchToProAndRetry, bypass, record,
-           overflow, pauseIntervals} = result;
+           overflow, overflowNow, pauseIntervals} = result;
 
     // Command the machine exactly once, on the first mount of this RunOwner.
     // How many screens are showing this run in full. A count rather than a
@@ -247,7 +249,7 @@ function RunOwner({
     const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
         holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, startedAt, quickEdit,
-        overflow, pauseIntervals,
+        overflow, overflowNow, pauseIntervals,
     };
     const quickEditFor = (
         next: Recipe,

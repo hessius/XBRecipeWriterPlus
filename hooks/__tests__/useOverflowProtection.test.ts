@@ -102,6 +102,41 @@ describe("useOverflowProtection", () => {
         expect(result.current.overflow?.nextCheckAt).toBe(Date.now() + 15_000);
     });
 
+    it("publishes the owner's clock with each snapshot, and advances it every tick while holding", async () => {
+        const h = machine();
+        const {result} = await renderHook(() => useOverflowProtection({
+            machine: h.link, config, runId: 1
+        }));
+        expect(result.current.now).toBeUndefined();
+        await h.phase(pouring);
+        await h.pair();
+        await advance(500);
+        await h.pair();
+        await h.phase(paused);
+        const heldAt = result.current.now;
+        expect(heldAt).toBe(Date.now());
+
+        await advance(250);
+        expect(result.current.now).toBe(heldAt! + 250);
+        await advance(250);
+        expect(result.current.now).toBe(heldAt! + 500);
+    });
+
+    it("does not re-render on every tick while merely armed", async () => {
+        const h = machine();
+        let renders = 0;
+        await renderHook(() => {
+            renders++;
+            return useOverflowProtection({machine: h.link, config, runId: 1});
+        });
+        await h.phase(pouring);
+        // The first tick publishes the initial armed snapshot once.
+        await advance(250);
+        const before = renders;
+        await advance(2000);
+        expect(renders).toBe(before);
+    });
+
     it("does not let an earlier attempt's retry reset a newer disabled run", async () => {
         const h = machine();
         const {result, rerender} = await renderHook(

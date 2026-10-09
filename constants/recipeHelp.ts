@@ -88,11 +88,33 @@ const ENTRIES = {
     },
     cup: {
         title:  "Brewer",
-        hint:   "Other turns overflow protection off.",
+        hint:   "Other has no built-in overflow protection.",
         question: "Which brewer should I pick?",
         detail: "Omni is xBloom's own dripper, so the machine knows when " +
                 "your cup is full and stops. Other is for third-party " +
-                "brewers it cannot measure, so nothing stops it."
+                "brewers it cannot measure, so nothing stops it unless you set a " +
+                "retained-water limit, which the app then watches while it " +
+                "stays open."
+    },
+    overflowThreshold: {
+        title:  "Retained-water limit",
+        hint:   "Pause when this much water is estimated in the dripper.",
+        question: "What is the retained-water limit?",
+        detail: "While a protected brew runs, the app subtracts the coffee " +
+                "collected in the cup from the water dispensed. When that " +
+                "estimate reaches your limit for a moment, the app pauses " +
+                "the brew. It includes water held by the grounds, so it is " +
+                "not a measured fill level, and no limit is suggested: " +
+                "choose one that suits your dripper from experience."
+    },
+    overflowInterval: {
+        title:  "CHECK AGAIN",
+        hint:   "How long a pause waits before the app looks again.",
+        question: "How often does a paused brew check again?",
+        detail: "After a protective pause the app waits this long, then looks " +
+                "at the estimate. Once it has fallen below your limit the brew " +
+                "resumes by itself; if not, it waits again. It cannot check " +
+                "while the app is closed or in the background."
     },
     xid: {
         title:  "Recipe ID",

@@ -16,6 +16,8 @@ export function useOverflowProtection({machine, config, runId}: {
     runId: number;
 }): {
     overflow: OverflowSnapshot | undefined;
+    /** Epoch ms of the latest publication; advances each tick while holding. */
+    now: number | undefined;
     manualPause: () => void;
     manualResume: () => void;
     cancel: () => void;
@@ -27,7 +29,7 @@ export function useOverflowProtection({machine, config, runId}: {
         from: OverflowMachine; runId: number; restart: () => void;
     } | null>(null);
     const [published, setPublished] = useState<{
-        from: OverflowMachine; runId: number; snapshot: OverflowSnapshot;
+        from: OverflowMachine; runId: number; snapshot: OverflowSnapshot; now: number;
     } | null>(null);
 
     useEffect(() => { configRef.current = config; }, [config]);
@@ -44,7 +46,7 @@ export function useOverflowProtection({machine, config, runId}: {
             },
             now: Date.now,
             onChange: snapshot => {
-                if (alive) setPublished({from: machine, runId, snapshot});
+                if (alive) setPublished({from: machine, runId, snapshot, now: Date.now()});
             }
         });
         let controller = create();
@@ -56,7 +58,7 @@ export function useOverflowProtection({machine, config, runId}: {
             controller = create();
             handle.current = controller;
             if (AppState.currentState !== "active") controller.background();
-            setPublished({from: machine, runId, snapshot: controller.snapshot});
+            setPublished({from: machine, runId, snapshot: controller.snapshot, now: Date.now()});
         };
         retry.current = {from: machine, runId, restart: preflightRetry};
         // The machine's current phase may belong to the previous attempt.
@@ -66,7 +68,15 @@ export function useOverflowProtection({machine, config, runId}: {
         const appState = AppState.addEventListener("change", state => {
             if (state !== "active") controller.background();
         });
-        const timer = setInterval(() => controller.tick(), OVERFLOW_PUBLISH_MS);
+        const timer = setInterval(() => {
+            controller.tick();
+            // The countdown is the only thing that moves while nothing else
+            // changes, so only a hold needs the clock republished.
+            const snapshot = controller.snapshot;
+            if (alive && snapshot.mode === "holding") {
+                setPublished({from: machine, runId, snapshot, now: Date.now()});
+            }
+        }, OVERFLOW_PUBLISH_MS);
         return () => {
             alive = false;
             offNotification();
@@ -79,9 +89,10 @@ export function useOverflowProtection({machine, config, runId}: {
         };
     }, [machine, runId]);
 
+    const current = published?.from === machine && published.runId === runId ? published : null;
     return {
-        overflow: published?.from === machine && published.runId === runId
-            ? published.snapshot : undefined,
+        overflow: current?.snapshot,
+        now: current?.now,
         manualPause: () => { handle.current?.manualPause(); },
         manualResume: () => { handle.current?.manualResume(); },
         cancel: () => { handle.current?.cancel(); },

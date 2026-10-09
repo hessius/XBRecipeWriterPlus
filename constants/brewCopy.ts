@@ -176,6 +176,33 @@ export const PAUSED_NOTE =
     "The machine is holding the brew where it is. "
     + "Its own screen will not say so, and only this app can start it again.";
 
+/**
+ * Custom overflow protection, in the words the editor and the live brew share.
+ *
+ * The first is the price of the feature and is shown wherever it is on offer or
+ * running. The second is why a gram figure is not a fill level.
+ */
+export const OVERFLOW_FOREGROUND_CAUTION =
+    "Keep XBRW++ open while brewing. Leaving or closing the app disables custom overflow protection.";
+export const OVERFLOW_ESTIMATE_NOTE =
+    "Estimated water in the dripper includes water held by the grounds. It is not a measured fill level.";
+export const OVERFLOW_MANUAL_OVERRIDE = "Custom overflow protection is off for this brew.";
+
+/** What the status says about the protection's state. One stable line per state: it is the spoken one. */
+/** The headline for a pause the app made itself, distinct from a manual one. */
+export const OVERFLOW_PAUSED_HEADLINE = "Paused for overflow.";
+
+export const OVERFLOW_STATE_COPY = {
+    armed:           "Custom overflow protection is on.",
+    requesting:      "Pausing the brew. Waiting for the machine to confirm.",
+    holding:         "Paused for the dripper to drain.",
+    resuming:        "Resuming the brew.",
+    background:      "Custom overflow protection stopped because the app left the foreground.",
+    lostContact:     "Custom overflow protection stopped because contact with the machine was lost.",
+    manualOverride:  OVERFLOW_MANUAL_OVERRIDE,
+    error:           "Custom overflow protection could not hold the brew."
+} as const;
+
 /** The phases a brew can end in: nothing more will arrive from the machine. */
 export const OVER: ReadonlySet<string> = new Set([
     "done", "cancelled", "failed", "lostContact"

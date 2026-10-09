@@ -366,7 +366,7 @@ export function useBrewRun(
         // the brewer's raw one, is what callers should see.
         ...brewer, phase, samples, pauseIntervals, elapsed, stageElapsed, activeIndex, holding,
         heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
-        overflow: protection.overflow, brew, pauseBrew, resumeBrew, cancelBrew
+        overflow: protection.overflow, overflowNow: protection.now, brew, pauseBrew, resumeBrew, cancelBrew
     };
 }
 
