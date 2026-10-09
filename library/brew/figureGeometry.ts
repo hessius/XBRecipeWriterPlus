@@ -1,4 +1,4 @@
-import {dotoTextWidth, DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
+import {dotoRowHeight, dotoTextWidth, DOTO_MIN_FONT_SIZE} from "@/library/dotoMetrics";
 
 export const BREW_FIGURE_LABEL_SIZE = 10;
 export const BREW_FIGURE_VALUE_SIZE = 28;
@@ -77,6 +77,129 @@ export function brewFigureBadgeWidth(
         DOTO_MIN_FONT_SIZE * scale
     )
         + (badge.paddingHorizontal + badge.borderWidth) * 2;
+}
+
+export const BREW_RECIPE_SIZE = 12;
+export const BREW_RECIPE_TRACKING = 1.2;
+export const BREW_RECIPE_LABEL_GAP = 4;
+export const BREW_RECIPE_UNIT_GAP = 16;
+export const BREW_RECIPE_ROW_GAP = 6;
+export const BREW_RECIPE_AFTER_GAP = 8;
+
+export type BrewRecipeInputs = {
+    dose?: number;
+    ratio?: number;
+    adjustedFromDose?: number;
+    adjustedFromRatio?: number;
+};
+
+export type BrewRecipeUnit = {
+    key: "dose" | "ratio";
+    label: string;
+    value: string;
+    badge: string | null;
+    accessibilityLabel: string;
+};
+
+export function brewRecipeUnits(inputs: BrewRecipeInputs = {}): BrewRecipeUnit[] {
+    const {dose, ratio, adjustedFromDose, adjustedFromRatio} = inputs;
+    const units: BrewRecipeUnit[] = [];
+    if (dose !== undefined && Number.isFinite(dose) && dose > 0) {
+        const hasBaseline = adjustedFromDose !== undefined
+            && Number.isFinite(adjustedFromDose) && adjustedFromDose > 0
+            && adjustedFromDose !== dose;
+        units.push({
+            key: "dose",
+            label: "DOSE",
+            value: `${dose} G`,
+            badge: hasBaseline ? `RECIPE ${adjustedFromDose}` : null,
+            accessibilityLabel: `Recipe dose, ${dose} grams`
+                + (hasBaseline ? `, saved recipe ${adjustedFromDose} grams` : "")
+        });
+    }
+    if (ratio !== undefined && Number.isFinite(ratio) && ratio > 0) {
+        const hasBaseline = adjustedFromRatio !== undefined
+            && Number.isFinite(adjustedFromRatio) && adjustedFromRatio > 0
+            && adjustedFromRatio !== ratio;
+        units.push({
+            key: "ratio",
+            label: "RATIO",
+            value: `1:${ratio}`,
+            badge: hasBaseline ? `RECIPE 1:${adjustedFromRatio}` : null,
+            accessibilityLabel: `Recipe ratio, 1 to ${ratio}`
+                + (hasBaseline ? `, saved recipe 1 to ${adjustedFromRatio}` : "")
+        });
+    }
+    return units;
+}
+
+export type BrewRecipeMeasuredUnit = {
+    unit: BrewRecipeUnit;
+    badgeBelow: boolean;
+    width: number;
+    height: number;
+};
+
+export type BrewRecipeContextLayout = {
+    rows: {units: BrewRecipeMeasuredUnit[]; height: number}[];
+    columnWidth: number;
+    maxWidth: number;
+    totalHeight: number;
+    fits: boolean;
+};
+
+export function brewRecipeContextLayout(
+    inputs: BrewRecipeInputs | undefined,
+    contentWidth: number,
+    fontScale: number,
+    scale = 1
+): BrewRecipeContextLayout {
+    const size = BREW_RECIPE_SIZE * scale;
+    const tracking = BREW_RECIPE_TRACKING * scale;
+    const lineHeight = dotoRowHeight(size, fontScale);
+    const badge = brewFigureBadgeGeometry(scale);
+    const badgeHeight = dotoRowHeight(badge.fontSize, fontScale, DOTO_MIN_FONT_SIZE * scale)
+        + 2 * (badge.paddingVertical + badge.borderWidth);
+    const segments = brewRecipeUnits(inputs).map((unit) => ({
+        unit,
+        baseWidth: dotoTextWidth(unit.label, size, fontScale, tracking)
+            + BREW_RECIPE_LABEL_GAP * scale
+            + dotoTextWidth(unit.value, size, fontScale, tracking),
+        badgeWidth: unit.badge === null ? 0 : brewFigureBadgeWidth(unit.badge, fontScale, scale)
+    }));
+    const twoColumnWidth = (contentWidth - BREW_RECIPE_UNIT_GAP * scale) / 2;
+    const columns = segments.length === 2 && segments.every(({baseWidth, badgeWidth}) =>
+        Math.max(baseWidth, badgeWidth) + STORY_FIT_MARGIN <= twoColumnWidth)
+        ? 2 : 1;
+    const columnWidth = Math.max(0, columns === 2 ? twoColumnWidth : contentWidth);
+    const measured = segments.map(({unit, baseWidth, badgeWidth}): BrewRecipeMeasuredUnit => {
+        if (unit.badge === null) {
+            return {unit, badgeBelow: false, width: baseWidth, height: lineHeight};
+        }
+        const inlineWidth = baseWidth + badge.gap + badgeWidth;
+        const badgeBelow = inlineWidth + STORY_FIT_MARGIN > columnWidth;
+        return {
+            unit,
+            badgeBelow,
+            width: badgeBelow ? Math.max(baseWidth, badgeWidth) : inlineWidth,
+            height: badgeBelow ? lineHeight + badge.gap + badgeHeight : Math.max(lineHeight, badgeHeight)
+        };
+    });
+    const rows: BrewRecipeContextLayout["rows"] = [];
+    for (let index = 0; index < measured.length; index += columns) {
+        const units = measured.slice(index, index + columns);
+        rows.push({units, height: Math.max(...units.map(({height}) => height))});
+    }
+    const maxWidth = Math.max(0, ...measured.map(({width}) => width));
+    return {
+        rows,
+        columnWidth,
+        maxWidth,
+        totalHeight: rows.length === 0 ? 0
+            : rows.reduce((sum, {height}) => sum + height, 0)
+                + (rows.length - 1) * BREW_RECIPE_ROW_GAP * scale + BREW_RECIPE_AFTER_GAP * scale,
+        fits: measured.length === 0 || maxWidth + STORY_FIT_MARGIN <= columnWidth
+    };
 }
 
 export type BrewFigureAdjustmentMeasure = {

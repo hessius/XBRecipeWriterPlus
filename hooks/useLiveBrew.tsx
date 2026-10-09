@@ -39,6 +39,7 @@ export type LiveBrewSnapshot = {
      * rather than as a ref local to the brew screen.
      */
     startedAt: number;
+    quickEdit?: QuickEditRecordAdjustments;
 };
 
 type LiveBrew = {
@@ -234,7 +235,11 @@ function RunOwner({
 
     const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
+<<<<<<< HEAD
         holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, startedAt,
+=======
+        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, quickEdit,
+>>>>>>> origin/spec/issue-199-dose-ratio
     };
     const quickEditFor = (
         next: Recipe,

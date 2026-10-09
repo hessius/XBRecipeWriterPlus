@@ -127,8 +127,6 @@ type Props = {
 };
 
 export type BrewFigureAdjustments = {
-    dose?: {value: number; from: number};
-    ratio?: {value: number; from: number};
     grind?: {value: number; from: number; confirmed?: boolean};
     temperature?: {offset: number; temperatures: number[]};
 };
@@ -255,28 +253,6 @@ function adjustmentFigures(
     if (adjustments === undefined) return [];
     const figures: AdjustmentFigure[] = [];
 
-    if (adjustments.dose !== undefined) {
-        figures.push({
-            key:                "dose",
-            label:              "DOSE",
-            value:              String(adjustments.dose.value),
-            badge:              `RECIPE ${adjustments.dose.from}`,
-            accessibilityLabel: `Dose, ${adjustments.dose.value} grams, recipe ${
-                adjustments.dose.from
-            } grams`
-        });
-    }
-    if (adjustments.ratio !== undefined) {
-        figures.push({
-            key:                "ratio",
-            label:              "RATIO",
-            value:              `1:${adjustments.ratio.value}`,
-            badge:              `RECIPE ${adjustments.ratio.from}`,
-            accessibilityLabel: `Ratio, 1:${adjustments.ratio.value}, recipe 1:${
-                adjustments.ratio.from
-            }`
-        });
-    }
     if (adjustments.temperature !== undefined) {
         const offset = signed(adjustments.temperature.offset);
         const value = describeTemperatureList(adjustments.temperature.temperatures);

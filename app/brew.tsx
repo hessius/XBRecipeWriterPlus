@@ -10,6 +10,7 @@ import {Text, XStack, YStack} from "tamagui";
 import BrewFigures from "@/components/BrewFigures";
 import BrewJudgement from "@/components/BrewJudgement";
 import BrewNowCard from "@/components/BrewNowCard";
+import BrewRecipeContext from "@/components/BrewRecipeContext";
 import BrewStageLadder from "@/components/BrewStageLadder";
 import BrewSummary from "@/components/BrewSummary";
 import BrewWakeLock from "@/components/BrewWakeLock";
@@ -39,6 +40,7 @@ import {useLiveBrew} from "@/hooks/useLiveBrew";
 import {resolveAccent} from "@/library/accent";
 import {allocateBands} from "@/library/brew/bands";
 import {finalOutcome} from "@/library/brew/BrewRecord";
+import type {BrewRecipeInputs} from "@/library/brew/figureGeometry";
 import {
     drawdownFigures,
     flowNow,
@@ -245,6 +247,13 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // The recipe the provider is running takes precedence once it is available,
     // because it is the object the recorder was started with.
     const recipe = run?.recipe ?? localRecipe;
+    const activeQuickEdit = run === null ? quickEditRecord : run.quickEdit;
+    const recipeInputs: BrewRecipeInputs = run?.record ?? {
+        dose: recipe.dosage,
+        ratio: recipe.ratio,
+        adjustedFromDose: activeQuickEdit?.adjustedFromDose,
+        adjustedFromRatio: activeQuickEdit?.adjustedFromRatio
+    };
     const stageWater = run?.stageWater ?? recipe.pours.map(() => 0);
     const stalls = run?.stalls ?? recipe.pours.map(() => []);
     const pauseElapsed = run?.pauseElapsed ?? 0;
@@ -514,6 +523,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 <ViewShot ref={shotRef} options={{format: "png", quality: 1}}>
                     <BrewSummary
                         recipeName={recipe.displayName()}
+                        recipeInputs={recipeInputs}
                         hasStream={samples.length > 0}
                         samples={samples}
                         stages={recipe.pours}
@@ -550,6 +560,9 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 </View>
             ) : (
                 <>
+                    <YStack flex={1} gap={0}>
+                    <BrewRecipeContext inputs={recipeInputs}
+                                       contentWidth={width - SCREEN_PADDING * 2}/>
                     <YStack testID="brew-band-region" flex={1} gap={BREW_BAND_GAP}
                             onLayout={(e) => setFlexHeight(e.nativeEvent.layout.height)}>
                         <BrewTrace
@@ -580,6 +593,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             pauseElapsed={pauseElapsed}
                             bypass={bypass}
                         />
+                    </YStack>
                     </YStack>
 
                     <BrewFigures

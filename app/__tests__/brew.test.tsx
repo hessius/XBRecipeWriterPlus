@@ -14,7 +14,8 @@ import type {StoredBrew} from "@/library/BrewDatabase";
 import {drawdownFrom, drawdownSeconds, type BrewSample} from "@/library/brew/BrewRecord";
 import Pour from "@/library/Pour";
 import type {BypassView} from "@/library/brew/bypassState";
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
+import type {QuickEditRecordAdjustments} from "@/library/quickEdit";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 
 const mockUseKeepAwake = jest.fn();
@@ -67,6 +68,7 @@ let mockBypass: BypassView | undefined = undefined;
 let mockRecord: StoredBrew | undefined = undefined;
 let mockStartedAt = 0;
 let mockLinkHistory: {at: number; text: string}[] = [];
+let mockRunQuickEdit: QuickEditRecordAdjustments | undefined = undefined;
 let mockBandAllocationArgs: [number, number][] = [];
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
@@ -101,6 +103,9 @@ const mockRecipe = (() => {
     r.grindRPM = 90;
     return r;
 })();
+const originalRecipeInputs = {
+    dosage: mockRecipe.dosage, ratio: mockRecipe.ratio, cupType: mockRecipe.cupType
+};
 
 // The real hook, wrapped so a test can see what the screen handed it. The
 // flicker reading the recipe's grind speed lives on one line of the screen --
@@ -142,6 +147,7 @@ jest.mock("@/hooks/useLiveBrew", () => {
             heldSeconds: 0,
             bypass: mockBypass,
             record: mockRecord,
+            quickEdit: mockRunQuickEdit,
         },
         start: mockStart,
         startInPro: mockStartInPro,
@@ -223,6 +229,7 @@ beforeEach(() => {
     mockPush.mockClear();
     mockBack.mockClear();
     mockPhase = {name: "pouring", pour: 1, pours: 2};
+    Object.assign(mockRecipe, originalRecipeInputs);
     mockRecipe.pours = [
         new Pour(1, 40, 93, 40, 0, 0, 20),
     ];
@@ -240,6 +247,7 @@ beforeEach(() => {
     mockRecord = undefined;
     mockStartedAt = 0;
     mockLinkHistory = [];
+    mockRunQuickEdit = undefined;
     mockBandAllocationArgs = [];
     mockFrameLogSince.mockClear();
     mockNotify.mockClear();
@@ -255,6 +263,108 @@ async function drawDone() {
 }
 
 describe("brew route", () => {
+    it("shows the active owner's recipe and saved inputs when reopened without route data", async () => {
+        mockView = "1";
+        mockRecipeJSON = undefined;
+        mockRecipe.dosage = 16;
+        mockRecipe.ratio = 17;
+        mockRunQuickEdit = {adjustedFromDose: 15, adjustedFromRatio: 16};
+
+        await renderWithProviders(<Brew />);
+
+        expect(screen.getByLabelText("Recipe dose, 16 grams, saved recipe 15 grams"))
+            .toBeOnTheScreen();
+        expect(screen.getByLabelText("Recipe ratio, 1 to 17, saved recipe 1 to 16"))
+            .toBeOnTheScreen();
+        expect(screen.getByText("16 G")).toBeOnTheScreen();
+        expect(screen.getByText("1:17")).toBeOnTheScreen();
+        expect(screen.getByText("RECIPE 15")).toBeOnTheScreen();
+        expect(mockStart).not.toHaveBeenCalled();
+    });
+
+    it("captures finished record inputs instead of the run's changed recipe", async () => {
+        mockRecord = {...record, dose: 15, ratio: 16};
+        mockRecipe.dosage = 20;
+        mockRecipe.ratio = 18;
+        mockRunQuickEdit = {adjustedFromDose: 19, adjustedFromRatio: 17};
+        await drawDone();
+
+        const capture = within(screen.getByTestId("brew-capture"));
+        expect(capture.getByLabelText("Recipe dose, 15 grams")).toBeOnTheScreen();
+        expect(capture.getByLabelText("Recipe ratio, 1 to 16")).toBeOnTheScreen();
+        expect(capture.getByText("15 G")).toBeOnTheScreen();
+        expect(capture.getByText("1:16")).toBeOnTheScreen();
+        expect(capture.queryByText("20 G")).toBeNull();
+        expect(capture.queryByText("1:18")).toBeNull();
+        expect(capture.queryByTestId("brew-recipe-dose-comparison")).toBeNull();
+        expect(screen.getAllByTestId("brew-recipe-context")).toHaveLength(1);
+    });
+
+    it("does not fill a finished record's missing ratio from the active recipe", async () => {
+        mockRecord = {...record, dose: 15};
+        mockRecipe.dosage = 20;
+        mockRecipe.ratio = 18;
+        await drawDone();
+
+        const capture = within(screen.getByTestId("brew-capture"));
+        expect(capture.getByText("15 G")).toBeOnTheScreen();
+        expect(capture.queryByTestId("brew-recipe-ratio")).toBeNull();
+        expect(capture.queryByText("1:18")).toBeNull();
+    });
+
+    it.each(["pouring", "failed", "done"] as const)(
+        "shows planned inputs during %s before a record is published, not measured yield",
+        async (name) => {
+            mockPhase = namedPhase(name);
+            mockRecipe.dosage = 15;
+            mockRecipe.ratio = 16;
+            mockSamples = [{at: 12_000, water: 120, cup: 90, pour: 1}];
+
+            await renderWithProviders(<Brew />);
+
+            expect(screen.getByText("15 G")).toBeOnTheScreen();
+            expect(screen.getByText("1:16")).toBeOnTheScreen();
+            expect(screen.getByLabelText("Recipe ratio, 1 to 16")).toBeOnTheScreen();
+            expect(screen.getAllByTestId("brew-recipe-context")).toHaveLength(1);
+        }
+    );
+
+    it("keeps tea dose and ratio independent of partial measured yield", async () => {
+        mockRecipe.cupType = CUP_TYPE.TEA;
+        mockRecipe.dosage = 5;
+        mockRecipe.ratio = 18;
+        mockSamples = [{at: 12_000, water: 45, cup: 40, pour: 1}];
+
+        await renderWithProviders(<Brew />);
+
+        expect(screen.getByText("5 G")).toBeOnTheScreen();
+        expect(screen.getByText("1:18")).toBeOnTheScreen();
+        expect(screen.getByLabelText("Recipe ratio, 1 to 18")).toBeOnTheScreen();
+    });
+
+    it("retains context rows and spacing from pouring through settling", async () => {
+        mockRecipe.dosage = 16;
+        mockRecipe.ratio = 17;
+        mockRunQuickEdit = {adjustedFromDose: 15, adjustedFromRatio: 16};
+        const rendered = await renderWithProviders(<Brew />);
+        const rowCount = screen.getAllByTestId("brew-recipe-row").length;
+        expect(screen.getByTestId("brew-recipe-context"))
+            .toHaveStyle({marginBottom: 8, gap: 6});
+        expect(screen.getByTestId("brew-recipe-context").parent)
+            .toHaveStyle({flex: 1, gap: 0});
+        expect(screen.getByTestId("brew-band-region").parent)
+            .toBe(screen.getByTestId("brew-recipe-context").parent);
+
+        mockPhase = {name: "settling"};
+        await rendered.rerender(<Brew />);
+
+        expect(screen.getAllByTestId("brew-recipe-row")).toHaveLength(rowCount);
+        expect(screen.getByTestId("brew-recipe-context"))
+            .toHaveStyle({marginBottom: 8, gap: 6});
+        expect(screen.getByText("16 G")).toBeOnTheScreen();
+        expect(screen.getByText("1:17")).toBeOnTheScreen();
+    });
+
     it.each([
         "waking", "sending", "readyToStart", "armed", "pressPlay",
         "grinding", "pouring", "bypass", "settling"
@@ -1211,6 +1321,8 @@ describe("bypass on the live brew screen", () => {
     });
 
     it("does not count bypass water into the WATER figure", async () => {
+        mockRecipe.dosage = 15;
+        mockRecipe.ratio = 16;
         await renderBrew({
             phase: {name: "settling"},
             samples: [{at: 190_000, water: 245, cup: 200, pour: 4}],
@@ -1219,6 +1331,8 @@ describe("bypass on the live brew screen", () => {
         });
         expect(screen.getByText("240")).toBeTruthy();
         expect(screen.getByText("+5")).toBeTruthy();
+        expect(screen.getByText("1:16")).toBeOnTheScreen();
+        expect(screen.getByLabelText("Recipe ratio, 1 to 16")).toBeOnTheScreen();
     });
 });
 

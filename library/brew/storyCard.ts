@@ -22,7 +22,10 @@ import {
     brewFigureColumnWidths,
     brewFigureUsesFourColumns,
     STORY_FIT_MARGIN,
-    brewFigureTextGeometry
+    brewFigureTextGeometry,
+    brewRecipeUnits,
+    brewRecipeContextLayout,
+    type BrewRecipeInputs
 } from "@/library/brew/figureGeometry";
 import {BYPASS_VOLUME} from "@/library/bypassLimits";
 import {
@@ -103,10 +106,11 @@ export type StorySummaryBudgetInput = {
     hasSummaryNote?: boolean;
     stagesUnavailable?: boolean;
     fontScale?: number;
+    recipeInputs?: BrewRecipeInputs;
 };
 
 export const STORY_CONTENT_KEYS = [
-    "coffee", "rating", "tags", "note", "details", "flow"
+    "coffee", "rating", "tags", "note", "details", "flow", "recipe"
 ] as const;
 
 export type StoryContentKey = (typeof STORY_CONTENT_KEYS)[number];
@@ -117,11 +121,12 @@ const STORY_CONTENT_SET = new Set<string>(STORY_CONTENT_KEYS);
 
 export function storyContentFacts({
     hasRateChart, hasCoffee, hasRating, tags = [], tagCount = tags.length,
-    figureExtraRows = 0, figureAdjustmentRows = 0, hasSummaryNote = false
+    figureExtraRows = 0, figureAdjustmentRows = 0, hasSummaryNote = false,
+    recipeInputs
 }: Pick<
     StorySummaryBudgetInput,
     "hasRateChart" | "hasCoffee" | "hasRating" | "tags" | "tagCount" |
-    "figureExtraRows" | "figureAdjustmentRows" | "hasSummaryNote"
+    "figureExtraRows" | "figureAdjustmentRows" | "hasSummaryNote" | "recipeInputs"
 >): StoryContentFacts {
     const totalFigureRows = figureExtraRows + figureAdjustmentRows;
     return {
@@ -130,7 +135,8 @@ export function storyContentFacts({
         tags:    tagCount > 0,
         note:    hasSummaryNote,
         details: totalFigureRows > 0,
-        flow:    hasRateChart
+        flow:    hasRateChart,
+        recipe:  brewRecipeUnits(recipeInputs).length > 0
     };
 }
 
@@ -179,6 +185,7 @@ export type StorySummaryBudget = {
     tagRows: number;
     showSummaryNote: boolean;
     showFigureDetails: boolean;
+    showRecipeInputs: boolean;
     showGrindRecipeBadge: boolean;
     showDrawdownRateBadge: boolean;
     showBypassBadge: boolean;
@@ -728,10 +735,15 @@ export function storyHorizontalFit(
         showGrindRecipeBadge?: boolean;
         showDrawdownRateBadge?: boolean;
         showBypassBadge?: boolean;
+        showRecipeInputs?: boolean;
     }
 ): StoryHorizontalFit {
     const width = input.width;
     const fontScale = input.fontScale ?? 1;
+    const recipeLayout = brewRecipeContextLayout(
+        input.recipeInputs, storyTextContentWidth(width), fontScale, storyTextScale(width)
+    );
+    const showRecipe = budget.showRecipeInputs ?? (brewRecipeUnits(input.recipeInputs).length > 0);
     const maxima = storyFigureMaxima(input.stages);
     const showBypassBadge = budget.showBypassBadge
         ?? (input.hasBypass === true && storyBypassBadgeFits(width, fontScale, input.stages));
@@ -761,7 +773,10 @@ export function storyHorizontalFit(
 
     return fitResult([
         {id: mainFigures.widest, width: mainFigures.width, limit: mainFigures.limit},
-        {id: details.widest, width: details.width, limit: details.limit}
+        {id: details.widest, width: details.width, limit: details.limit},
+        ...(showRecipe ? [{
+            id: "recipe inputs", width: recipeLayout.maxWidth, limit: recipeLayout.columnWidth
+        }] : [])
     ]);
 }
 
@@ -838,12 +853,15 @@ export function storySummaryBudget(
         tagCount = tags.length, hasBypass = false, hasGrindRecipeBadge = undefined,
         drawdownRate = undefined, figureExtraRows = 0, figureAdjustmentRows = 0,
         hasSummaryNote = false, stagesUnavailable = false,
-        fontScale = 1
+        fontScale = 1, recipeInputs
     }: StorySummaryBudgetInput
 ): StorySummaryBudget {
     const frame = storyFrame(width);
     const contentHeight = frame.height - frame.safeTop - frame.safeBottom;
     const rows = storyRows(width, fontScale);
+    const recipeLayout = brewRecipeContextLayout(
+        recipeInputs, storyTextContentWidth(width), fontScale, storyTextScale(width)
+    );
     const shownTags = tags.slice(0, Math.min(tagCount, 4));
     const moreTags = Math.max(0, tagCount - shownTags.length);
     const tagsForWidth = moreTags > 0
@@ -856,7 +874,8 @@ export function storySummaryBudget(
         tags:    tagCount > 0,
         note:    hasSummaryNote,
         details: figureExtraRows + figureAdjustmentRows > 0,
-        flow:    hasRateChart
+        flow:    hasRateChart,
+        recipe:  brewRecipeUnits(recipeInputs).length > 0
     };
     const traceFull = scaledFloor(STORY_TRACE_HEIGHT, width, STORY_TRACE_MIN_FLOOR);
     const traceMin = Math.min(
@@ -891,7 +910,8 @@ export function storySummaryBudget(
         chartHeight: number,
         showStages: boolean,
         showNote: boolean,
-        showDetails: boolean
+        showDetails: boolean,
+        showRecipe: boolean
     ) => {
         const charts = storyChartHeights(chartHeight, showRate);
         const tagLineCount = showTags ? tagRows(tagsForWidth, width, fontScale) : 0;
@@ -927,6 +947,7 @@ export function storySummaryBudget(
             + (showNote ? dotoRowHeight(scaledSize(11, width), fontScale) + 8 : 0);
         const summary = STORY_CAPTURE_PADDING * 2
             + rows.name
+            + (showRecipe ? recipeLayout.totalHeight : 0)
             + charts.trace
             + (showRate ? rateTopGap + charts.rate + rateBottomGap : 0)
             + figureBlock
@@ -935,7 +956,8 @@ export function storySummaryBudget(
             showFigureDetails:    showDetails,
             showGrindRecipeBadge: showDetails && canShowGrindRecipeBadge,
             showDrawdownRateBadge: showDetails && canShowDrawdownRateBadge,
-            showBypassBadge:      canShowBypassBadge
+            showBypassBadge:      canShowBypassBadge,
+            showRecipeInputs:     showRecipe
         };
         return {
             around,
@@ -949,7 +971,8 @@ export function storySummaryBudget(
                     width, stages, hasRateChart: showRate, hasCoffee: showCoffee,
                     hasRating: showRating, tags, tagCount, hasBypass, hasGrindRecipeBadge,
                     figureExtraRows: figureExtraRows + figureAdjustmentRows,
-                    hasSummaryNote: showNote, stagesUnavailable, fontScale, drawdownRate
+                    hasSummaryNote: showNote, stagesUnavailable, fontScale, drawdownRate,
+                    recipeInputs
                 },
                 budgetForFit
             )
@@ -965,6 +988,7 @@ export function storySummaryBudget(
         stages: boolean;
         note: boolean;
         details: boolean;
+        recipe: boolean;
     };
     const baseAttempt: Attempt = {
         coffee: requested.coffee,
@@ -974,7 +998,8 @@ export function storySummaryBudget(
         chart: requested.flow ? chartPairFull : traceFull,
         stages: true,
         note: requested.note,
-        details: requested.details
+        details: requested.details,
+        recipe: requested.recipe
     };
     const shrinkAttempt: Attempt = {
         ...baseAttempt,
@@ -982,8 +1007,8 @@ export function storySummaryBudget(
     };
     const attempts: Attempt[] = [baseAttempt, shrinkAttempt];
     const declineOrder: (keyof Pick<
-        Attempt, "tags" | "rating" | "coffee" | "note" | "details" | "rate"
-    >)[] = ["tags", "rating", "coffee", "note", "details", "rate"];
+        Attempt, "tags" | "rating" | "coffee" | "note" | "details" | "rate" | "recipe"
+    >)[] = ["tags", "rating", "coffee", "note", "details", "rate", "recipe"];
     const withoutStages: Attempt = {...shrinkAttempt, stages: false};
     attempts.push(withoutStages);
     let declining = withoutStages;
@@ -1000,12 +1025,12 @@ export function storySummaryBudget(
     let chosen = attempts[attempts.length - 1];
     let measured = build(
         chosen.coffee, chosen.rating, chosen.tags, chosen.rate, chosen.chart, chosen.stages,
-        chosen.note, chosen.details
+        chosen.note, chosen.details, chosen.recipe
     );
     for (const attempt of attempts) {
         const next = build(
             attempt.coffee, attempt.rating, attempt.tags, attempt.rate,
-            attempt.chart, attempt.stages, attempt.note, attempt.details
+            attempt.chart, attempt.stages, attempt.note, attempt.details, attempt.recipe
         );
         if (
             next.required <= contentHeight
@@ -1071,6 +1096,7 @@ export function storySummaryBudget(
         tagRows: measured.tagLineCount,
         showSummaryNote: chosen.note,
         showFigureDetails: chosen.details,
+        showRecipeInputs: chosen.recipe,
         showGrindRecipeBadge: chosen.details && canShowGrindRecipeBadge,
         showDrawdownRateBadge: chosen.details && canShowDrawdownRateBadge,
         showBypassBadge: canShowBypassBadge,
@@ -1081,7 +1107,8 @@ export function storySummaryBudget(
             tags:    requested.tags && !chosen.tags,
             note:    requested.note && !chosen.note,
             details: requested.details && !chosen.details,
-            flow:    requested.flow && !chosen.rate
+            flow:    requested.flow && !chosen.rate,
+            recipe:  requested.recipe && !chosen.recipe
         },
         margin: contentHeight - requiredHeight
     };

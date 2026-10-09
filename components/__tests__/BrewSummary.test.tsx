@@ -113,6 +113,30 @@ describe("BrewSummary", () => {
         expect(capture.getByText("Ethiopia Guji")).toBeTruthy();
     });
 
+    it("captures recipe context inside measured chrome between the name and trace", async () => {
+        await draw({
+            recipeInputs: {dose: 16, ratio: 17, adjustedFromDose: 15, adjustedFromRatio: 16}
+        });
+        const chrome = within(screen.getByTestId("summary-chrome"));
+        expect(chrome.getByText("16 G")).toBeOnTheScreen();
+        expect(chrome.getByText("1:17")).toBeOnTheScreen();
+        expect(chrome.getByText("RECIPE 15")).toBeOnTheScreen();
+        expect(chrome.getByText("RECIPE 1:16")).toBeOnTheScreen();
+        expect(chrome.getAllByTestId(/^(brew-summary-name|brew-recipe-context|trace-chart-slot)$/)
+            .map((node) => node.props.testID))
+            .toEqual(["brew-summary-name", "brew-recipe-context", "trace-chart-slot"]);
+        expect(within(screen.getByTestId("brew-capture")).getByTestId("brew-recipe-context"))
+            .toBeOnTheScreen();
+    });
+
+    it.each([undefined, {}, {dose: 0, ratio: -1}])(
+        "omits context and its spacing when no valid inputs were supplied: %j",
+        async (recipeInputs) => {
+            await draw({recipeInputs});
+            expect(screen.queryByTestId("brew-recipe-context")).toBeNull();
+        }
+    );
+
     it("pads the captured area so the exported PNG has a margin", async () => {
         const {getByTestId} = await draw();
         const style = StyleSheet.flatten(
@@ -150,7 +174,7 @@ describe("BrewSummary", () => {
         // The chrome above the ladder reports 300, leaving 600 - 2*30 of capture
         // padding for three stages: room for both bands to reach their ceilings.
         await act(async () => {
-            fireEvent(getByTestId("summary-chrome"), "layout", {
+            await fireEvent(getByTestId("summary-chrome"), "layout", {
                 nativeEvent: {layout: {height: 300, width: 330, x: 0, y: 0}}
             });
         });
@@ -166,7 +190,7 @@ describe("BrewSummary", () => {
         });
 
         await act(async () => {
-            fireEvent(getByTestId("summary-chrome"), "layout", {
+            await fireEvent(getByTestId("summary-chrome"), "layout", {
                 nativeEvent: {layout: {height: 300, width: 330, x: 0, y: 0}}
             });
         });
@@ -185,7 +209,7 @@ describe("BrewSummary", () => {
         });
 
         await act(async () => {
-            fireEvent(getByTestId("summary-chrome"), "layout", {
+            await fireEvent(getByTestId("summary-chrome"), "layout", {
                 nativeEvent: {layout: {height: 420, width: 330, x: 0, y: 0}}
             });
         });
