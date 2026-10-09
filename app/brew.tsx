@@ -590,6 +590,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             planDashed={motion.dashed}
                             planHeadAt={motion.headAt}
                             bypass={bypass}
+                            pauseIntervals={run?.pauseIntervals}
                         />
 
                         <BrewStageLadder
@@ -604,6 +605,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             stalls={stalls}
                             pauseElapsed={pauseElapsed}
                             bypass={bypass}
+                            pauseKind={phase.name === "paused" ? phase.pauseKind ?? "manual" : undefined}
                         />
                     </YStack>
                     </YStack>

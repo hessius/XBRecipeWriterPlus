@@ -216,6 +216,19 @@ export function overflowCountdownText(seconds: number): string {
 /** The headline for a pause the app made itself, distinct from a manual one. */
 export const OVERFLOW_PAUSED_HEADLINE = "Paused for overflow.";
 
+/** The inline marker on the paused stage's rung, and what a screen reader hears. */
+export const RUNG_PAUSE_MARKER = {manual: "PAUSED", overflow: "DRAINING"} as const;
+export const RUNG_PAUSE_SPOKEN = {
+    manual: "paused",
+    overflow: "paused, draining",
+} as const;
+
+/** The spoken phrase for one pause band on the trace. */
+export function tracePauseSpoken(reason: "manual" | "overflow", seconds: number): string {
+    const who = reason === "overflow" ? "paused for overflow" : "paused by you";
+    return `${who} ${Math.round(seconds)} seconds`;
+}
+
 export const OVERFLOW_STATE_COPY = {
     armed:           "Custom overflow protection is on.",
     requesting:      "Pausing the brew. Waiting for the machine to confirm.",

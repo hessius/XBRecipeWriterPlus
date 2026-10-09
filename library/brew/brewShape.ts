@@ -1,6 +1,7 @@
 import type Pour from "@/library/Pour";
 
 import type {BrewSample} from "./BrewRecord";
+import {intervalExtent, type PauseInterval} from "./pauseIntervals";
 
 /** A point on the brew's plane: seconds since the start, and millilitres. */
 export type Point = {t: number; v: number};
@@ -130,6 +131,28 @@ export function livePoints(samples: BrewSample[], of: "water" | "cup"): Point[] 
 }
 
 /**
+ * Breaks a series where two consecutive samples bridge a whole overflow pause.
+ *
+ * The machine was stopped by the app across that gap, so a line joining the two
+ * would claim a flow nobody measured. A manual pause is the user's own and keeps
+ * the existing joined line. Samples inside a pause are real readings and stay.
+ */
+export function splitAtPauses(
+    points: Point[], intervals: readonly PauseInterval[]
+): Point[][] {
+    const automatic = intervals.filter((i) => i.reason === "overflow" && i.to > i.from);
+    if (automatic.length === 0 || points.length === 0) return [points];
+    const runs: Point[][] = [[points[0]]];
+    for (let i = 1; i < points.length; i++) {
+        const bridged = automatic.some((interval) =>
+            points[i - 1].t * 1000 <= interval.from && points[i].t * 1000 >= interval.to);
+        if (bridged) runs.push([points[i]]);
+        else runs[runs.length - 1].push(points[i]);
+    }
+    return runs;
+}
+
+/**
  * The pieces a trace's horizontal axis is built from.
  *
  * `BrewTrace` needs the parts as well as the total: the bypass box is drawn
@@ -148,9 +171,13 @@ export type TraceTimeParts = {
 export function traceTimeParts(
     plannedSeconds: number,
     samples: BrewSample[],
-    bypass?: {volume: number; startedAt: number | null}
+    bypass?: {volume: number; startedAt: number | null},
+    intervals: readonly PauseInterval[] = []
 ): TraceTimeParts {
-    const ranTo = samples.length > 0 ? samples[samples.length - 1].at / 1000 : 0;
+    const ranTo = Math.max(
+        samples.length > 0 ? samples[samples.length - 1].at / 1000 : 0,
+        intervalExtent(intervals)
+    );
     const bypassMl = bypass === undefined ? 0 : Math.max(bypass.volume, 0);
     const bypassWide = bypassSeconds(bypassMl);
     /*
@@ -181,9 +208,10 @@ export function traceTimeParts(
 export function traceTimeExtent(
     plannedSeconds: number,
     samples: BrewSample[],
-    bypass?: {volume: number; startedAt: number | null}
+    bypass?: {volume: number; startedAt: number | null},
+    intervals: readonly PauseInterval[] = []
 ): number {
-    return traceTimeParts(plannedSeconds, samples, bypass).maxT;
+    return traceTimeParts(plannedSeconds, samples, bypass, intervals).maxT;
 }
 
 /**
@@ -202,9 +230,10 @@ export function traceAxisFor(
     pours: Pour[],
     samples: BrewSample[],
     plannedSeconds: number,
-    bypass?: {volume: number; startedAt: number | null}
+    bypass?: {volume: number; startedAt: number | null},
+    intervals: readonly PauseInterval[] = []
 ): {maxT: number; maxV: number} {
-    const times = traceTimeParts(plannedSeconds, samples, bypass);
+    const times = traceTimeParts(plannedSeconds, samples, bypass, intervals);
     const plan = planPoints(pours);
     // The plan's final water level: the floor the bypass box is stacked on.
     const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;

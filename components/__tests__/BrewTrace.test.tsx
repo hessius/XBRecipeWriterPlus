@@ -984,3 +984,44 @@ describe("the bypass box", () => {
         expect(pinned).toBeGreaterThan(0);
     });
 });
+
+describe("BrewTrace pause bands", () => {
+    const intervals = [
+        {from: 10000, to: 25000, pour: 1, reason: "overflow" as const},
+        {from: 30000, to: 40000, pour: 1, reason: "manual" as const},
+    ];
+    const rows = samples([5000, 20, 0], [10000, 30, 0], [25000, 30, 0], [45000, 50, 10]);
+
+    it("draws one band per reason behind the channels, with distinct colours", async () => {
+        await draw({samples: rows, pauseIntervals: intervals, plannedSeconds: 50});
+        const overflow = screen.getByTestId("trace-pause-overflow-0");
+        const manual = screen.getByTestId("trace-pause-manual-1");
+        expect(overflow.props.fill).not.toBe(manual.props.fill);
+        expect(overflow.props.fill).not.toBe(palette.warn);
+        expect(svgScalar(overflow.props.width)).toBeCloseTo(300 * 15 / 50);
+    });
+
+    it("draws no bands without intervals and keeps the label", async () => {
+        await draw({samples: rows});
+        expect(screen.queryByTestId("trace-pause-overflow-0")).toBeNull();
+    });
+
+    it("says the pauses in the accessible label", async () => {
+        await draw({samples: rows, pauseIntervals: intervals, plannedSeconds: 50});
+        expect(screen.getByLabelText(/paused for overflow 15 seconds/i)).toBeTruthy();
+        expect(screen.getByLabelText(/paused by you 10 seconds/i)).toBeTruthy();
+    });
+
+    it("breaks the water line across an automatic pause", async () => {
+        await draw({samples: rows, pauseIntervals: intervals, plannedSeconds: 50});
+        const d = screen.getByTestId("trace-water").props.d as string;
+        expect(d.match(/M/g)).toHaveLength(2);
+    });
+
+    it("includes an open pause in the axis", async () => {
+        await draw({samples: samples([5000, 20, 0], [10000, 30, 0]), plannedSeconds: 10,
+            pauseIntervals: [{from: 10000, to: 50000, pour: 1, reason: "overflow"}]});
+        expect(svgScalar(screen.getByTestId("trace-pause-overflow-0").props.width))
+            .toBeCloseTo(300 * 40 / 50);
+    });
+});

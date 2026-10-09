@@ -46,3 +46,33 @@ describe("pause intervals", () => {
         }
     );
 });
+
+describe("interval geometry", () => {
+    const {intervalRects, intervalExtent} = jest.requireActual("@/library/brew/pauseIntervals");
+
+    it("scales milliseconds into seconds before the axis", () => {
+        const [rect] = intervalRects([{from: 10000, to: 25000, pour: 1, reason: "overflow"}], 400, 100);
+        expect(rect.x).toBeCloseTo(40);
+        expect(rect.width).toBeCloseTo(60);
+    });
+
+    it("keeps millisecond precision and drops zero width", () => {
+        const rects = intervalRects([
+            {from: 1000, to: 1500, pour: 1, reason: "manual"},
+            {from: 2000, to: 2000, pour: 1, reason: "manual"},
+        ], 100, 10);
+        expect(rects).toHaveLength(1);
+        expect(rects[0].width).toBeCloseTo(5);
+    });
+
+    it("returns nothing on a degenerate box", () => {
+        const one = [{from: 0, to: 1000, pour: 1, reason: "manual" as const}];
+        expect(intervalRects(one, 0, 10)).toEqual([]);
+        expect(intervalRects(one, 100, 0)).toEqual([]);
+    });
+
+    it("reports the furthest end in seconds", () => {
+        expect(intervalExtent([])).toBe(0);
+        expect(intervalExtent([{from: 0, to: 4500, pour: 1, reason: "manual"}])).toBe(4.5);
+    });
+});

@@ -505,3 +505,24 @@ describe("BrewStageRung", () => {
         expect(widthOf(tail.getByTestId("rung-agitation-after"))).toBe(0);
     });
 });
+
+describe("rung pause marker", () => {
+    it("marks an overflow pause on the active rung and keeps progress", async () => {
+        const screen = await draw({state: "active", delivered: 30, pauseKind: "overflow"});
+        expect(screen.getByText("DRAINING")).toBeTruthy();
+        expect(screen.getByLabelText(/paused, draining/i)).toBeTruthy();
+        expect(screen.getByTestId("segment-fill-0")).toBeTruthy();
+    });
+
+    it("marks a manual pause plainly", async () => {
+        const screen = await draw({state: "active", delivered: 30, pauseKind: "manual"});
+        expect(screen.getByText("PAUSED")).toBeTruthy();
+    });
+
+    it("shows nothing extra without a pause kind or off the active rung", async () => {
+        const a = await draw({state: "active", delivered: 30});
+        expect(a.queryByText("DRAINING")).toBeNull();
+        const b = await draw({state: "done", delivered: 70, pauseKind: "overflow"});
+        expect(b.queryByText("DRAINING")).toBeNull();
+    });
+});

@@ -8,10 +8,12 @@ import {dotMatrixSvgProps, drawnFontSize} from "@/components/DotMatrixText";
 import TraceLegendItem, {LEGEND_SIZE, rowHeight} from "@/components/TraceLegendItem";
 import {palette} from "@/constants/colors";
 import type {BrewSample} from "@/library/brew/BrewRecord";
-import {livePoints, pathLength, planPoints, stageSpans, toPath,
+import {livePoints, pathLength, planPoints, splitAtPauses, stageSpans, toPath,
         traceAxisFor, traceTimeParts,
         type Box} from "@/library/brew/brewShape";
 import type {BypassView} from "@/library/brew/bypassState";
+import {intervalRects, type PauseInterval} from "@/library/brew/pauseIntervals";
+import {tracePauseSpoken} from "@/constants/brewCopy";
 import {stageAtX, stageBounds} from "@/library/brew/stagePick";
 import {bandY, hasSetTemperature, temperatureBand,
         temperatureInBand, temperatureMarks} from "@/library/brew/tempBand";
@@ -49,6 +51,11 @@ type Props = {
      * would still put the same temperature at different heights.
      */
     axis?: {maxT: number; maxV: number};
+    /**
+     * The pauses to shade, in water-relative milliseconds. Drawn behind the
+     * channels, and the axis grows to include one still open.
+     */
+    pauseIntervals?: readonly PauseInterval[];
     /** Overflow protection has stopped the water. Turns the live line amber. */
     holding?: boolean;
     /** Which comparison role this compact lane carries. Defaults to the coloured subject. */
@@ -123,6 +130,9 @@ function tempLabelHeadroom(): number {
 
 /** Minimum SVG plot height in pixels. Prevents zero or negative dimensions when height is very small. */
 const PLOT_FLOOR = 10;
+const NO_INTERVALS: readonly PauseInterval[] = [];
+const PAUSE_OPACITY = 0.18;
+const PAUSE_FILL = {manual: palette.dim, overflow: palette.warnMuted} as const;
 
 /** Minimum rendered bypass box size on the volume axis, unrelated to temperature mark width. */
 const BYPASS_BOX_MIN = 2;
@@ -186,7 +196,7 @@ function temperatureAccessibilityLabel(marks: {temperature: number}[]): string {
  */
 export default function BrewTrace({
     pours, samples, accent, width, height, plannedSeconds,
-    axis,
+    axis, pauseIntervals = NO_INTERVALS,
     holding = false, role = "subject", planOpacity = 1, planColor = palette.muted,
     planDashed = true, planHeadAt = 1,
     compact = false, legendInset = 0, stages, selectedIndex = null, onSelectStage, bypass
@@ -197,12 +207,12 @@ export default function BrewTrace({
     const water = livePoints(samples, "water");
     const cup = livePoints(samples, "cup");
 
-    const times = traceTimeParts(plannedSeconds, samples, bypass);
+    const times = traceTimeParts(plannedSeconds, samples, bypass, pauseIntervals);
     const {ranTo, bypassMl, bypassWide, bypassFrom} = times;
     // The plan's final water level: where the target line ends, and the floor
     // the bypass box is stacked on.
     const planTop = plan.length > 0 ? plan[plan.length - 1].v : 0;
-    const extent = axis ?? traceAxisFor(pours, samples, plannedSeconds, bypass);
+    const extent = axis ?? traceAxisFor(pours, samples, plannedSeconds, bypass, pauseIntervals);
     // In compact mode the SVG fills the full height; otherwise the legend row
     // takes its height first.
     const svgHeight = compact
@@ -218,8 +228,11 @@ export default function BrewTrace({
     const planPath = toPath(plan, box);
     // The dash pattern below is measured along the line, not across the box.
     const planLength = pathLength(plan, box);
-    const waterPath = toPath(water, box);
-    const cupPath = toPath(cup, box);
+    // A line is broken across an automatic pause rather than joined through it.
+    const waterRuns = splitAtPauses(water, pauseIntervals);
+    const waterPath = waterRuns.map((run) => toPath(run, box)).filter((d) => d !== "").join(" ");
+    const cupPath = splitAtPauses(cup, pauseIntervals)
+        .map((run) => toPath(run, box)).filter((d) => d !== "").join(" ");
     // Derived here rather than at each use so the compact render, the full
     // render and the legend cannot drift apart. From `traceStyle` rather than
     // inline so that `CompareTrace` cannot drift from either.
@@ -240,14 +253,21 @@ export default function BrewTrace({
     const marks = tempBand === undefined
         ? []
         : temperatureMarks(tempStages, tempBand, box, tempHeadroom);
-    const accessibilityLabel = temperatureAccessibilityLabel(marks);
+    const pauseBands = intervalRects(pauseIntervals, box.width, box.maxT);
+    const accessibilityLabel = [
+        temperatureAccessibilityLabel(marks),
+        ...pauseBands.map(({interval}) =>
+            tracePauseSpoken(interval.reason, (interval.to - interval.from) / 1000))
+    ].join(", ");
     // The water line, carried down to the floor and back, so it can be filled.
     // Built here rather than by setting `fill` on the line itself: an open
     // path fills between its endpoints and cuts the corner off the curve.
-    const waterFill = waterPath === ""
-        ? ""
-        : `${waterPath} L${round(box.width * (ranTo / Math.max(box.maxT, 1)))} `
-          + `${svgHeight} L0 ${svgHeight} Z`;
+    const waterFill = waterRuns
+        .map((run) => ({d: toPath(run, box), last: run[run.length - 1]}))
+        .filter(({d}) => d !== "")
+        .map(({d, last}, i) => `${d} L${round(box.width * (last.t / Math.max(box.maxT, 1)))} `
+            + `${svgHeight} L${i === 0 ? 0 : firstX(d)} ${svgHeight} Z`)
+        .join(" ");
 
     // Where each stage ends, as a fraction of the axis. The last boundary is
     // the right-hand edge of the chart and is not drawn.
@@ -369,6 +389,15 @@ export default function BrewTrace({
                         fill={palette.raised}
                     />
                 )}
+                {pauseBands.map(({x, width: bandWidth, interval}, i) => (
+                    <Rect
+                        key={`pause-${i}`}
+                        testID={`trace-pause-${interval.reason}-${i}`}
+                        x={x} y={0} width={bandWidth} height={svgHeight}
+                        fill={PAUSE_FILL[interval.reason]}
+                        fillOpacity={PAUSE_OPACITY}
+                    />
+                ))}
                 {boundaries.map((x, i) => (
                     <Line
                         key={`gridline-${i}`}
@@ -517,6 +546,11 @@ export default function BrewTrace({
             </XStack>
         </YStack>
     );
+}
+
+/** The x a path starts at, so a fill can close back to it. */
+function firstX(d: string): string {
+    return d.slice(1).split(" ")[0];
 }
 
 /** One decimal, as in `toPath`. Long SVG paths are mostly noise. */

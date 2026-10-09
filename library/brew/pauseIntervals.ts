@@ -25,3 +25,23 @@ export function pausedWithin(
     return intervals.reduce((total, interval) =>
         total + Math.max(0, Math.min(to, interval.to) - Math.max(from, interval.from)), 0);
 }
+
+export function intervalExtent(intervals: readonly PauseInterval[]): number {
+    return intervals.reduce(
+        (max, interval) => Number.isFinite(interval.to) ? Math.max(max, interval.to / 1000) : max, 0);
+}
+
+export type IntervalRect = {x: number; width: number; interval: PauseInterval};
+
+export function intervalRects(
+    intervals: readonly PauseInterval[], width: number, maxT: number
+): IntervalRect[] {
+    if (!(width > 0) || !(maxT > 0) || !Number.isFinite(width) || !Number.isFinite(maxT)) return [];
+    return intervals
+        .filter((interval) => interval.to > interval.from)
+        .map((interval) => ({
+            x: interval.from / 1000 / maxT * width,
+            width: (interval.to - interval.from) / 1000 / maxT * width,
+            interval,
+        }));
+}

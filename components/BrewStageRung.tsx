@@ -10,6 +10,8 @@ import {mix, palette} from "@/constants/colors";
 import {pauseSeconds} from "@/library/brew/brewShape";
 import {rungSegments, seamIndex, type Segment} from "@/library/brew/rungGeometry";
 import type {Stall} from "@/library/brew/stalls";
+import {RUNG_PAUSE_MARKER, RUNG_PAUSE_SPOKEN} from "@/constants/brewCopy";
+import type {PauseKind} from "@/library/brew/pauseIntervals";
 import type Pour from "@/library/Pour";
 
 /**
@@ -56,6 +58,8 @@ type Props = {
      * colour.
      */
     accentDone?: boolean;
+    /** Why the brew is paused, when it is and this is the active rung. */
+    pauseKind?: PauseKind;
     testID?: string;
 };
 
@@ -154,7 +158,8 @@ const HATCH_DIM = 0.62;
 
 /** One spoken sentence for a rung, for VoiceOver / TalkBack. */
 function buildLabel(
-    pour: Pour, index: number, stalls: Stall[], before: boolean, after: boolean
+    pour: Pour, index: number, stalls: Stall[], before: boolean, after: boolean,
+    marker?: PauseKind
 ): string {
     const stage = `Stage ${String(index + 1).padStart(2, "0")}`;
     const kind = glyphForPattern(pour.pourPattern);
@@ -179,7 +184,7 @@ function buildLabel(
         held = `, held ${stalls.length} times, ${total} seconds in all`;
     }
 
-    return `${stage}, ${pattern}, ${temp}, ${vol}${pause}${agitation}${held}`;
+    return `${stage}, ${pattern}, ${temp}, ${vol}${pause}${agitation}${held}${marker ? `, ${RUNG_PAUSE_SPOKEN[marker]}` : ""}`;
 }
 
 /** The colour a segment's filled part takes. */
@@ -226,11 +231,12 @@ function readout(
  * every frame. Reserving the widest form and drawing the current one over it
  * holds the lane still, without depending on the font's metrics.
  */
-function widestReadout(pour: Pour): string {
+function widestReadout(pour: Pour, pauseKind?: PauseKind): string {
     const target = Math.max(pour.volume, 0);
     const rest = Math.round(pauseSeconds(pour));
     const forms = [`${target} ml`, `${target}/${target} ml`];
     if (rest > 0) forms.push(`${rest} s left`);
+    if (pauseKind) forms.push(RUNG_PAUSE_MARKER[pauseKind]);
     return forms.reduce((a, b) => (b.length > a.length ? b : a));
 }
 
@@ -244,8 +250,9 @@ function widestReadout(pour: Pour): string {
  */
 export default function BrewStageRung({
     pour, index, state, accent, laneSeconds, barHeight, delivered, pauseElapsed,
-    stalls, selected = false, onPress, accentDone = false, testID
+    stalls, selected = false, onPress, accentDone = false, pauseKind, testID
 }: Props) {
+    const marker = state === "active" ? pauseKind : undefined;
     const segments = rungSegments({pour, delivered, pauseElapsed, stalls});
     const span = laneSeconds > 0 ? laneSeconds : 1;
     const used = segments.reduce((sum, s) => sum + s.seconds, 0);
@@ -274,7 +281,7 @@ export default function BrewStageRung({
     return (
         <XStack
             testID={testID}
-            accessibilityLabel={buildLabel(pour, index, stalls, before, after)}
+            accessibilityLabel={buildLabel(pour, index, stalls, before, after, marker)}
             accessible
             accessibilityRole={onPress ? "button" : undefined}
             accessibilityState={onPress ? {selected} : undefined}
@@ -376,14 +383,15 @@ export default function BrewStageRung({
                 <DotMatrixText testID="rung-readout-reserve" fontSize={12}
                                weight="bold" color={palette.dim}
                                style={{opacity: 0}}>
-                    {widestReadout(pour)}
+                    {widestReadout(pour, pauseKind)}
                 </DotMatrixText>
                 <View style={{
                     position: "absolute", top: 0, bottom: 0, right: 0,
                     justifyContent: "center"
                 }}>
                     <DotMatrixText fontSize={12} weight="bold" color={palette.dim}>
-                        {state === "pending"
+                        {marker ? RUNG_PAUSE_MARKER[marker]
+                            : state === "pending"
                             ? `${Math.max(pour.volume, 0)} ml`
                             : readout(pour, delivered, pauseElapsed, state)}
                     </DotMatrixText>

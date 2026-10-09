@@ -10,6 +10,7 @@ import BrewStageRung, {type RungState} from "@/components/BrewStageRung";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {rungSegments} from "@/library/brew/rungGeometry";
 import {stageLadderRungMinHeight} from "@/library/brew/stageLadderGeometry";
+import type {PauseKind} from "@/library/brew/pauseIntervals";
 import type {Stall} from "@/library/brew/stalls";
 import type Pour from "@/library/Pour";
 
@@ -65,6 +66,8 @@ type Props = {
      * bypass was drawn at all.
      */
     bypass?: BypassView;
+    /** Why the live brew is paused. Absent while it is running. */
+    pauseKind?: PauseKind;
 };
 
 /**
@@ -76,7 +79,7 @@ type Props = {
  */
 export default function BrewStageLadder({
     pours, accent, activeIndex, barHeight, rungGap, scrolls, fill, stageWater, stalls,
-    pauseElapsed, selectedIndex = null, onSelectStage, bypass, accentDone = false
+    pauseElapsed, selectedIndex = null, onSelectStage, bypass, accentDone = false, pauseKind
 }: Props) {
     const scroller = useRef<ScrollView>(null);
     // Maps rung index → measured layout relative to the ScrollView content.
@@ -175,6 +178,7 @@ export default function BrewStageLadder({
                     selected={selectedIndex === index}
                     onPress={onSelectStage ? () => onSelectStage(index) : undefined}
                     accentDone={accentDone}
+                    pauseKind={index === activeIndex ? pauseKind : undefined}
                 />
             </View>
         );
