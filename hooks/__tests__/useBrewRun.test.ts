@@ -130,6 +130,32 @@ describe("useBrewRun", () => {
         expect(result.current.samples).toHaveLength(2);
     });
 
+    it("publishes pause metadata and excludes it from a plateau after resume", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        const pouring: BrewPhase = {name: "pouring", pour: 1, pours: 2};
+        await h.setPhase(pouring);
+        await h.water(20);
+        await act(async () => { jest.advanceTimersByTime(500); });
+        await h.water(20);
+        await h.setPhase({name: "paused", pour: 1, pours: 2, was: pouring,
+            pauseKind: "overflow"});
+        await act(async () => { jest.advanceTimersByTime(10_000); });
+        await h.setPhase(pouring);
+        await h.water(20);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        expect(result.current.pauseIntervals).toEqual([
+            {from: 500, to: 10_500, pour: 1, reason: "overflow"}
+        ]);
+        expect(result.current.holding).toBe(false);
+        expect(result.current.stalls[0]).toEqual([]);
+        await act(async () => { jest.advanceTimersByTime(2000); });
+        await h.water(20);
+        await act(async () => { jest.advanceTimersByTime(250); });
+        expect(result.current.holding).toBe(true);
+        expect(result.current.stalls[0][0].seconds).toBe(2.8);
+    });
+
     it("keeps publishing the trace while the brew settles", async () => {
         // Settling is neither pouring nor over. The cup is still filling, so
         // the live trace has to keep publishing through it rather than freezing

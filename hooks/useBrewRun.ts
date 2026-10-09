@@ -6,6 +6,7 @@ import {bypassRungState, type BypassView} from "@/library/brew/bypassState";
 import BrewDatabase from "@/library/BrewDatabase";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import BrewRecorder from "@/library/brew/BrewRecorder";
+import type {PauseInterval} from "@/library/brew/pauseIntervals";
 import {readDialAfterBrew} from "@/library/brew/dialAfterBrew";
 import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {stageOriginMl, stageWaterFrom, stalledNow, stallsInStage, type Stall}
@@ -30,6 +31,7 @@ const PUBLISH_MS = 250;
 
 /** One empty array, so "no samples yet" is a stable identity across renders. */
 const NO_SAMPLES: BrewSample[] = [];
+const NO_PAUSES: PauseInterval[] = [];
 
 // Re-exported from where it now lives: the live rungs and the recorded ladder
 // must not be able to drift apart, so there is one implementation and the
@@ -69,12 +71,13 @@ export function useBrewRun(
     const brewer = useBrew();
     const {machine} = brewer;
     const [published, setPublished] = useState<
-        {runId: number; samples: BrewSample[]; elapsed: number}
-    >({runId, samples: NO_SAMPLES, elapsed: 0});
+        {runId: number; samples: BrewSample[]; elapsed: number; pauseIntervals: PauseInterval[]}
+    >({runId, samples: NO_SAMPLES, elapsed: 0, pauseIntervals: NO_PAUSES});
     const [recorded, setRecorded] = useState<{runId: number; record: BrewRecord} | null>(null);
     const current = published.runId === runId;
     const samples = current ? published.samples : NO_SAMPLES;
     const elapsed = current ? published.elapsed : 0;
+    const pauseIntervals = current ? published.pauseIntervals : NO_PAUSES;
     const record = recorded?.runId === runId ? recorded.record : undefined;
     // Track phase locally so React re-renders when it changes. The machine it
     // was heard from is remembered alongside it: a reconnect hands us a new
@@ -181,6 +184,7 @@ export function useBrewRun(
             setPublished({
                 runId,
                 samples: [...taken],
+                pauseIntervals: recorder.current?.pauseIntervals ?? [],
                 elapsed: taken.length > 0 ? taken[taken.length - 1].at / 1000 : 0
             });
         }, PUBLISH_MS);
@@ -195,6 +199,7 @@ export function useBrewRun(
         setPublished({
             runId,
             samples: [...taken],
+            pauseIntervals: recorder.current?.pauseIntervals ?? [],
             elapsed: taken.length > 0 ? taken[taken.length - 1].at / 1000 : 0
         });
     }, [over, runId]);
@@ -229,7 +234,7 @@ export function useBrewRun(
     // and not just the live one, because a stall stays visible after the stage
     // that suffered it is finished.
     const stalls: Stall[][] = pours.map((pour, i) =>
-        stallsInStage(samples, i + 1, Math.max(pour.volume, 0))
+        stallsInStage(samples, i + 1, Math.max(pour.volume, 0), undefined, pauseIntervals)
     );
     const stageWater: number[] = pours.map((_, i) => stageWaterFrom(samples, i + 1));
 
@@ -255,7 +260,7 @@ export function useBrewRun(
     // stage that has reached its target, so the planned rest is covered there
     // rather than by a second condition that could disagree with it.
     const holding = activeIndex !== null && pouring
-        && stalledNow(samples, activeIndex + 1, liveTarget);
+        && stalledNow(samples, activeIndex + 1, liveTarget, undefined, pauseIntervals);
 
     // The bypass, as one object for the three views that draw it.
     //
@@ -293,7 +298,7 @@ export function useBrewRun(
     return {
         // `phase` after the spread on purpose: the sanitised local reading, not
         // the brewer's raw one, is what callers should see.
-        ...brewer, phase, samples, elapsed, stageElapsed, activeIndex, holding,
+        ...brewer, phase, samples, pauseIntervals, elapsed, stageElapsed, activeIndex, holding,
         heldSeconds, stalls, stageWater, pauseElapsed, bypass, record
     };
 }
