@@ -11,7 +11,7 @@ export function isPauseIntervals(value: unknown): value is PauseInterval[] {
         const {from, to, pour, reason} = interval;
         if (typeof from !== "number" || !Number.isFinite(from) || from < previousTo
             || typeof to !== "number" || !Number.isFinite(to) || to < from
-            || !Number.isInteger(pour) || pour < 0
+            || !Number.isSafeInteger(pour) || pour < 0
             || (reason !== "manual" && reason !== "overflow")) return false;
         previousTo = to;
     }

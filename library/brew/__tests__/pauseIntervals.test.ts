@@ -10,6 +10,16 @@ describe("pause intervals", () => {
             pour: 0, reason: "overflow"}])).toBe(true);
     });
 
+    it.each([0, 1, Number.MAX_SAFE_INTEGER])("accepts safe pour integer %p", (pour) => {
+        expect(isPauseIntervals([{...span, pour}])).toBe(true);
+    });
+
+    it.each([Number.MAX_SAFE_INTEGER + 1, Number.MAX_SAFE_INTEGER + 3])(
+        "rejects unsafe pour integer %p", (pour) => {
+            expect(isPauseIntervals([{...span, pour}])).toBe(false);
+        }
+    );
+
     it.each([
         null, {}, [null], [[]], [new Date()], [{...span, from: -1}],
         [{...span, from: NaN}], [{...span, to: Infinity}],
