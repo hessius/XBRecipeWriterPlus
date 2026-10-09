@@ -48,6 +48,8 @@ export function toHex(frame: Uint8Array): string {
 /** What a frame says, in words. */
 export function readingOf(parsed: Notification): string {
     switch (parsed.kind) {
+        case "receipt":
+            return `receipt ${parsed.code} status 0x${parsed.status.toString(16).padStart(2, "0")}`;
         case "status":
             return `state 0x${parsed.state.toString(16).padStart(2, "0")} ${stateName(parsed.state)}`;
         case "event":

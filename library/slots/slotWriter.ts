@@ -10,6 +10,8 @@ export interface SlotPort {
     acquire(identity: SlotIdentity): Promise<SlotLease>;
 }
 export interface SlotLease {
+    /** Production checks again at the synchronous durable mutation boundary. */
+    assertCurrent?(): void;
     /** Resolves on an unambiguous machine receipt, never native write completion. */
     sendAndConfirm(frame: Uint8Array, index: SlotIndex): Promise<void>;
     /** Subscribe before A; require a fresh SLOTS_SAVED from this attempt. */
@@ -47,17 +49,21 @@ async function transmit(
     let begun = !isNew;
     let completed = false;
     try {
+        lease.assertCurrent?.();
         if (isNew) {
             store.begin(identity.deviceId, journal);
             begun = true;
         }
         for (const index of [0, 1, 2] as const) {
             if (index < journal.acknowledged) continue;
+            lease.assertCurrent?.();
             store.dispatching(identity.deviceId, journal.id, index);
             await lease.sendAndConfirm(Uint8Array.from(journal.frames[index]), index);
+            lease.assertCurrent?.();
             store.acknowledge(identity.deviceId, journal.id, index);
         }
         await lease.confirmSaved();
+        lease.assertCurrent?.();
         store.complete(identity.deviceId, journal.id, now());
         completed = true;
     } catch (error) {

@@ -271,6 +271,7 @@ export type MachineInfo = {
 };
 
 export type Notification =
+    | {kind: "receipt"; code: number; status: number}
     | {kind: "status"; state: number}
     | {kind: "event"; code: number; value?: number}
     | {kind: "waterWeight"; grams: number}
@@ -383,6 +384,11 @@ export function parseNotification(bytes: Uint8Array): Notification {
     const type = bytes[3];
     const sub = bytes[4];
     const payload = bytes.subarray(PAYLOAD_START, bytes.length - 2);
+
+    // Slot ACKs carry no index. Preserve the command status, including refusals.
+    if ((type | (sub << 8)) === 11510) {
+        return {kind: "receipt", code: 11510, status: bytes[9]};
+    }
 
     if (type === 0x57) {
         return {kind: "status", state: payload[0] ?? 0};

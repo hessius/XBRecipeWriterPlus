@@ -134,6 +134,31 @@ Production uses no raw `Machine.send` workaround while the shared owner has
 not installed this contract. The unavailable production port reports a
 specific integration block before journal creation or radio use.
 
+### Bounded production-port clarification (2026-10-09)
+
+`installMachineSlotPort` is implemented separately from the approved domain/UI.
+Its early shared-owner installation, app-state forwarding and settings-forget
+notification contract are recorded in the package 10 handoff in
+`docs/release-2.1.0-changes.md`; route-effect installation is insufficient.
+The route remains unavailable until that owner/UI work is wired.
+
+Command 11510's receipt status is byte 9 (C2 ACK), as documented in
+brAzzi64/xbloom-ble's PROTOCOL.md notification format; it carries no slot index.
+The port serializes one outstanding receipt, uses the existing 2-second frame
+gap and never automatically retries. A delayed duplicate from a prior slot
+arriving in the next slot's window is not distinguishable in software.
+Firmware ordering remains an explicit hardware gate, not a solved correlation
+problem. The native notification format also contains no connection epoch;
+generation guards reject observable stale callbacks, not unknowable wire age.
+
+Native dispatch, receipt and final storage completion each have a separate,
+conservative **unmeasured 15-second software budget**. Dispatch includes
+pacing; receipt's budget begins after native dispatch resolves. An early ACK
+does not excuse a hung native dispatch. Only fresh SLOTS_SAVED after C's
+receipt satisfies final completion; early final evidence is buffered while
+native dispatch resolves. Invalidation is checked again at durable mutation
+boundaries. No change to the slot bytes, mode flags or recovery policy is made.
+
 ## Recovery and uncertainty
 
 Hardware proves that completing an interrupted set releases the machine; it

@@ -51,6 +51,52 @@ jest.mock("react-native-ble-manager", () => ({
 
 const write = BleManager.writeWithoutResponse as jest.Mock;
 
+it("filters peripheral events and rejects callbacks captured by an old connection", async () => {
+    jest.clearAllMocks();
+    const transport = new BleTransport();
+    await transport.connect("one");
+    const frames = jest.fn();
+    const drops = jest.fn();
+    transport.onFrame(frames);
+    transport.onDisconnect(drops);
+    const oldFrame = (BleManager.onDidUpdateValueForCharacteristic as jest.Mock).mock.calls[0][0];
+    const oldDrop = (BleManager.onDisconnectPeripheral as jest.Mock).mock.calls[0][0];
+    await transport.disconnect();
+    await transport.connect("two");
+    oldFrame({value: [1], characteristic: "ffe2", peripheral: "one"});
+    oldDrop({peripheral: "one"});
+    const currentFrame = (BleManager.onDidUpdateValueForCharacteristic as jest.Mock).mock.calls[1][0];
+    const currentDrop = (BleManager.onDisconnectPeripheral as jest.Mock).mock.calls[1][0];
+    currentFrame({value: [2], characteristic: "ffe2", peripheral: "one"});
+    currentDrop({peripheral: "one"});
+    expect(frames).not.toHaveBeenCalled();
+    expect(drops).not.toHaveBeenCalled();
+    expect(transport.connectedDeviceId).toBe("two");
+    currentFrame({value: [3], characteristic: "ffe2", peripheral: "two"});
+    expect(frames).toHaveBeenCalledWith(Uint8Array.from([3]), "ffe2", {
+        deviceId: "two", generation: transport.connectionGeneration
+    });
+    currentDrop({peripheral: "two"});
+    expect(drops).toHaveBeenCalledWith({deviceId: "two", generation: transport.connectionGeneration});
+    expect(transport.connectedDeviceId).toBeNull();
+});
+
+it("cannot overwrite a new connection's identity with a late native model read", async () => {
+    jest.clearAllMocks();
+    let finishOld!: (bytes: number[]) => void;
+    (BleManager.read as jest.Mock)
+        .mockImplementationOnce(() => new Promise<number[]>((resolve) => { finishOld = resolve; }))
+        .mockResolvedValueOnce(Array.from("NEW", (char) => char.charCodeAt(0)));
+    const transport = new BleTransport();
+    const old = transport.connect("one").catch((error: Error) => error);
+    for (let index = 0; index < 40; index++) await Promise.resolve();
+    await transport.connect("two");
+    finishOld(Array.from("OLD", (char) => char.charCodeAt(0)));
+    expect(await old).toBeInstanceOf(Error);
+    expect(transport.connectedDeviceId).toBe("two");
+    expect(transport.modelNumber).toBe("NEW");
+});
+
 async function connected(): Promise<BleTransport> {
     const transport = new BleTransport();
     await transport.connect("AA:BB:CC");

@@ -102,6 +102,11 @@ export const INFO_WAIT_MS = 2000;
  */
 export const FRAME_GAP_MS = 2000;
 
+/** UNMEASURED conservative slot budgets; dispatch includes its pacing gap. */
+export const SLOT_DISPATCH_MS = 15_000;
+export const SLOT_RECEIPT_MS = 15_000;
+export const SLOT_COMPLETION_MS = 15_000;
+
 /** How long to wait for a sent recipe to reach `loading` or `armed`. */
 export const RECIPE_ACK_MS = 8000;
 
