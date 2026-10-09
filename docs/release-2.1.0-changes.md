@@ -31,7 +31,7 @@ The package numbers refer to
 | 7: Hardware spike | Initial questions answered via #198 | 40518 pauses, 40524 resumes without restarting; 8019 instead abandons the recipe for a water pour. Easy Mode batch behaviour documented. Pause latency, overshoot and reconnect survival still require measurement below. |
 | 8: Pause/resume | Prototype integrated from #202; hardware-blocked | Pause is acknowledged rather than inferred from ARMED; resume is optimistic; pause time is recorded, backed up and excluded from held-time/delay; paused readings are omitted; ladder/bypass remain in place. |
 | 9: Custom overflow protection | Not implemented | Depends on reliable pause and measured valve-stop overshoot. The pause spec describes the intended feature, not shipped code. |
-| 10: Easy Mode slots | Scope recorded in #62; implementation deferred | Dedicated three-slot screen, batch warning, EASY-mode side effect and visible staleness. Slots are write-only. No slot UI ships in this set. |
+| 10: Easy Mode slots | Promoted to implementation scope on 2026-10-09 | Ship a dedicated three-slot screen, recipe-context entry and library markers. Warn that every write replaces all three slots and leaves the machine in EASY. Slots are write-only, so last-written state must not imply read-back verification. Detailed design and implementation remain to be completed. |
 
 ## Additional 2.0 feedback and integration changes
 
@@ -81,6 +81,15 @@ Original review threads and PR metadata were not changed.
    TalkBack checks, including narrow widths and large text.
 7. Confirm Beanconqueror's public release before package 4; decide explicitly
    whether package 9 is required for 2.1.0 or deferred.
+8. Implement and verify the three-slot writer. Prepare all three valid blobs
+   before sending A; recover incomplete batches without pretending a sent frame
+   proves storage; verify distinct ratios, grinder on/off, interrupted writes,
+   reconnect and ordinary brewing after the machine changes to EASY.
+
+Package 10 was promoted from issue-only/deferred to an actual 2.1.0 feature
+by the user's decision on 2026-10-09. This supersedes the older release design
+and #62's deferral wording; it does not resolve the detailed first-use,
+acknowledgement-loss or persistence/recovery design.
 
 Full release testing should cover both iOS and Android. NFC regressions require
 physical devices and genuine cards; neither simulator proves card safety.
