@@ -1,6 +1,6 @@
 import router from "@/hooks/steadyRouter";
 import React from "react";
-import {Pressable} from "react-native";
+import {Pressable, ScrollView} from "react-native";
 import {Text, XStack, YStack} from "tamagui";
 
 import DotIcon from "@/components/DotIcon";
@@ -60,6 +60,7 @@ type Props = {
     onToggleFavourite?: () => void;
     /** Which way the star row reads and speaks. */
     favourite?: boolean;
+    onEasyMode?: () => void;
 };
 
 /**
@@ -79,7 +80,7 @@ type Props = {
 export default function RecipeOverflowSheet({
     open, canRefreshName, recipeUuid, onOpenChange, showHints, onShowHintsChange,
     onShare, onDuplicate, onRefreshName, onRevert, onDelete,
-    onBrew, onWrite, onToggleFavourite, favourite = false
+    onBrew, onWrite, onToggleFavourite, favourite = false, onEasyMode
 }: Props) {
     function pick(action: () => void) {
         onOpenChange(false);
@@ -113,7 +114,8 @@ export default function RecipeOverflowSheet({
     // does nothing but measure itself.
     return (
         <XbrwSheet open={open} onOpenChange={onOpenChange} title="RECIPE"
-                   showTitle={false} prewarm heightPercent={OVERFLOW_HEIGHT}>
+                   showTitle={false} prewarm heightPercent={onEasyMode ? 60 : OVERFLOW_HEIGHT}>
+            <ScrollView>
             <YStack gap="$2" paddingBottom="$4">
                 {/* A switch, so it does not close the sheet the way the action
                     rows do: it is the one row here that has a state to show,
@@ -160,6 +162,7 @@ export default function RecipeOverflowSheet({
                 {onWrite && row("Write recipe to card", "write", onWrite, {
                     caption: "Write to card"
                 })}
+                {onEasyMode && row("Assign to Easy Mode", "brew", onEasyMode)}
 
                 {row("Share", "share", onShare, {
                     testID: "overflow-share-label",
@@ -193,6 +196,7 @@ export default function RecipeOverflowSheet({
                     })}
                 </YStack>
             </YStack>
+            </ScrollView>
         </XbrwSheet>
     );
 }

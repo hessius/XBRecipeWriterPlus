@@ -1,4 +1,4 @@
-import Recipe from "@/library/Recipe";
+import Recipe, {CUP_TYPE} from "@/library/Recipe";
 import {brewProblems, GRIND_RPM} from "@/library/cardLimits";
 import {buildType2, encodeCoffeeBlob} from "@/library/machine/protocol";
 
@@ -32,7 +32,17 @@ export function emptySlotRecord(): SlotRecord {
 }
 
 export function snapshotRecipe(recipe: Recipe): SlotSnapshot {
+    if (typeof recipe.uuid !== "string" || recipe.uuid.trim() === "") {
+        throw new Error("The recipe's source identity is invalid.");
+    }
+    if (typeof recipe.grinder !== "boolean") {
+        throw new Error("The recipe's grinder state is invalid.");
+    }
     if (recipe.isTea()) throw new Error("Tea recipes are not supported in Easy Mode.");
+    if (![CUP_TYPE.XPOD, CUP_TYPE.OMNI, CUP_TYPE.OTHER].includes(recipe.cupType)
+        || typeof recipe.bypassEnabled !== "boolean") {
+        throw new Error("The recipe's brewer settings are invalid.");
+    }
     if (recipe.bypassEnabled) {
         throw new Error("Recipes with bypass are not supported in Easy Mode.");
     }
@@ -68,7 +78,7 @@ export function objectValue(value: unknown): value is Record<string, unknown> {
 
 export function readSnapshot(value: unknown): SlotSnapshot {
     if (!objectValue(value) || typeof value.sourceUuid !== "string"
-        || value.sourceUuid === "" || typeof value.name !== "string"
+        || value.sourceUuid.trim() === "" || typeof value.name !== "string"
         || typeof value.recipeJSON !== "string" || !Array.isArray(value.blob)
         || !value.blob.every((byte: unknown) =>
             typeof byte === "number" && Number.isInteger(byte) && byte >= 0 && byte <= 255)) {
@@ -77,6 +87,12 @@ export function readSnapshot(value: unknown): SlotSnapshot {
     const json: unknown = JSON.parse(value.recipeJSON);
     if (!objectValue(json) || json.uuid !== value.sourceUuid) {
         throw new Error("The Easy Mode snapshot identity is invalid.");
+    }
+    if (typeof json.grinder !== "boolean" || typeof json.grindRPM !== "number") {
+        throw new Error("The Easy Mode snapshot's grinder settings are invalid.");
+    }
+    if (typeof json.cupType !== "number" || typeof json.bypassEnabled !== "boolean") {
+        throw new Error("The Easy Mode snapshot's brewer settings are invalid.");
     }
     const checked = snapshotRecipe(new Recipe(undefined, value.recipeJSON));
     if (!sameBytes(checked.blob, value.blob)) {
@@ -102,9 +118,12 @@ export function prepareSet(drafts: Triple<SlotSnapshot | null>): Triple<number[]
 export function snapshotStatus(snapshot: SlotSnapshot, recipe: Recipe | undefined):
     "unchanged" | "edited" | "removed" {
     if (recipe === undefined) return "removed";
-    return !recipe.isTea() && !recipe.bypassEnabled
-        && sameBytes(snapshot.blob, Array.from(encodeCoffeeBlob(recipe)))
-        ? "unchanged" : "edited";
+    try {
+        return sameBytes(snapshot.blob, snapshotRecipe(recipe).blob) ? "unchanged" : "edited";
+    } catch {
+        // Invalid edits must not be hidden by Uint8Array's byte coercion.
+        return "edited";
+    }
 }
 
 export function slotMarkers(record: SlotRecord, recipe: Recipe): string | undefined {

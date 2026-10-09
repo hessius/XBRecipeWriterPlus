@@ -14,6 +14,8 @@ import type {LibraryQuery} from "@/library/libraryQuery";
 import {Settings, type SettingsStorage} from "@/library/Settings";
 import {CARD_READ_FAILED} from "@/constants/copy";
 import {TYPING_DEBOUNCE_MS} from "@/constants/motion";
+import {sharedSlotDatabase} from "@/hooks/useEasyModeSlots";
+import {snapshotRecipe} from "@/library/slots/slotModel";
 
 const mockPush = jest.fn();
 
@@ -27,6 +29,7 @@ let mockFocusEpoch = 0;
 jest.mock("expo-router", () => {
     const actualReact = jest.requireActual("react");
     return {
+        router: {push: (...args: unknown[]) => mockPush(...args)},
         useRouter:     () => ({push: mockPush}),
         useNavigation: () => ({setOptions: jest.fn()}),
         // Mirror expo-router closely enough for these tests: run the focus
@@ -74,6 +77,9 @@ jest.mock("expo-linking", () => ({
 }));
 
 jest.mock("@/library/RecipeDatabase");
+jest.mock("expo-sqlite", () => ({
+    openDatabaseSync: () => jest.requireActual("@/test-utils/sqlite").createTestDatabase()
+}));
 
 // Configurable so a test can leave a lookup in flight (a never-resolving
 // `fetchRecipeDetail` holds the sheet in its resolving state) or hand back a
@@ -1816,7 +1822,31 @@ describe("writing a recipe from scratch", () => {
     });
 });
 
+it("assigns a recipe through its list action and exposes the persisted slot marker", async () => {
+    mockRemembered = "machine-device-id";
+    const recipe = writable("Slot coffee");
+    await renderHome({recipes: [recipe]});
+    await fireEvent(screen.getByTestId("recipe-card"), "accessibilityAction",
+        {nativeEvent: {actionName: "easyMode"}});
+    expect(mockPush).toHaveBeenCalledWith({pathname: "/easyMode"});
+    expect(sharedSlotDatabase().read(mockRemembered).drafts[0]?.sourceUuid).toBe(recipe.uuid);
+    expect(screen.getByRole("button", {name: /Slot coffee.*Draft A\./})).toBeOnTheScreen();
+});
+
 describe("the shelf grid", () => {
+    it("shows slot markers and the Easy Mode recipe action on shelf-room tiles", async () => {
+        mockRemembered = "machine-device-id";
+        const recipe = writable("Slot coffee");
+        recipe.setTags(["morning"]);
+        sharedSlotDatabase().assign(mockRemembered, 2, snapshotRecipe(recipe));
+        await openGrid([recipe], shelfSettings("morning"));
+        await fireEvent.press(screen.getByTestId("shelf-tag:morning"));
+        expect(screen.getByRole("button", {name: /Slot coffee.*Draft C\./})).toBeOnTheScreen();
+        await fireEvent(screen.getByTestId(`recipe-tile-${recipe.uuid}`), "accessibilityAction",
+            {nativeEvent: {actionName: "easyMode"}});
+        expect(mockPush).toHaveBeenCalledWith({pathname: "/easyMode"});
+    });
+
     function shelfLibrary(): Recipe[] {
         // Four teas, so the TEA auto shelf clears the floor of three, and a
         // tagged recipe so the manual half has something in it.

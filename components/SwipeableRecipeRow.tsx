@@ -80,6 +80,8 @@ type Props = {
      * otherwise reach only through the long press.
      */
     onHistory?: () => void;
+    slotMarker?: string;
+    onEasyMode?: () => void;
 };
 
 /**
@@ -182,7 +184,9 @@ export default function SwipeableRecipeRow({
                                                onWrite,
                                                onToggleFavourite,
                                                onLongPress,
-                                               onHistory
+                                               onHistory,
+                                               slotMarker,
+                                               onEasyMode
                                            }: Props) {
     const swipeableRef = useRef<SwipeableMethods | null>(null);
     /**
@@ -446,7 +450,8 @@ export default function SwipeableRecipeRow({
                             onDelete={onDelete} onDuplicate={onDuplicate}
                             onToggleFavourite={onToggleFavourite}
                             onLongPress={onLongPress}
-                            onHistory={onHistory}/>
+                            onHistory={onHistory}
+                            slotMarker={slotMarker} onEasyMode={onEasyMode}/>
             </Swipeable>
         </View>
     );

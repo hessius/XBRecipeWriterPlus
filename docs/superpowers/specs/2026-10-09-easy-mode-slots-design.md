@@ -183,6 +183,9 @@ behaviour and actual scripted results. Required production gates:
    that omitting PRO and `11512` remains correct on supported firmware.
 5. Native iOS/Android checks: narrow widths, large text, VoiceOver/TalkBack,
    picker/sheet isolation, pinned action and recovery copy.
+6. Verify brewer/cup and overflow behaviour. The documented slot blob carries
+   neither cup type nor phone-side overflow policy; do not imply that either
+   protection transfers to standalone EASY brewing.
 
 Hardware is unavailable during development. These gates remain explicitly
 unverified and must clear before shipping; scripted fakes cannot clear them.

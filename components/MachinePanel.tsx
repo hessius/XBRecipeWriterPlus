@@ -29,6 +29,7 @@ type Props = {
     /** Asks the machine for its readings; resolves to whether it answered. */
     onRefreshWater: () => Promise<boolean>;
     onConnect: () => void;
+    onEasyMode?: () => void;
 };
 
 /** `4 MIN AGO`. Minutes only: seconds would change while it was being read. */
@@ -114,7 +115,7 @@ function RefreshButton({accent, onRefresh}: {
  * the control that closes it: the panel needs no dismiss affordance of its own.
  */
 export default function MachinePanel({
-    open, status, accent, vitals, now, onRefreshWater, onConnect
+    open, status, accent, vitals, now, onRefreshWater, onConnect, onEasyMode
 }: Props) {
     let body: React.ReactNode;
 
@@ -239,6 +240,17 @@ export default function MachinePanel({
                     // read as clipped rather than finished.
                     paddingBottom="$4">
                 {body}
+                {onEasyMode !== undefined && (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Easy Mode slots"
+                               onPress={onEasyMode}>
+                        <YStack minHeight={44} justifyContent="center" marginTop="$2">
+                            <DotMatrixText fontSize={11} weight="bold" letterSpacing={1.6}
+                                           color={palette.text}>
+                                EASY MODE SLOTS
+                            </DotMatrixText>
+                        </YStack>
+                    </Pressable>
+                )}
             </YStack>
         </Collapsible>
     );

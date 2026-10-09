@@ -38,6 +38,8 @@ export type RoomRecipeActions = {
     onToggleFavourite?: () => void;
     /** Open this recipe's brew history, the sheet row no tray carries. */
     onHistory: () => void;
+    onEasyMode?: () => void;
+    slotMarker?: string;
 };
 
 /**
@@ -196,6 +198,8 @@ export default function ShelfRoom({
                                     onDelete={acts.onDelete}
                                     onToggleFavourite={acts.onToggleFavourite}
                                     onHistory={acts.onHistory}
+                                    onEasyMode={acts.onEasyMode}
+                                    slotMarker={acts.slotMarker}
                                     editing={editing}/>
                             );
                         })}

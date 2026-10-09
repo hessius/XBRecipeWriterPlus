@@ -92,6 +92,30 @@ it("keeps all receipts but does not infer completion from a missing saved event"
     await expect(recoverSlots(store, identity, script.port)).rejects.toThrow(/completion/i);
 });
 
+it.each(["Native dispatch failed", "Receipt timeout", "Duplicate receipt", "Delayed receipt ambiguous"])(
+    "retains uncertainty when the exclusive port refuses: %s", async (message) => {
+        const {store} = ready();
+        const script = scripted(store);
+        const acquire = script.port.acquire;
+        script.port.acquire = async (bound) => {
+            const lease = await acquire(bound);
+            return {
+                ...lease,
+                sendAndConfirm: async (frame, index) => {
+                    await lease.sendAndConfirm(frame, index);
+                    throw new Error(message);
+                }
+            };
+        };
+        await expect(writeSlots(store, identity, script.port)).rejects.toThrow(message);
+        expect(store.read("one").journal).toMatchObject({
+            acknowledged: 0, inFlight: 0, error: message
+        });
+        expect(script.sent).toEqual([0]);
+        expect(script.released).toEqual([false]);
+    }
+);
+
 it("resumes an explicitly confirmed boundary with exactly the remaining immutable frames", async () => {
     const {store, sql} = ready();
     const snapshot = snapshotRecipe(coffee());
@@ -116,6 +140,17 @@ it("blocks different serials and overlapping write attempts", async () => {
     await expect(recoverSlots(store, {...identity, serial: "other"}, script.port))
         .rejects.toThrow(/different machine/i);
     await expect(writeSlots(store, identity, script.port)).rejects.toThrow(/incomplete/i);
+});
+
+it("cannot acquire two overlapping slot leases before the first frame", async () => {
+    const {store} = ready();
+    const script = scripted(store);
+    const first = writeSlots(store, identity, script.port);
+    const second = writeSlots(store, identity, script.port);
+    await expect(second).rejects.toThrow(/busy/i);
+    await first;
+    expect(script.sent).toEqual([0, 1, 2]);
+    expect(script.released).toEqual([true]);
 });
 
 it("leaves receipt uncertainty durable when persisting acknowledgement fails", async () => {

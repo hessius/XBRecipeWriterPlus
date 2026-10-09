@@ -62,6 +62,32 @@ it("retains the last-written set and immutable recovery bytes on failure", () =>
     expect(store.read("one").journal?.error).toBe("Receipt unknown");
 });
 
+it("does not overwrite a prior written set when its replacement is incomplete", () => {
+    const store = new SlotDatabase(createTestDatabase());
+    store.begin("one", batch("first"));
+    for (const index of [0, 1, 2] as const) {
+        store.dispatching("one", "first", index);
+        store.acknowledge("one", "first", index);
+    }
+    store.complete("one", "first", 10);
+    const previous = store.read("one").written;
+    store.begin("one", batch("replacement"));
+    store.dispatching("one", "replacement", 0);
+    store.fail("one", "replacement", "Link lost");
+    expect(store.read("one").written).toEqual(previous);
+});
+
+it("rejects corrupted recovery frames instead of replaying them", () => {
+    const sql = createTestDatabase();
+    const store = new SlotDatabase(sql);
+    store.begin("one", batch());
+    const corrupt = JSON.parse(JSON.stringify(store.read("one")));
+    corrupt.journal.frames[1] = corrupt.journal.frames[0];
+    sql.runSync("UPDATE easy_mode_slots SET recordJSON = ? WHERE deviceId = ?",
+        [JSON.stringify(corrupt), "one"]);
+    expect(() => new SlotDatabase(sql).read("one")).toThrow(/frames disagree/i);
+});
+
 it("rejects malformed storage rather than presenting an empty successful set", () => {
     const sql = createTestDatabase();
     new SlotDatabase(sql);

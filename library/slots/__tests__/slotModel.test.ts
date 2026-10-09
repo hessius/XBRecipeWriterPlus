@@ -15,6 +15,20 @@ it("encodes the documented coffee blob with hardware-proven grinder flags", () =
     expect(snapshotRecipe(recipe).blob.slice(-2)).toEqual([0xFE, 150]);
 });
 
+it("retains the existing encoder's upward ratio rounding", () => {
+    const recipe = coffee();
+    recipe.dosage = 18;
+    recipe.ratio = 240 / 18;
+    recipe.pours[0].volume = 240;
+    expect(snapshotRecipe(recipe).blob.at(-1)).toBe(134);
+});
+
+it("rejects a ratio outside the shared brew bounds", () => {
+    const recipe = coffee();
+    recipe.ratio = 99;
+    expect(() => snapshotRecipe(recipe)).toThrow(/ratio/i);
+});
+
 it("rejects unsupported tea and bypass rather than silently changing the recipe", () => {
     const recipe = coffee();
     recipe.cupType = CUP_TYPE.TEA;
@@ -49,6 +63,27 @@ it("distinguishes changed wire content from renames and removed recipes", () => 
     recipe.pours[0].temperature = 92;
     expect(snapshotStatus(snapshot, recipe)).toBe("edited");
     expect(snapshotStatus(snapshot, undefined)).toBe("removed");
+});
+
+it("does not call malformed edits unchanged when byte coercion hides the edit", () => {
+    const recipe = coffee();
+    const saved = snapshotRecipe(recipe);
+    recipe.pours[0].agitation = 0.5;
+    expect(snapshotStatus(saved, recipe)).toBe("edited");
+});
+
+it("rejects non-boolean grinder state in stored recipe input", () => {
+    const saved = snapshotRecipe(coffee());
+    const json = JSON.parse(saved.recipeJSON);
+    json.grinder = "false";
+    expect(() => prepareSet([{...saved, recipeJSON: JSON.stringify(json)}, saved, saved]))
+        .toThrow(/grinder/i);
+});
+
+it("rejects a snapshot without a usable source identity", () => {
+    const recipe = coffee();
+    recipe.uuid = " ";
+    expect(() => snapshotRecipe(recipe)).toThrow(/identity/i);
 });
 
 it("markers distinguish repeated draft and last-written assignments", () => {

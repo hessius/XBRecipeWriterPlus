@@ -31,7 +31,7 @@ The package numbers refer to
 | 7: Hardware spike | Initial questions answered via #198 | 40518 pauses, 40524 resumes without restarting; 8019 instead abandons the recipe for a water pour. Easy Mode batch behaviour documented. Pause latency, overshoot and reconnect survival still require measurement below. |
 | 8: Pause/resume | Prototype integrated from #202; hardware-blocked | Pause is acknowledged rather than inferred from ARMED; resume is optimistic; pause time is recorded, backed up and excluded from held-time/delay; paused readings are omitted; ladder/bypass remain in place. |
 | 9: Custom overflow protection | Approved v1; not implemented | Threshold-triggered automatic pause, with resume checks every 15/30/45 seconds (default 15). Extend while at/above threshold; resume and re-arm on a fresh below-threshold reading. Include live UI, graph intervals and ladder state. Hardware verification gates release, not development. |
-| 10: Easy Mode slots | Promoted to implementation scope on 2026-10-09 | Ship a dedicated three-slot screen, recipe-context entry and library markers. Warn that every write replaces all three slots and leaves the machine in EASY. Slots are write-only, so last-written state must not imply read-back verification. Detailed design and implementation remain to be completed. |
+| 10: Easy Mode slots | Owned software implemented; production transport and hardware verification blocked | Persistent machine-bound A/B/C snapshots, dedicated screen, whole-library picker, recipe-context entry and library markers. Every write replaces all three slots and leaves the machine in EASY. Coffee only; tea and enabled bypass are rejected. Scripted writer preserves receipt uncertainty and prior last-written state. Production uses an unavailable port until the shared machine owner integrates transport and exclusion; no real slot writes are enabled. |
 
 ## Additional 2.0 feedback and integration changes
 
@@ -81,15 +81,67 @@ Original review threads and PR metadata were not changed.
    TalkBack checks, including narrow widths and large text.
 7. Confirm Beanconqueror's public release before package 4. Package 9 is in
    planned 2.1.0 scope under the approved fixed-check-interval v1 design.
-8. Implement and verify the three-slot writer. Prepare all three valid blobs
-   before sending A; recover incomplete batches without pretending a sent frame
-   proves storage; verify distinct ratios, grinder on/off, interrupted writes,
-   reconnect and ordinary brewing after the machine changes to EASY.
+8. Integrate the three-slot writer's exclusive production port and restore
+   incomplete reservations before allowing other machine operations. Verify
+   real receipt correlation and fresh final completion, not native dispatch or
+   idle. Physical checks must use three distinct ratios, grinder on/off,
+   interrupted A/B writes, lost acknowledgements, restart/reconnect and ordinary
+   brewing after the machine changes to EASY. Establish safe recovery for an
+   unknown receipt or missing final completion before enabling production writes.
+9. Check the Easy Mode screen and library markers on native iOS/Android:
+   narrow widths, large text, marked shelf tile height, pinned action,
+   VoiceOver/TalkBack and recipe-picker accessibility isolation.
+10. Verify the brewer/cup and overflow behaviour of stored slots before release.
+    The documented coffee blob does not encode cup type or phone-side overflow
+    policy; do not imply those protections carry over to standalone EASY brewing.
 
 Package 10 was promoted from issue-only/deferred to an actual 2.1.0 feature
 by the user's decision on 2026-10-09. This supersedes the older release design
-and #62's deferral wording; it does not resolve the detailed first-use,
-acknowledgement-loss or persistence/recovery design.
+and #62's deferral wording. Its approved bounded design is
+`docs/superpowers/specs/2026-10-09-easy-mode-slots-design.md`; uncertain receipt
+and final-completion recovery remain deliberately blocked pending verified
+machine evidence.
+
+## Package 10 software and shared-owner handoff
+
+Implemented in the isolated `feat/easy-mode-slots` worktree based on
+`origin/integration/2.1.0` at `d0f60dd`; not merged into this integration branch.
+No edits to `Machine.ts`, `protocol.ts`, Recipe serialization, recipe backups,
+command exclusion or the brew lifecycle were made by this package.
+
+`easy_mode_slots` uses the existing app database and BLE device ID. Drafts,
+last-written snapshots and incomplete journals survive relaunch and source
+recipe deletion. Library changes require an explicit snapshot update; markers
+distinguish draft and last-written letters, including repeated assignments.
+Machine-bound slot records are intentionally excluded from recipe backups.
+All three frames are prepared before A. The journal persists before each send
+and after each receipt; only three receipts plus fresh final completion promote
+the set. A failed replacement retains the previous last-written set.
+
+The dedicated `/easyMode` screen has entries in the machine panel, library
+recipe actions and editor recipe actions. The picker reads `allRecipes()`,
+not the current search/shelf answer. Full sets require an explicit replacement
+choice; incomplete sets lock assignment and display the frozen recovery set.
+Incoming route JSON is validated without accepting constructor-invented
+grinder or brewer defaults.
+
+The shared machine owner must implement `SlotPort` / `SlotLease` from
+`library/slots/slotWriter.ts` and install it through `useEasyModeSlots`.
+Use the same `sharedSlotDatabase()` instance as the UI. On startup/reconnect,
+restore any journal's operation reservation before accepting brew, console,
+link-changing or competing slot commands. Validate device/serial, subscribe
+before A, pace frames and distinguish dispatch from unambiguous receipt.
+`release(false)` must retain recovery exclusion across navigation and
+reconnect. `confirmSaved()` requires fresh `SLOTS_SAVED` evidence from the
+attempt; code-only `11510` acknowledgements cannot identify their slot.
+
+The injected scripted port exercises ordering, durable boundaries, failure
+handling, contention, unchanged recovery bytes and conservative refusal. It
+does **not** prove raw acknowledgement correlation, actual global machine
+exclusion, firmware replay semantics or physical storage. Production remains
+explicitly blocked before journal creation or radio mutation. Recovery sends
+remaining immutable frames only from a confirmed boundary; an in-flight slot
+or all receipts without final completion is not automatically replayed.
 
 Full release testing should cover both iOS and Android. NFC regressions require
 physical devices and genuine cards; neither simulator proves card safety.
@@ -123,3 +175,19 @@ PRs' green checks:
 
 These are local integration results, not a GitHub CI run on this branch or
 device verification. No integration PR has been opened.
+
+Package 10's isolated worktree was additionally validated on 2026-10-09:
+
+- Final bounded feature and affected regression run: 34 iOS/Android project
+  suites passed, 1,002 tests passed and four existing tests skipped. Selectors
+  include the slot model/store/writer/hook, route/screen/surface tests and
+  affected home, editor, card, tile, shelf, selection and machine-panel tests.
+- Whole-worktree typecheck passed.
+- Changed-code lint passed with zero errors and one pre-existing
+  `no-require-imports` warning in the home test harness.
+- `git diff --check` passed; the shared Machine/protocol and Recipe/backup
+  files remain unchanged from the integration base.
+
+No full release suite, new Expo Doctor run, native build or physical device
+verification was performed for package 10. Its production transport and
+release gates above remain open.

@@ -35,6 +35,8 @@ import {useShelfPicker} from "@/hooks/useShelfPicker";
 import {useCardWriter} from "@/hooks/useCardWriter";
 import {useBeanFilters, type BeanVocabularyStore} from "@/hooks/useBeanFilters";
 import {useMachine} from "@/hooks/useMachine";
+import {openEasyModeRecipe, useSlotRecord} from "@/hooks/useEasyModeSlots";
+import {slotMarkers} from "@/library/slots/slotModel";
 import {useLibraryQuery} from "@/hooks/useLibraryQuery";
 import {useRecipeImport} from "@/hooks/useRecipeImport";
 import {useRecipeLibrary, type RecipeStore, type ShelfWriteOutcome}
@@ -320,6 +322,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
 
     const {machine, status: machineStatus, connect: connectMachine, remembered} =
         useMachine();
+    const slotRecord = useSlotRecord(remembered);
     // Seeded from machine.info so a machine that is already connected when the
     // screen mounts does not show "Not in range" while the header dot says
     // connected. The useState initialiser runs once; subsequent updates arrive
@@ -1318,7 +1321,9 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
         onDuplicate:       () => library.duplicateRecipe(recipe),
         onDelete:          () => library.deleteRecipe(recipe),
         onToggleFavourite: () => library.toggleFavourite(recipe),
-        onHistory:         () => openHistory(recipe)
+        onHistory:         () => openHistory(recipe),
+        onEasyMode:        remembered !== "" ? () => openEasyModeRecipe(recipe, remembered) : undefined,
+        slotMarker:        slotMarkers(slotRecord, recipe)
     });
 
     // The shelf standing open, found by the id the query holds. Its label and
@@ -1394,6 +1399,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                             now={popoverNow}
                             onRefreshWater={refreshWater}
                             onConnect={connectMachine}
+                            onEasyMode={() => router.push("/easyMode")}
                         />
                     )}
                     onMachinePress={() => {
@@ -1551,6 +1557,7 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                         ) : picker.active ? (
                             <SelectableRecipeRow
                                 recipe={item.recipe}
+                                slotMarker={slotMarkers(slotRecord, item.recipe)}
                                 selected={picker.selected.has(item.recipe.uuid)}
                                 onToggle={() => picker.toggle(item.recipe.uuid)}
                                 showCoffeeMarker={showCoffeeMarker}
@@ -1562,6 +1569,9 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                                 showCoffeeMarker={showCoffeeMarker}
                                 dottedProfile={dottedProfile}
                                 evidence={library.evidence[item.recipe.uuid]}
+                                slotMarker={slotMarkers(slotRecord, item.recipe)}
+                                onEasyMode={remembered !== ""
+                                    ? () => openEasyModeRecipe(item.recipe, remembered) : undefined}
                                 hintTray={drawerHint.trayFor(item.recipeIndex)}
                                 hintDelayMs={drawerHint.delayFor(item.recipeIndex)}
                                 onManualOpen={drawerHint.noteManualOpen}
@@ -1748,6 +1758,9 @@ export default function HomeScreen({db, beanStore, settings}: Props) {
                 favourite={overflowRecipe?.favourite ?? false}
                 onBrew={overflowRecipe !== null && remembered !== ""
                     ? () => openBrew(overflowRecipe)
+                    : undefined}
+                onEasyMode={overflowRecipe !== null && remembered !== ""
+                    ? () => openEasyModeRecipe(overflowRecipe, remembered)
                     : undefined}
                 // The same gate the swipe tray and both sets of accessibility
                 // actions apply. Without it the long press was the one door that
