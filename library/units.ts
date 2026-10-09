@@ -32,7 +32,7 @@ export const CELSIUS_RANGE = {min: 39, max: 99} as const;
 /**
  * Exported so an importer can clamp a temperature the card cannot hold (an
  * official-app "BP" preset, for instance, has landed here as 99.4 C rather
- * than a clean 98) without duplicating the band it is clamped to.
+ * than a clean 100) without duplicating the band it is clamped to.
  */
 export function clampCelsius(celsius: number): number {
     if (!Number.isFinite(celsius)) return CELSIUS_RANGE.min;

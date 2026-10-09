@@ -240,11 +240,7 @@ function RunOwner({
 
     const snapshot: LiveBrewSnapshot | null = recipe === null ? null : {
         recipe, samples, elapsed, stageElapsed, activeIndex, phase,
-<<<<<<< HEAD
-        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, startedAt,
-=======
-        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, quickEdit,
->>>>>>> origin/spec/issue-199-dose-ratio
+        holding, heldSeconds, stalls, stageWater, pauseElapsed, bypass, record, startedAt, quickEdit,
     };
     const quickEditFor = (
         next: Recipe,

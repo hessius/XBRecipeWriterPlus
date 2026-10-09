@@ -206,8 +206,8 @@ live):
   excluded).
 - Pressing it shows the same success toast the console's copy uses.
 - A "Try again" press followed by a second failure and a second copy
-  reflects only the second attempt's window, pinning that the ref is
-  reset on retry rather than accumulating.
+  reflects only the second attempt's window, pinning that the provider's
+  attempt timestamp is reset on retry rather than accumulating.
 
 Full existing gates before merge: typecheck, lint, both jest projects
 (`ios` and `android`), `expo-doctor` -- same bar as every prior PR this

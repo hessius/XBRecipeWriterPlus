@@ -513,4 +513,20 @@ describe("useBrewRun", () => {
         expect(result.current.activeIndex).toBeNull();
     });
 
+    it("keeps the bypass rung active while the bypass is paused", async () => {
+        const h = harness();
+        const r = recipe();
+        r.bypassEnabled = true;
+        r.bypassVolume = 5;
+        r.bypassTemp = 85;
+        const {result} = await renderHook(() => useBrewRun(r, h.store));
+
+        await h.setPhase({name: "bypass"});
+        expect(result.current.bypass?.state).toBe("filling");
+        await h.setPhase({
+            name: "paused", pour: 2, pours: 2, was: {name: "bypass"}
+        });
+        expect(result.current.bypass?.state).toBe("filling");
+    });
+
 });

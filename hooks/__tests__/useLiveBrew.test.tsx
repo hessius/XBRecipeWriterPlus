@@ -86,10 +86,12 @@ describe("LiveBrewProvider", () => {
         });
         const r = recipe();
         const quickEdit = {adjustedFromDose: 15, adjustedFromRatio: 16};
+        const startedAt = Date.now();
 
         await act(async () => { result.current.start(r, quickEdit); });
 
         expect(result.current.run?.quickEdit).toEqual(quickEdit);
+        expect(result.current.run?.startedAt).toBe(startedAt);
         expect(global.__brewer.brew).toHaveBeenCalledTimes(1);
     });
 
