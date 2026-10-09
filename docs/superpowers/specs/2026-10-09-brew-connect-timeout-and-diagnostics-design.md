@@ -82,22 +82,36 @@ sequence alone, roughly 3x the slowest observed real connect.
 `connect()`'s existing body -- `BleManager.connect` (with its existing
 retry-once-after-a-ghost-link attempt), `retrieveServices`,
 `listenToEverythingThatTalks`, `negotiateMtu`, `readModelNumber` -- is
-raced against that timeout. If the timer wins:
+raced against that timeout. The race is wrapped in `try`/`catch`/
+`finally`: `finally` always clears the timer, so a connect that
+succeeds well under the timeout does not leave it armed. If the timer
+wins, the `catch` block:
 
-- Force `BleManager.disconnect(id).catch(() => {})` -- best effort,
+- Fires `BleManager.disconnect(id).catch(() => {})` -- best effort,
   exactly like the existing ghost-link cleanup a few lines above it --
   so a hung attempt does not also leave the OS holding the link open
-  for the *next* attempt to trip over.
-- Throw `new Error("The machine took too long to connect.")`. Plain
+  for the *next* attempt to trip over. This call is deliberately **not
+  awaited**: if the native disconnect itself hangs, awaiting it would
+  hold the whole `catch` block open behind it, and a timeout built to
+  bound one hang would be defeated by a second, unrelated one in its
+  own cleanup path. The caller's rejection must not wait on it.
+- Throws `new Error("The machine took too long to connect.")`. Plain
   sentence, matching every other thrown message in this file (e.g.
   "The machine is already in use by another app.").
 
-A `timedOut` flag, local to that one `connect()` call, guards the final
-`this.deviceId = id`. If the native sequence eventually settles after
-the timeout has already fired and been reported to the caller, the
-transport must not retroactively believe it is connected -- that would
-leave `isConnected()` saying true about a link the caller was already
-told had failed.
+A `timedOut` flag, local to that one `connect()` call, is read in the
+`catch` block solely to decide whether this disconnect-and-cleanup path
+runs (a non-timeout failure has nothing to clean up here). It does
+**not** guard the `this.deviceId = id` assignment on the success path --
+that line runs unconditionally once `Promise.race` resolves, and by
+construction it only resolves that way when the real connect sequence
+won the race, so `timedOut` is trivially false there already. What
+protects the transport from retroactively believing it is connected is
+structural: `this.deviceId = id` sits on the `try` side, immediately
+after the `await`, so a native sequence that eventually settles after
+the timeout has already fired and been reported to the caller never
+reaches that line for this call -- the `catch` block (and its `throw`)
+already ran instead.
 
 ### 2. No changes needed in `Machine.ts`, `useBrew.ts`, or `useMachine.ts`
 
@@ -122,11 +136,19 @@ told had failed.
 existing destructure (`app/machine.tsx`'s console does the same, so
 this is not a new pattern).
 
-A new ref holds `attemptStartedAt: number`. Every call the screen makes
-to `start(...)` -- both the mount-time auto-start and the "Try again"
-button's -- is wrapped so it stamps this ref with `Date.now()` first.
-A retry's diagnostic window therefore starts at the retry, not back at
-the original attempt.
+The shared `LiveBrewProvider` (`hooks/useLiveBrew.tsx`) stamps a
+`startedAt: number` on its run snapshot the moment a run is registered
+in `begin()` -- not a ref local to `app/brew.tsx`. A screen-local ref
+only gets stamped on a call to `start(...)`, and the brew screen can
+also be reopened via the mini bar (`view=1`) to look at an
+already-finished run without calling `start()` again; a local ref would
+silently keep its initial value in that case and scope the diagnostic
+log to "everything" instead of the real attempt. Storing the timestamp
+on the shared run instead means both the original `start(...)` call and
+a "Try again" retry -- which both route through the same `begin()` --
+stamp it exactly once each, and reopening via the mini bar reads the
+same `startedAt` the run was actually given, with no new tracking code
+in the screen itself. `copyDiagnosticLog` reads `run?.startedAt ?? 0`.
 
 On any failure (`blocked || failed`), below the existing `Action`
 button stack, render a plain pressable text line -- not another bordered

@@ -328,7 +328,12 @@ export class BleTransport implements MachineTransport {
                 // own retry-once already exists to clear on the *next*
                 // connect attempt. So it self-heals; it is not a gap this
                 // method needs to close itself.
-                await BleManager.disconnect(id).catch(() => {});
+                //
+                // Deliberately not awaited: a native disconnect that hangs
+                // must not hold this catch block open with it, or a timeout
+                // that exists to bound one hang would be defeated by
+                // another. The caller gets its rejection either way.
+                BleManager.disconnect(id).catch(() => {});
             }
             throw error;
         } finally {

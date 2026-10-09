@@ -267,6 +267,26 @@ describe("connecting", () => {
         }
     });
 
+    it("reports the timeout even when the cleanup disconnect itself hangs", async () => {
+        // If the cleanup disconnect were awaited and the native call never
+        // settles, this timeout — which exists to bound one hang — would be
+        // defeated by a second, unrelated hang in its own cleanup path.
+        jest.useFakeTimers();
+        try {
+            (BleManager.connect as jest.Mock).mockReturnValue(new Promise(() => {}));
+            (BleManager.disconnect as jest.Mock).mockReturnValue(new Promise(() => {}));
+            const transport = new BleTransport();
+
+            const connecting = transport.connect("AA:BB:CC");
+            const settled = connecting.catch((e: Error) => e.message);
+            await jest.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS + 100);
+
+            expect(await settled).toMatch(/took too long/i);
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
     it("still connects when the sequence resolves just under the timeout", async () => {
         // Regression guard: a timeout tight enough to clip a real, slow-but-
         // healthy connect would trade one bug for a worse one.
