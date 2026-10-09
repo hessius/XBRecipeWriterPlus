@@ -414,6 +414,7 @@ export default function BrewCompareScreen() {
                                                 height={LANE_HEIGHT}
                                                 plannedSeconds={plannedSeconds(axis.subjectPours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
+                                                pauseIntervals={axis.subjectPauses}
                                             />
                                             {showRateLanes && (
                                                 <CompareRateLane
@@ -453,6 +454,7 @@ export default function BrewCompareScreen() {
                                                 height={LANE_HEIGHT}
                                                 plannedSeconds={plannedSeconds(axis.referencePours)}
                                                 axis={{maxT: axis.maxT, maxV: axis.maxV}}
+                                                pauseIntervals={axis.referencePauses}
                                             />
                                             {showRateLanes && (
                                                 <CompareRateLane

@@ -513,4 +513,36 @@ describe("the comparison screen", () => {
             "Choose two brews of the same recipe. Cross recipe comparison has no shared plan."
         )).toBeTruthy();
     });
+
+    it("keeps each lane's pauses on that lane and shares one axis in seconds", async () => {
+        const a = makeBrewRecordFixture({
+            id: "a", plan: comparisonPlan,
+            pauseIntervals: [{from: 20_000, to: 40_000, pour: 1, reason: "overflow"}]
+        });
+        const b = makeBrewRecordFixture({
+            id: "b", plan: comparisonPlan,
+            pauseIntervals: [{from: 100_000, to: 300_000, pour: 2, reason: "manual"}]
+        });
+        setRecords({
+            a: {record: a, samples: makeBrewRecordSamples(comparisonSamples)},
+            b: {record: b, samples: makeBrewRecordSamples(comparisonSamples)}
+        });
+        setParams({a: "a", b: "b"});
+        const {getByLabelText, getByTestId} = await renderWithProviders(<BrewCompareScreen />);
+        await fireEvent.press(getByLabelText("Show the brews separately"));
+
+        const laneA = within(getByTestId("compare-lane-a"));
+        const laneB = within(getByTestId("compare-lane-b"));
+        expect(laneA.getByTestId("trace-pause-overflow-0")).toBeTruthy();
+        expect(laneA.queryByTestId("trace-pause-manual-0")).toBeNull();
+        expect(laneB.getByTestId("trace-pause-manual-0")).toBeTruthy();
+        expect(laneB.queryByTestId("trace-pause-overflow-0")).toBeNull();
+
+        // B's pause ends at 300 s, past both streams, so the shared axis ends there.
+        const widthA = Number(laneA.getByTestId("trace-pause-overflow-0").props.width);
+        const bandB = laneB.getByTestId("trace-pause-manual-0");
+        expect(widthA / 20).toBeCloseTo(Number(bandB.props.width) / 200, 4);
+        expect(Number(bandB.props.x) + Number(bandB.props.width))
+            .toBeCloseTo(300 * widthA / 20, 4);
+    });
 });

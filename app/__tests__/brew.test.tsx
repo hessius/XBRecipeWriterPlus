@@ -61,6 +61,7 @@ let mockPhase: BrewPhase = {name: "pouring", pour: 1, pours: 2};
 // screen a default install draws.
 let mockHandoffEnabled = false;
 let mockSamples: BrewSample[] = [];
+let mockPauseIntervals: {from: number; to: number; pour: number; reason: "manual" | "overflow"}[] = [];
 let mockElapsed = 12;
 let mockStageElapsed = 12;
 let mockActiveIndex: number | null = 0;
@@ -148,6 +149,7 @@ jest.mock("@/hooks/useLiveBrew", () => {
             recipe: mockOwnerRecipe ?? mockRecipe,
             phase: mockPhase,
             samples: mockSamples,
+            pauseIntervals: mockPauseIntervals,
             startedAt: mockStartedAt,
             elapsed: mockElapsed,
             stageElapsed: mockStageElapsed,
@@ -249,6 +251,7 @@ beforeEach(() => {
         new Pour(1, 40, 93, 40, 0, 0, 20),
     ];
     mockSamples = [];
+    mockPauseIntervals = [];
     mockElapsed = 12;
     mockStageElapsed = 12;
     mockActiveIndex = 0;
@@ -915,6 +918,23 @@ describe("brew route", () => {
         ]));
         expect(summaryProps.drawdown).toBeCloseTo(2);
         expect(summaryProps.drawdownRate).toBeCloseTo(2);
+    });
+
+    it("hands the finished run's pause intervals to the summary and draws their bands", async () => {
+        mockSamples = [
+            {at: 0, water: 0, cup: 0, pour: 1},
+            {at: 20_000, water: 60, cup: 40, pour: 1}
+        ];
+        mockPauseIntervals = [{from: 20_000, to: 50_000, pour: 1, reason: "overflow"}];
+        mockElapsed = 50;
+        mockPhase = {name: "done"} as BrewPhase;
+        mockActiveIndex = 1;
+        mockRecord = {...record, endedAt: 50_000};
+
+        await renderWithProviders(<Brew />);
+
+        expect(summaryProps.pauseIntervals).toEqual(mockPauseIntervals);
+        expect(screen.getByTestId("trace-pause-overflow-0")).toBeTruthy();
     });
 
     it("captures and shares the brew in place, without pushing /brewRecord", async () => {

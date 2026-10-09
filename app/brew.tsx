@@ -564,6 +564,7 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                             === "endedOnMachine" ? ENDED_ON_MACHINE_NOTE : undefined}
                         stagesUnavailable={false}
                         bypass={bypass}
+                        pauseIntervals={run?.pauseIntervals}
                         availableHeight={doneHeight}
                     />
                 </ViewShot>

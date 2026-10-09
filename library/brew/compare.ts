@@ -13,6 +13,7 @@ import {
     type Box,
     type Point
 } from "./brewShape";
+import {intervalExtent, type PauseInterval} from "./pauseIntervals";
 import {NOISE_FLOOR_ML} from "./stalls";
 import {maxRateOf, retrospectiveFlowSeries, type FlowPoint} from "./flowRate";
 
@@ -245,7 +246,16 @@ export type CompareAxis = {
     referenceRate: FlowPoint[];
     subjectPours: ReturnType<typeof poursFromPlan>;
     referencePours: ReturnType<typeof poursFromPlan>;
+    /** Each lane's own recorded pauses; empty where that lane draws no trace. */
+    subjectPauses: PauseInterval[];
+    referencePauses: PauseInterval[];
 };
+
+// A lane with no drawn trace has no band to draw and must not stretch the
+// other lane's axis, so its stored intervals stay record metadata only.
+function drawnPauses(brew: BrewUnderComparison): PauseInterval[] {
+    return hasTrace(brew) ? brew.record.pauseIntervals ?? [] : [];
+}
 
 function rateSeriesFor({record, samples}: BrewUnderComparison): FlowPoint[] {
     if (!record.hasStream || samples.length === 0) return [];
@@ -267,13 +277,17 @@ export function compareAxis(
     const referencePours = poursFromPlan(reference.record.plan);
     const subjectRate = rateSeriesFor(subject);
     const referenceRate = rateSeriesFor(reference);
+    const subjectPauses = drawnPauses(subject);
+    const referencePauses = drawnPauses(reference);
     return {
         maxT: Math.max(
             1,
             lastSecond(subject.samples),
             lastSecond(reference.samples),
             plannedSeconds(subjectPours),
-            plannedSeconds(referencePours)
+            plannedSeconds(referencePours),
+            intervalExtent(subjectPauses),
+            intervalExtent(referencePauses)
         ),
         maxV: Math.max(
             1,
@@ -286,7 +300,9 @@ export function compareAxis(
         subjectRate,
         referenceRate,
         subjectPours,
-        referencePours
+        referencePours,
+        subjectPauses,
+        referencePauses
     };
 }
 

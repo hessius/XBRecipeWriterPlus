@@ -575,3 +575,48 @@ describe("compareBrews", () => {
         expect(c.reference.id).toBe("b");
     });
 });
+
+describe("compareAxis pause intervals", () => {
+    const stream = (lastAt: number): BrewSample[] => [
+        {at: 0, water: 0, cup: 0, pour: 1},
+        {at: lastAt, water: 100, cup: 90, pour: 1}
+    ];
+    const early = [{from: 10_000, to: 20_000, pour: 1, reason: "overflow" as const}];
+    const late = [
+        {from: 30_000, to: 45_000, pour: 1, reason: "manual" as const},
+        {from: 60_000, to: 95_000, pour: 1, reason: "overflow" as const}
+    ];
+
+    it("gives each lane its own intervals and spans both extents", () => {
+        const axis = compareAxis(
+            {record: brew({pauseIntervals: early}), samples: stream(40_000)},
+            {record: brew({id: "b", pauseIntervals: late}), samples: stream(50_000)}
+        );
+
+        expect(axis.maxT).toBe(95);
+        expect(axis.subjectPauses).toEqual(early);
+        expect(axis.referencePauses).toEqual(late);
+    });
+
+    it("lets the other lane's pause stretch the axis without appearing on this lane", () => {
+        const axis = compareAxis(
+            {record: brew(), samples: stream(40_000)},
+            {record: brew({id: "b", pauseIntervals: late}), samples: stream(50_000)}
+        );
+
+        expect(axis.maxT).toBe(95);
+        expect(axis.subjectPauses).toEqual([]);
+    });
+
+    it("does not let a record with no stream stretch the axis or carry a band", () => {
+        const swept = brew({id: "b", hasStream: false, pauseIntervals: late});
+        const axis = compareAxis(
+            {record: brew(), samples: stream(40_000)},
+            {record: swept, samples: []}
+        );
+
+        expect(axis.maxT).toBe(40);
+        expect(axis.referencePauses).toEqual([]);
+        expect(swept.pauseIntervals).toEqual(late);
+    });
+});

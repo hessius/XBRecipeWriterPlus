@@ -149,6 +149,24 @@ export function pausedNote(seconds: number | undefined): string | undefined {
 }
 
 /**
+ * Which pauses a record holds, by who made them, as counts alone.
+ *
+ * Counts and no seconds: `pausedNote` already states the total held time, and
+ * a second figure for the same time would be counted twice. Absent when the
+ * app paused nothing, since a manual pause is then all `pausedNote` says.
+ */
+export function pauseReasonsNote(
+    intervals: readonly {reason: "manual" | "overflow"}[] | undefined
+): string | undefined {
+    const list = intervals ?? [];
+    const overflow = list.filter((interval) => interval.reason === "overflow").length;
+    if (overflow === 0) return undefined;
+    const manual = list.length - overflow;
+    const automatic = `${overflow} AUTOMATIC OVERFLOW ${overflow === 1 ? "PAUSE" : "PAUSES"}`;
+    return manual === 0 ? automatic : `${automatic}, ${manual} MANUAL`;
+}
+
+/**
  * The phases from which PAUSE is worth offering.
  *
  * Narrower than "active", and deliberately so. 40518 is inert outside a
