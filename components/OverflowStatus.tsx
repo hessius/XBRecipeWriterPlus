@@ -1,4 +1,5 @@
-import React from "react";
+import React, {useEffect, useRef} from "react";
+import {AccessibilityInfo, Platform} from "react-native";
 import {Text, YStack} from "tamagui";
 
 import {
@@ -53,11 +54,21 @@ function figuresLine(status: OverflowSnapshot, now: number): string | null {
  * What custom overflow protection is doing, for the live brew.
  *
  * Two kinds of text, kept apart on purpose. The state line is stable per state
- * and is the only live region, so a screen reader announces a change of state.
- * The gram figure and the countdown move every few hundred milliseconds and are
- * deliberately not announced.
+ * and is the only Android live region. iOS queues an announcement when that text
+ * changes, not on mount. The gram figure and the countdown move every few hundred
+ * milliseconds and are deliberately not announced.
  */
 export default function OverflowStatus({status, now, compact}: Props) {
+    const stateText = stateLine(status);
+    const previousStateText = useRef(stateText);
+    useEffect(() => {
+        const changed = previousStateText.current !== stateText;
+        previousStateText.current = stateText;
+        if (Platform.OS === "ios" && changed && stateText) {
+            AccessibilityInfo.announceForAccessibilityWithOptions(stateText, {queue: true});
+        }
+    }, [stateText]);
+
     if (status.mode === "ended") return null;
 
     const failed = status.mode === "error";
@@ -72,7 +83,7 @@ export default function OverflowStatus({status, now, compact}: Props) {
         <YStack testID="overflow-status" gap="$1">
             <Text testID="overflow-status-state" accessibilityLiveRegion="polite"
                   fontSize={13} lineHeight={18} color={color}>
-                {stateLine(status)}
+                {stateText}
             </Text>
             {!compact && figures !== null && (
                 <Text testID="overflow-status-figures" fontSize={13} lineHeight={18}

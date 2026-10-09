@@ -1,9 +1,11 @@
 import React from "react";
+import {AccessibilityInfo, Platform} from "react-native";
 import {screen} from "@testing-library/react-native";
 
 import OverflowStatus from "@/components/OverflowStatus";
 import {
-    OVERFLOW_ESTIMATE_NOTE, OVERFLOW_FOREGROUND_CAUTION, OVERFLOW_MANUAL_OVERRIDE
+    OVERFLOW_ESTIMATE_NOTE, OVERFLOW_FOREGROUND_CAUTION, OVERFLOW_MANUAL_OVERRIDE,
+    OVERFLOW_STATE_COPY
 } from "@/constants/brewCopy";
 import type {OverflowSnapshot} from "@/library/brew/OverflowController";
 import {renderWithProviders} from "@/test-utils/render";
@@ -23,6 +25,106 @@ describe("OverflowStatus", () => {
         expect(screen.getByText("Estimated in the dripper: 42 g")).toBeOnTheScreen();
         expect(screen.getByText(OVERFLOW_FOREGROUND_CAUTION)).toBeOnTheScreen();
         expect(screen.getByText(OVERFLOW_ESTIMATE_NOTE)).toBeOnTheScreen();
+    });
+
+    describe.each(["ios", "android"] as const)("OverflowStatus announcements on %s", (platform) => {
+        const originalPlatform = Platform.OS;
+        let announce: jest.SpyInstance;
+        let announceWithOptions: jest.SpyInstance;
+
+        beforeEach(() => {
+            Platform.OS = platform;
+            announce = jest.spyOn(AccessibilityInfo, "announceForAccessibility")
+                .mockImplementation(() => {}).mockClear();
+            announceWithOptions = jest.spyOn(AccessibilityInfo, "announceForAccessibilityWithOptions")
+                .mockImplementation(() => {}).mockClear();
+        });
+
+        afterEach(() => {
+            Platform.OS = originalPlatform;
+            announce.mockRestore();
+            announceWithOptions.mockRestore();
+        });
+
+        function expectAnnouncements(messages: string[]) {
+            expect(announce).not.toHaveBeenCalled();
+            expect(announceWithOptions.mock.calls).toEqual(
+                platform === "ios" ? messages.map((message) => [message, {queue: true}]) : []
+            );
+        }
+
+        it.each(["armed", "requesting", "holding", "resuming", "disabled", "error", "ended"] as const)(
+            "does not announce %s on initial mount",
+            async (mode) => {
+                await renderWithProviders(<OverflowStatus status={snap({mode})} now={0}/>);
+                expectAnnouncements([]);
+            }
+        );
+
+        it("announces each automatic state transition once, never grams or countdown ticks", async () => {
+            const {rerender} = await renderWithProviders(<OverflowStatus status={snap()} now={0}/>);
+            const messages: string[] = [];
+            for (const mode of ["armed", "requesting", "holding", "resuming", "armed"] as const) {
+                const status = snap({mode, retainedGrams: 60, telemetryAvailable: true, nextCheckAt: 9000});
+                await rerender(<OverflowStatus status={status} now={0}/>);
+                if (mode !== "armed" || messages.length > 0) messages.push(OVERFLOW_STATE_COPY[mode]);
+                const state = screen.getByTestId("overflow-status-state");
+                expect(state).toHaveTextContent(OVERFLOW_STATE_COPY[mode]);
+                expect(state.props.accessibilityLiveRegion).toBe("polite");
+                expectAnnouncements(messages);
+
+                for (const now of [250, 1000, 9000]) {
+                    await rerender(
+                        <OverflowStatus status={{...status, retainedGrams: 60 - now / 1000}} now={now}/>
+                    );
+                    expectAnnouncements(messages);
+                }
+                await rerender(
+                    <OverflowStatus status={{...status, telemetryAvailable: false, nextCheckAt: 12_000}}
+                                    now={10_000} compact/>
+                );
+                expectAnnouncements(messages);
+            }
+        });
+
+        it("announces changed disabled reasons and errors, but not repeated state text", async () => {
+            const {rerender} = await renderWithProviders(<OverflowStatus status={snap()} now={0}/>);
+            const messages: string[] = [];
+            const statuses: OverflowSnapshot[] = [
+                snap({mode: "disabled"}),
+                snap({mode: "disabled", disabledReason: "manualOverride"}),
+                snap({mode: "disabled", disabledReason: "background"}),
+                snap({mode: "disabled", disabledReason: "lostContact"}),
+                snap({mode: "error"}),
+                snap({mode: "error", error: OVERFLOW_STATE_COPY.error}),
+                snap({mode: "error", error: "The machine did not confirm the protection pause."}),
+                snap({mode: "error", error: "The machine did not confirm the protection resume."})
+            ];
+            for (const status of statuses) {
+                const message = status.mode === "disabled"
+                    ? OVERFLOW_STATE_COPY[status.disabledReason ?? "manualOverride"]
+                    : status.error ?? OVERFLOW_STATE_COPY.error;
+                if (messages[messages.length - 1] !== message) messages.push(message);
+                await rerender(<OverflowStatus status={status} now={0}/>);
+                expect(screen.getByTestId("overflow-status-state")).toHaveTextContent(message);
+                expectAnnouncements(messages);
+                await rerender(<OverflowStatus status={{...status}} now={250}/>);
+                expectAnnouncements(messages);
+            }
+        });
+
+        it("does not announce ended, unmount, or a fresh mount", async () => {
+            const {rerender, unmount} = await renderWithProviders(<OverflowStatus status={snap()} now={0}/>);
+            await rerender(<OverflowStatus status={snap({mode: "ended"})} now={250}/>);
+            expect(screen.queryByTestId("overflow-status")).toBeNull();
+            await unmount();
+            expectAnnouncements([]);
+            const remounted = await renderWithProviders(
+                <OverflowStatus status={snap({mode: "holding"})} now={500}/>
+            );
+            await remounted.unmount();
+            expectAnnouncements([]);
+        });
     });
 
     it("armed with no reading says the estimate is unavailable and keeps the caution", async () => {
