@@ -42,6 +42,8 @@ function harness() {
         error: null,
         brew: jest.fn(async () => {}),
         startBrew: jest.fn(async () => {}),
+        pauseBrew: jest.fn(async () => {}),
+        resumeBrew: jest.fn(async () => {}),
         cancelBrew: jest.fn(async () => {}),
         canOfferProMode: () => false,
         switchToProAndRetry: jest.fn(async () => {}),
@@ -181,6 +183,31 @@ describe("useBrewRun", () => {
         const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
         await h.setPhase({name: "pouring", pour: 2, pours: 2});
         await h.setPhase({name: "done"});
+        expect(result.current.activeIndex).toBe(2);
+    });
+
+    it("leaves the ladder standing where it stood when the brew was paused", async () => {
+        // A pause changes nothing about which stages have poured. Read off
+        // `phase` alone it is neither pouring nor over, so the whole ladder
+        // drops to the un-started look the moment the user presses PAUSE.
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 2, pours: 2});
+        await h.setPhase({
+            name: "paused", pour: 2, pours: 2,
+            was: {name: "pouring", pour: 2, pours: 2}
+        });
+        expect(result.current.activeIndex).toBe(1);
+    });
+
+    it("keeps a paused drawdown's stages done rather than pending", async () => {
+        const h = harness();
+        const {result} = await renderHook(() => useBrewRun(recipe(), h.store));
+        await h.setPhase({name: "pouring", pour: 2, pours: 2});
+        await h.setPhase({name: "settling"});
+        await h.setPhase({
+            name: "paused", pour: 2, pours: 2, was: {name: "settling"}
+        });
         expect(result.current.activeIndex).toBe(2);
     });
 

@@ -1,4 +1,5 @@
 import {
+    pausedNote,
     BLOCKED_HEADLINE,
     BLOCKED_WATER_HEADLINE,
     FAILURE_COPY,
@@ -77,5 +78,19 @@ describe("brew copy", () => {
             .toBe("Agitates the bed after pouring.");
         expect(AGITATION_SENTENCE[AGITATION.BEFORE_ON_AFTER_ON])
             .toBe("Agitates the bed before and after pouring.");
+    });
+});
+
+describe("pausedNote", () => {
+    it("says nothing about a brew nobody paused", () => {
+        expect(pausedNote(undefined)).toBeUndefined();
+    });
+
+    it("says nothing about a pause too short to have been meant", () => {
+        expect(pausedNote(0.4)).toBeUndefined();
+    });
+
+    it("says how long the brew was held, in whole seconds", () => {
+        expect(pausedNote(42.6)).toBe("PAUSED FOR 43 S");
     });
 });

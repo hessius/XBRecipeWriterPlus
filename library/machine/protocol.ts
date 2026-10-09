@@ -211,6 +211,24 @@ export const EVENT = {
     ENJOY_2:          40513,
     ERROR_IDLING:     40517,
     /**
+     * 40515. The machine acknowledging a pause, carrying the volume delivered
+     * so far.
+     *
+     * Hardware 2026-10-08 (V12.0D.500): sending 40518 into a running recipe
+     * produced this with a rising number (138, then 184 within one brew),
+     * followed by state 0x1f. Volume-so-far is the obvious reading of the
+     * number and has not been checked against the scale, so nothing depends
+     * on its value -- only on its arrival, which is the only confirmation
+     * the machine ever gives that a brew is actually paused.
+     */
+    COFFEE_PAUSED:    40515,
+    /**
+     * 40516. The machine acknowledging a resume. State returns to 0x23 and
+     * the brew carries on from where it stopped rather than restarting the
+     * stage.
+     */
+    COFFEE_RESUMED:   40516,
+    /**
      * 40522. Named for what a capture proves it to be, not for what it was
      * assumed to be.
      *
@@ -228,6 +246,18 @@ export const EVENT = {
     MACHINE_INFO:     40521,
     HANDSHAKE_ACK:    8100
 } as const;
+
+/**
+ * Commands the app sends, where the number is worth a name.
+ *
+ * Only the pause pair so far; the rest of the app still writes its literals
+ * inline. These two earn constants because the obvious-looking alternative,
+ * `8019`, is named "Brewer pause" by every upstream source and is **not** a
+ * pause: hardware on 2026-10-08 showed it abandoning the recipe into a
+ * FreeSolo water pour. Anybody reaching for a pause code should land on these.
+ */
+export const COMMAND_PAUSE = 40518;
+export const COMMAND_RESUME = 40524;
 
 export type MachineInfo = {
     kind: "info";

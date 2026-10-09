@@ -24,7 +24,8 @@ import MachineDot from "@/components/MachineDot";
 import {notify} from "@/components/XbrwToast";
 import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
         ENDED_ON_MACHINE_NOTE, FAILURE_COPY,
-        FIRST_BREW_REMINDER, LONGEST_ACTIVE_HEADLINE, NO_RETRY, PHASE_COPY,
+        FIRST_BREW_REMINDER, LONGEST_ACTIVE_HEADLINE, NO_RETRY, PAUSABLE,
+        PAUSED_NOTE, PHASE_COPY,
         PRO_MODE_PROMPT, RATING_CAN_WAIT} from "@/constants/brewCopy";
 import {mix, palette} from "@/constants/colors";
 import {useBrewExport, type BrewExportSource} from "@/hooks/useBrewExport";
@@ -212,8 +213,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
         quickEditRecordFromRoute(localRecipe, quickEditAdjustments)
     );
 
-    const {run, start, startInPro, startBrew, cancelBrew, canOfferProMode,
-           error, watch, ratingNoteOpen} = useLiveBrew();
+    const {run, start, startInPro, startBrew, pauseBrew, resumeBrew, cancelBrew,
+           canOfferProMode, error, watch, ratingNoteOpen} = useLiveBrew();
 
     // Tell the provider to start a run for this recipe. `start` is idempotent:
     // if RunOwner is already mounted it replaces `start` with a no-op, so
@@ -309,7 +310,8 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     const doneDrawdown = phase.name === "done" ? doneDrawdownFigures?.seconds ?? null : null;
     const doneDrawdownRate = phase.name === "done" ? doneDrawdownFigures?.rate ?? null : null;
     const doneDelay = phase.name === "done"
-        ? pourEndDelaySeconds(elapsed, doneDrawdown, plannedSecs)
+        ? pourEndDelaySeconds(elapsed, doneDrawdown, plannedSecs,
+                              run?.record?.pausedSeconds ?? 0)
         : null;
     const liveDelay = pourEndDelaySeconds(
         elapsed,
@@ -638,6 +640,10 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                 </Text>
             )}
 
+            {phase.name === "paused" && (
+                <Text color={palette.warn} fontSize={13}>{PAUSED_NOTE}</Text>
+            )}
+
             {!firstBrewDone && running && (
                 <Text color={palette.warn} fontSize={13}>{FIRST_BREW_REMINDER}</Text>
             )}
@@ -668,6 +674,18 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
                         // something BREW did on the user's behalf.
                         <Action label="Start brewing" color={palette.success}
                                 onPress={() => void startBrew()} />
+                    )}
+                    {PAUSABLE.has(phase.name) && (
+                        <Action label="Pause" color={palette.warn}
+                                onPress={() => void pauseBrew()} />
+                    )}
+                    {phase.name === "paused" && (
+                        // Resume sits above Cancel and carries the accent,
+                        // because the two are opposite answers to the same
+                        // question and only one of them is the reason most
+                        // people paused.
+                        <Action label="Resume" color={palette.success}
+                                onPress={() => void resumeBrew()} />
                     )}
                     <Action label="Cancel" color={palette.danger}
                             onPress={() => void cancelBrew()} />

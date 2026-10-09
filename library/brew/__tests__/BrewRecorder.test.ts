@@ -1124,3 +1124,159 @@ describe("the bypass", () => {
         expect(saved?.outcome).toBe("endedOnMachine");
     });
 });
+
+describe("the pause clock", () => {
+    function paused(pour = 1): BrewPhase {
+        return {name: "paused", pour, pours: 2, was: {name: "pouring", pour, pours: 2}};
+    }
+
+    it("records nothing when nobody paused", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        time.advance(60_000);
+        fake.phase({name: "done"});
+
+        expect(records[0].record.pausedSeconds).toBeUndefined();
+    });
+
+    it("measures a pause from the phase to the one that follows it", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        time.advance(30_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.phase({name: "done"});
+
+        expect(records[0].record.pausedSeconds).toBe(30);
+    });
+
+    it("sums every pause rather than keeping the last", () => {
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        time.advance(20_000);
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.phase(paused());
+        time.advance(15_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.phase({name: "done"});
+
+        expect(records[0].record.pausedSeconds).toBe(35);
+    });
+
+    it("keeps a pause that was still open when the brew ended", () => {
+        // Cancelling from a pause is the realistic way a pause ends, and it is
+        // the case where the span is longest. Closing it only on the next
+        // phase would throw exactly that one away.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        time.advance(45_000);
+        fake.phase({name: "cancelled"});
+
+        expect(records[0].record.pausedSeconds).toBe(45);
+    });
+
+    it("does not report a pause as the machine holding water back", () => {
+        // Held time is `elapsed - planned`, so without the subtraction the
+        // pause arrives in it untouched. The plan here is 20 s of pause plus
+        // two pours; a 40 s pause inside a brew that otherwise ran to plan is
+        // not the machine holding anything.
+        const {fake, time, records} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        time.advance(40_000);
+        fake.phase({name: "pouring", pour: 2, pours: 2});
+        fake.water(200);
+        fake.phase({name: "done"});
+
+        expect(records[0].record.heldSeconds).toBe(0);
+        expect(records[0].record.pausedSeconds).toBe(40);
+    });
+});
+
+describe("the scale while a brew is paused", () => {
+    function paused(pour = 1): BrewPhase {
+        return {name: "paused", pour, pours: 2, was: {name: "pouring", pour, pours: 2}};
+    }
+
+    it("keeps no readings from a paused brew", () => {
+        // The water is flat throughout a pause by design, and the scale goes
+        // on reporting it ten times a second. Kept, those readings are an
+        // observed plateau, which is the definition of a stall -- so the brew
+        // would report the user's own button press back to them as a fault.
+        const {fake, recorder} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.water(210);
+        const before = recorder.samples.length;
+
+        fake.phase(paused());
+        fake.water(210);
+        fake.water(210);
+        fake.water(210);
+
+        expect(recorder.samples.length).toBe(before);
+    });
+
+    it("starts taking readings again once the brew resumes", () => {
+        const {fake, recorder} = build();
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(200);
+        fake.phase(paused());
+        fake.water(210);
+        const held = recorder.samples.length;
+
+        fake.phase({name: "pouring", pour: 1, pours: 2});
+        fake.water(220);
+
+        expect(recorder.samples.length).toBe(held + 1);
+    });
+});
+
+describe("a pause during the bypass", () => {
+    it("does not move the bypass's start to the moment of the resume", () => {
+        // `leavePause` restores the phase the pause interrupted, so the bypass
+        // branch runs a second time. Stamping the start again would place the
+        // bypass wherever the user happened to press RESUME, which on a
+        // history chart shortens it and slides it right.
+        const {machine, time, emitPhase, emitWeight} = makeMachine();
+        const recipe = makeRecipe([{volume: 40}, {volume: 115}, {volume: 85}]);
+        recipe.bypassEnabled = true;
+        recipe.bypassVolume = 5;
+        recipe.bypassTemp = 85;
+
+        let saved: BrewRecord | undefined;
+        const recorder = new BrewRecorder({
+            machine, recipe, now: time.now, onRecord: (record) => { saved = record; }
+        });
+        recorder.start();
+        built.push(recorder);
+
+        emitPhase({name: "pouring", pour: 1, pours: 3});
+        emitWeight(40, 0);
+        emitPhase({name: "pouring", pour: 2, pours: 3});
+        emitWeight(155, 20);
+        emitPhase({name: "pouring", pour: 3, pours: 3});
+        emitWeight(240, 100);
+        emitPhase({name: "bypass"});
+        emitWeight(243, 155);
+        const started = recorder.samples[recorder.samples.length - 1].at;
+
+        emitPhase({name: "paused", pour: 3, pours: 3, was: {name: "bypass"}});
+        time.advance(45_000);
+        emitPhase({name: "bypass"});
+        emitWeight(245, 160);
+        emitPhase({name: "settling"});
+        emitPhase({name: "done"});
+
+        // Within a second of the first bypass sample, and nowhere near the
+        // forty-five seconds the pause added.
+        expect(saved?.bypass?.startedAt).toBeLessThan(started + 1000);
+    });
+});

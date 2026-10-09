@@ -36,6 +36,8 @@ function harness() {
         error: null,
         brew: jest.fn(async () => {}),
         startBrew: jest.fn(async () => {}),
+        pauseBrew: jest.fn(async () => {}),
+        resumeBrew: jest.fn(async () => {}),
         cancelBrew: jest.fn(async () => {}),
         canOfferProMode: () => false,
         switchToProAndRetry: jest.fn(async () => {}),

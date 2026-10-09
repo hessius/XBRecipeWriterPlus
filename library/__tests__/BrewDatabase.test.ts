@@ -356,6 +356,23 @@ describe("BrewDatabase", () => {
             });
     });
 
+    it("keeps the paused seconds across a write and a read", () => {
+        const db = realBrewDatabase();
+        db.insert(record({id: "a", pausedSeconds: 42}), []);
+
+        expect(db.get("a")?.pausedSeconds).toBe(42);
+    });
+
+    it("leaves the key off a brew nobody paused", () => {
+        // 0 is the storage sentinel and also the truth, so the row is what it
+        // was before the column existed. A backup written from this record
+        // must be byte for byte an old one.
+        const db = realBrewDatabase();
+        db.insert(record({id: "a"}), []);
+
+        expect(db.get("a")).not.toHaveProperty("pausedSeconds");
+    });
+
     it("answers for a recipe never brewed without inventing a date", () => {
         // MAX over no rows is NULL. Left as it comes back it would reach the
         // deck as a date, and 1970 is not when this recipe was last brewed.

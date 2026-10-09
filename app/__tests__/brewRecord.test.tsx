@@ -1803,6 +1803,38 @@ describe("brew record's story card", () => {
             expect(summaryProps.grind).toBeNull();
         });
 
+    it("says a brew was paused, since nothing else on the record would", async () => {
+        // The clock runs long and the trace holds a flat stretch. Without the
+        // note the record shows both and explains neither.
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                plan:          planFromPours(twoPours.pours),
+                pausedSeconds: 40
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+
+        expect(screen.getByText("PAUSED FOR 40 S")).toBeTruthy();
+    });
+
+    it("lets ending on the machine keep the note slot from a pause", async () => {
+        mockOpened = {
+            record:  recordWithDrawdownRate({
+                plan:          planFromPours(twoPours.pours),
+                outcome:       "endedOnMachine",
+                pausedSeconds: 40
+            }),
+            samples: samplesForRate()
+        };
+
+        await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
+
+        expect(screen.getByText("ENDED ON THE MACHINE")).toBeTruthy();
+        expect(screen.queryByText("PAUSED FOR 40 S")).toBeNull();
+    });
+
     it("hides the screen from a screen reader while the card is up", async () => {
         await renderWithProviders(<BrewRecord recipeLookup={lookup}/>);
         await openCard();

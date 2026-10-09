@@ -24,6 +24,11 @@ const DRAWDOWN_PHASES = {
     pressPlay: "veto",
     grinding: "veto",
     pouring: "water",
+    // A paused brew's water stopped because somebody stopped it, not because
+    // the bed is draining. Opening the drawdown clock here would start timing
+    // a drawdown that has not begun, and the figure would go on climbing for
+    // as long as the pause lasted.
+    paused: "veto",
     bypass: "backstop",
     settling: "backstop",
     done: "veto",

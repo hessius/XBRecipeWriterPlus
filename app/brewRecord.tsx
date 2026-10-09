@@ -52,7 +52,8 @@ import RecipeDatabase from "@/library/RecipeDatabase";
 import type Recipe from "@/library/Recipe";
 import {RECORD_ACTION_GAP, SCREEN_PADDING} from "@/constants/layout";
 import type {StoredBrew} from "@/library/BrewDatabase";
-import {HANDOFF_ALREADY_SENT, ENDED_ON_MACHINE_NOTE} from "@/constants/brewCopy";
+import {HANDOFF_ALREADY_SENT, ENDED_ON_MACHINE_NOTE, pausedNote}
+    from "@/constants/brewCopy";
 
 /** Minimal interface for looking up a recipe. Injected by tests. */
 export type RecipeLookup = {getRecipe: (uuid: string) => Recipe | null};
@@ -390,8 +391,12 @@ export default function BrewRecord({recipeLookup}: Props) {
         activeIndex:       ladderFrontier(record.outcome, delivered),
         stageWater:        delivered,
         stalls:            record.stalls ?? stages.map(() => []),
+        // A paused brew's clock runs long and its trace holds a flat stretch
+        // nothing else on the screen accounts for. Ending on the machine is
+        // the louder fact, so it keeps the slot where both are true.
         note:              record.outcome === "endedOnMachine"
-            ? ENDED_ON_MACHINE_NOTE : undefined,
+            ? ENDED_ON_MACHINE_NOTE
+            : pausedNote(record.pausedSeconds),
         stagesUnavailable: snapshot.length === 0 && recipe === null,
         bypass,
         drawdown:          drawdown?.seconds ?? null,
@@ -402,7 +407,8 @@ export default function BrewRecord({recipeLookup}: Props) {
         delay:             pourEndDelaySeconds(
             durationSeconds,
             drawdown?.seconds ?? null,
-            plannedSecs
+            plannedSecs,
+            record.pausedSeconds ?? 0
         ),
         grind:             summaryGrind,
         adjustments

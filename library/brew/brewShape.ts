@@ -58,14 +58,20 @@ export function plannedSeconds(pours: Pour[]): number {
  * delay measured to the end of the brew mostly reports a normal bed drawdown.
  * Null means nobody can separate the two, or the separated delay is too small
  * to name.
+ *
+ * `pausedSeconds` comes off first. The figure exists to say the machine took
+ * longer than the recipe asked for; time the user held the brew is not the
+ * machine's and reporting it here blames the machine for a button press. Same
+ * correction as `summarise` makes to held time, and for the same reason.
  */
 export function pourEndDelaySeconds(
     seconds: number,
     drawdown: number | null,
-    planSeconds: number
+    planSeconds: number,
+    pausedSeconds = 0
 ): number | null {
     if (drawdown === null || planSeconds <= 0) return null;
-    const pourEnd = seconds - drawdown;
+    const pourEnd = seconds - drawdown - Math.max(0, pausedSeconds);
     const delay = Math.round(pourEnd - planSeconds);
     return delay >= DELAY_FLOOR_SECONDS ? delay : null;
 }

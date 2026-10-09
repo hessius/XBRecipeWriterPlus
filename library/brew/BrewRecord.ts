@@ -169,6 +169,18 @@ export type BrewRecord = {
     /** Seconds the brew ran beyond its plan — overflow protection, mostly. */
     heldSeconds: number;
     /**
+     * Seconds the user held the brew with PAUSE, summed over every pause.
+     *
+     * Separate from `heldSeconds` and subtracted from it, which is not a
+     * refinement but a correction: held time is derived as `elapsed - planned`
+     * rather than measured, so without this a pause would be reported as the
+     * machine holding water back. Whose decision made a brew long is the only
+     * question worth asking of the pair.
+     *
+     * Absent on rows written before it existed, and 0 where nobody paused.
+     */
+    pausedSeconds?: number;
+    /**
      * Where each stage stopped pouring, one list per stage, index-aligned with
      * the recipe's pours.
      *
@@ -356,7 +368,8 @@ export function isRating(value: unknown): value is number {
         && value <= MAX_RATING;
 }
 
-export type BrewSummary = Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeconds">;
+export type BrewSummary =
+    Pick<BrewRecord, "waterTotal" | "cupTotal" | "heldSeconds"> & {pausedSeconds: number};
 
 /**
  * How long the bed took to finish, in seconds, or null if it was not measured.
@@ -458,14 +471,22 @@ export function drawdownFrom(
     return at;
 }
 
-export function summarise(samples: BrewSample[], plannedSeconds: number): BrewSummary {
+export function summarise(
+    samples: BrewSample[], plannedSeconds: number, pausedSeconds = 0
+): BrewSummary {
     const last = samples[samples.length - 1];
-    if (last === undefined) return {waterTotal: 0, cupTotal: 0, heldSeconds: 0};
+    if (last === undefined) {
+        return {waterTotal: 0, cupTotal: 0, heldSeconds: 0, pausedSeconds: 0};
+    }
     const elapsed = last.at / 1000;
     return {
         waterTotal: last.water,
         cupTotal: last.cup,
-        heldSeconds: Math.max(0, Math.round(elapsed - plannedSeconds)),
+        // The pause comes out before the comparison, not after: a brew that
+        // was paused for longer than it ran over has not held anything, and
+        // the subtraction has to be able to reach zero.
+        heldSeconds: Math.max(0, Math.round(elapsed - plannedSeconds - pausedSeconds)),
+        pausedSeconds: Math.max(0, Math.round(pausedSeconds)),
     };
 }
 

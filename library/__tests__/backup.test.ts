@@ -813,6 +813,37 @@ describe("brew history through a backup", () => {
         expect(result.payload.brews[0].cupAtDrawdown).toBeCloseTo(118.5, 6);
     });
 
+    it("carries the paused seconds through a round trip", () => {
+        const text = buildBackup([recipeNamed("A", "u1")], {}, "2.6.0",
+                                 [brewNamed("b1", {pausedSeconds: 42})]);
+        const result = parseBackup(text);
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews[0].pausedSeconds).toBe(42);
+    });
+
+    it("accepts a backup written before anybody could pause a brew", () => {
+        // Which is every backup written before this release, so the absence
+        // has to be ordinary rather than a defect in the file.
+        const result = parseBackup(buildBackup([recipeNamed("A", "u1")], {}, "2.6.0",
+                                               [brewNamed("b1", {})]));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toHaveLength(1);
+        expect(result.payload.brews[0].pausedSeconds).toBeUndefined();
+    });
+
+    it("refuses a backup whose paused seconds are not a number", () => {
+        const result = parseBackup(backupFileWithBrewFields({pausedSeconds: "a while"}));
+
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.brews).toEqual([]);
+        expect(result.payload.skippedBrews).toBe(1);
+    });
+
     it("refuses a backup whose drawdown cup reading is not a number", () => {
         const result = parseBackup(backupFileWithBrewFields({cupAtDrawdown: "fast"}));
 

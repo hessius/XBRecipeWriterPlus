@@ -46,6 +46,10 @@ export const PHASE_COPY: Record<string, string> = {
     // it is part of the brew, and how long it takes is one of the figures a
     // person dials a recipe in by.
     settling:    "Drawdown…",
+    // Said in the present tense and without an ellipsis, because unlike every
+    // other active phase nothing is happening and nothing will until somebody
+    // acts. The machine will sit here indefinitely.
+    paused:      "Paused.",
     done:        "Enjoy.",
     // Every other ending here is a sentence saying what happened --
     // "The machine ran out of water.", "Lost contact. …". This one said
@@ -127,6 +131,50 @@ export const PRO_MODE_PROMPT =
  * would be a guess dressed as a reading.
  */
 export const ENDED_ON_MACHINE_NOTE = "ENDED ON THE MACHINE";
+
+/**
+ * The note shown on a brew the user held paused.
+ *
+ * A paused brew's clock runs long and its trace holds a flat stretch, and
+ * without this nothing on the record says why. The seconds are rounded and
+ * stated plainly rather than framed as an overrun, because the delay was the
+ * user's own.
+ *
+ * Null below a second: a pause that short is a mis-tap, and a record claiming
+ * "PAUSED FOR 0 S" says less than nothing.
+ */
+export function pausedNote(seconds: number | undefined): string | undefined {
+    if (seconds === undefined || seconds < 1) return undefined;
+    return `PAUSED FOR ${Math.round(seconds)} S`;
+}
+
+/**
+ * The phases from which PAUSE is worth offering.
+ *
+ * Narrower than "active", and deliberately so. 40518 is inert outside a
+ * running recipe, so offering it earlier would cost nothing but would promise
+ * something: a button that does nothing is worse than no button when the thing
+ * it claims to do is stop a machine.
+ *
+ * `settling` is excluded for a different reason. The water is already off and
+ * the bed is draining; there is nothing left to pause, and pausing would only
+ * interrupt the drawdown the record is still measuring.
+ */
+export const PAUSABLE: ReadonlySet<string> = new Set([
+    "grinding", "pouring", "bypass"
+]);
+
+/**
+ * What a paused brew says under the headline.
+ *
+ * The second sentence is the one that matters: the machine's own screen says
+ * nothing about a pause, because nothing on the machine knows. Somebody who
+ * walks over to it will find a display that looks like a brew waiting to
+ * start, and this is where they find out why.
+ */
+export const PAUSED_NOTE =
+    "The machine is holding the brew where it is. "
+    + "Its own screen will not say so, and only this app can start it again.";
 
 /** The phases a brew can end in: nothing more will arrive from the machine. */
 export const OVER: ReadonlySet<string> = new Set([
