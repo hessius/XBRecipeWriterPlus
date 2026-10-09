@@ -38,6 +38,24 @@ export const ATT_HEADER_BYTES = 3;
  */
 export const RADIO_READY_MS = 5000;
 
+/**
+ * How long `BleTransport.connect()` will wait for the rest of the connect
+ * sequence (the native connect call, service discovery, MTU negotiation and
+ * the model-number read) before giving up.
+ *
+ * Without this, a native BLE call that never resolves — the file's own
+ * ghost-link comments already describe how this can happen — hangs the
+ * promise forever. Nothing fails, so nothing retries and nothing is logged,
+ * and the only way out is restarting the app, which recreates the one
+ * `Machine` singleton `useMachine.ts` holds for the app's life.
+ *
+ * Sized from a real session log: observed connects, including the existing
+ * ghost-link retry-once, completed in 1.5-3.5 s. `waitForRadio()` already has
+ * its own 5 s timeout earlier in the same `connect()` call, so this only has
+ * to cover what is left — 10 s is roughly 3x the slowest connect observed.
+ */
+export const CONNECT_TIMEOUT_MS = 10_000;
+
 /** How long to scan before giving up on finding a machine. */
 export const SCAN_SECONDS = 10;
 

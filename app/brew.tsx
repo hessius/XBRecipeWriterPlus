@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import {useLocalSearchParams} from "expo-router";
 import router from "@/hooks/steadyRouter";
 import React, {useEffect, useState} from "react";
@@ -17,7 +18,9 @@ import ExportButton from "@/components/ExportButton";
 import BrewTrace from "@/components/BrewTrace";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
+import LinkText from "@/components/LinkText";
 import MachineDot from "@/components/MachineDot";
+import {notify} from "@/components/XbrwToast";
 import {BLOCKED_HEADLINE, BLOCKED_WATER_HEADLINE, blockedWaterCopy,
         ENDED_ON_MACHINE_NOTE, FAILURE_COPY,
         FIRST_BREW_REMINDER, LONGEST_ACTIVE_HEADLINE, NO_RETRY, PHASE_COPY,
@@ -337,7 +340,38 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
     // which are "greater than zero", so a threshold drew the two halves of the
     // beat identically and the flicker never appeared at all.
     const planColor = mix(palette.muted, accent, motion.warmth);
-    const {status, connect} = useMachine();
+    const {status, connect, machine} = useMachine();
+
+    /**
+     * Everything the machine logged from this attempt's start onward, in the
+     * same two-part shape `app/machine.tsx`'s console `copyLog()` builds —
+     * link narration, then the frame log — except scoped to this attempt
+     * rather than the whole session, since that is what somebody reporting
+     * "this one didn't start" actually needs to send.
+     *
+     * Read off the shared run rather than a local ref: reopening an
+     * already-failed run from the mini bar (`view=1`) never calls `start`
+     * itself, so a ref stamped only by this screen's own start calls would
+     * stay at its initial value and scope the log to nothing instead of the
+     * attempt.
+     */
+    function copyDiagnosticLog() {
+        const since = run?.startedAt ?? 0;
+        const connectionLines = machine.linkHistory
+            .filter((event) => event.at >= since)
+            .map((event) => `${new Date(event.at).toISOString().slice(11, 23)}  ${event.text}`);
+        const block = [
+            "This attempt's diagnostic log",
+            "",
+            ...connectionLines,
+            "",
+            machine.frameLogSince(since)
+        ].join("\n");
+        void Clipboard.setStringAsync(block).then(() => notify({
+            tone:    "success",
+            message: "Diagnostic log copied"
+        }));
+    }
 
     // Export mechanics, shared with the record screen so the two look and
     // behave identically. The record is read from the store on press after
@@ -595,6 +629,15 @@ export default function Brew({historyStore}: {historyStore?: ExportStore} = {}) 
             )}
 
             {offerPro && <Text color={palette.dim} fontSize={13}>{PRO_MODE_PROMPT}</Text>}
+
+            {/* Shown on every failure, including NO_RETRY endings with no
+                retry button to sit near — diagnostics matter there too. Not
+                an Action: this is an aid, not a recovery option, and must not
+                visually compete with TRY AGAIN. */}
+            {(blocked || failed) && (
+                <LinkText label="Copy diagnostic log" onPress={copyDiagnosticLog}
+                          fontSize={13} />
+            )}
             {/* `error` is the transport channel. When the phase is already a
                 failure it is restating it, which is how one refusal came to be
                 printed three times. It speaks only about things the phase

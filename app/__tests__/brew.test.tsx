@@ -1,6 +1,7 @@
 import React from "react";
 import {Dimensions, StyleSheet, type StyleProp, type ViewStyle} from "react-native";
 import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
+import * as Clipboard from "expo-clipboard";
 import * as Sharing from "expo-sharing";
 import {Linking} from "react-native";
 
@@ -17,6 +18,7 @@ import Recipe from "@/library/Recipe";
 import {HANDOFF_TARGETS} from "@/library/brew/handoff/targets";
 
 const mockUseKeepAwake = jest.fn();
+const mockNotify = jest.fn();
 
 let summaryProps: Record<string, unknown> = {};
 jest.mock("@/components/BrewSummary", () => {
@@ -33,6 +35,10 @@ jest.mock("@/components/BrewSummary", () => {
 
 jest.mock("expo-keep-awake", () => ({
     useKeepAwake: (...args: unknown[]) => mockUseKeepAwake(...args)
+}));
+
+jest.mock("@/components/XbrwToast", () => ({
+    notify: (notice: unknown) => mockNotify(notice)
 }));
 
 // The record the provider writes when a brew finishes; the in-place export
@@ -59,11 +65,14 @@ let mockFirstBrewDone = true;
 let mockError: string | null = null;
 let mockBypass: BypassView | undefined = undefined;
 let mockRecord: StoredBrew | undefined = undefined;
+let mockStartedAt = 0;
+let mockLinkHistory: {at: number; text: string}[] = [];
 let mockBandAllocationArgs: [number, number][] = [];
 const mockBrew = jest.fn();
 const mockStartBrew = jest.fn();
 const mockCancelBrew = jest.fn();
 const mockSwitchToProAndRetry = jest.fn();
+const mockFrameLogSince = jest.fn((since: number) => `FRAMES SINCE ${since}`);
 const mockStart = jest.fn();
 const mockStartInPro = jest.fn();
 let mockView: string | undefined = undefined;
@@ -125,6 +134,7 @@ jest.mock("@/hooks/useLiveBrew", () => {
             recipe: mockRecipe,
             phase: mockPhase,
             samples: mockSamples,
+            startedAt: mockStartedAt,
             elapsed: mockElapsed,
             stageElapsed: mockStageElapsed,
             activeIndex: mockActiveIndex,
@@ -150,7 +160,12 @@ jest.mock("@/hooks/useLiveBrew", () => {
 jest.mock("@/hooks/useMachine", () => ({
     __esModule: true,
     useMachine: () => ({
-        machine: {isConnected: () => true, onLink: () => () => undefined},
+        machine: {
+            isConnected:    () => true,
+            onLink:         () => () => undefined,
+            get linkHistory() { return mockLinkHistory; },
+            frameLogSince:  mockFrameLogSince
+        },
         status: "connected",
         error: null,
         remembered: null,
@@ -223,7 +238,12 @@ beforeEach(() => {
     traceAnimationArgs = [];
     mockBypass = undefined;
     mockRecord = undefined;
+    mockStartedAt = 0;
+    mockLinkHistory = [];
     mockBandAllocationArgs = [];
+    mockFrameLogSince.mockClear();
+    mockNotify.mockClear();
+    (Clipboard.setStringAsync as jest.Mock).mockClear();
 });
 
 // The done branch: a finished brew, drawn in its scroller. A shared entry so
@@ -508,6 +528,79 @@ describe("brew route", () => {
         const {queryByLabelText, getByText} = await renderWithProviders(<Brew />);
         expect(getByText("The machine ran out of water.")).toBeTruthy();
         expect(queryByLabelText("Try again")).toBeNull();
+    });
+
+    it("offers the diagnostic log on a blocked failure", async () => {
+        mockPhase = {name: "failed", reason: "blocked", detail: "The tank is low."} as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+        expect(getByLabelText("Copy diagnostic log")).toBeTruthy();
+    });
+
+    it("offers the diagnostic log even with no retry, on a NO_RETRY failure", async () => {
+        // The dose is spent and there is no TRY AGAIN button here, but a
+        // report of a brew that stopped mid-pour is exactly the case where
+        // diagnostics matter most.
+        mockPhase = {name: "failed", reason: "noWater"} as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+        expect(getByLabelText("Copy diagnostic log")).toBeTruthy();
+    });
+
+    it("does not offer the diagnostic log while a brew is running", async () => {
+        mockPhase = {name: "pouring", pour: 1, pours: 1} as BrewPhase;
+        const {queryByLabelText} = await renderWithProviders(<Brew />);
+        expect(queryByLabelText("Copy diagnostic log")).toBeNull();
+    });
+
+    it("copies only this attempt's history, and confirms with a toast", async () => {
+        mockStartedAt = Date.parse("2026-10-09T10:00:00.000Z");
+        mockLinkHistory = [
+            {at: Date.parse("2026-10-09T09:59:00.000Z"), text: "an earlier attempt's line"},
+            {at: Date.parse("2026-10-09T10:00:05.000Z"), text: "connecting to AA:BB:CC"}
+        ];
+        mockPhase = {name: "failed", reason: "blocked", detail: "The tank is low."} as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+
+        await fireEvent.press(getByLabelText("Copy diagnostic log"));
+        await waitFor(() => expect(Clipboard.setStringAsync).toHaveBeenCalled());
+
+        const copied = (Clipboard.setStringAsync as jest.Mock).mock.calls[0][0] as string;
+        expect(copied).not.toContain("an earlier attempt's line");
+        expect(copied).toContain("connecting to AA:BB:CC");
+        expect(copied).toContain("FRAMES SINCE");
+        expect(mockFrameLogSince).toHaveBeenCalledWith(mockStartedAt);
+        await waitFor(() => expect(mockNotify).toHaveBeenCalledWith({
+            tone: "success",
+            message: "Diagnostic log copied"
+        }));
+    });
+
+    it("scopes the diagnostic log to the viewed run's own start, when reopened from the mini bar", async () => {
+        // Regression test: the attempt's start time must come from the shared
+        // run (stamped once, when the attempt actually began), not from
+        // anything this particular mount does — because this mount, opened
+        // via view=1 from the mini bar, never calls start() itself. An
+        // earlier version of this feature tracked the start time in a local
+        // ref that only start() stamped, so reopening an already-failed run
+        // this way left the ref at its initial value and scoped the log to
+        // everything instead of the attempt. Mounting straight into view=1
+        // with mockStartedAt already set (as the provider would have left
+        // it from whenever the attempt actually began, well before this
+        // mount) reproduces exactly that path.
+        mockView = "1";
+        mockRecipeJSON = undefined;
+        mockStartedAt = Date.parse("2026-10-09T10:00:00.000Z");
+        mockLinkHistory = [
+            {at: Date.parse("2026-10-09T10:00:05.000Z"), text: "connecting to AA:BB:CC"}
+        ];
+        mockPhase = {name: "failed", reason: "blocked", detail: "The tank is low."} as BrewPhase;
+        const {getByLabelText} = await renderWithProviders(<Brew />);
+
+        expect(mockStart).not.toHaveBeenCalled();
+
+        await fireEvent.press(getByLabelText("Copy diagnostic log"));
+        await waitFor(() => expect(Clipboard.setStringAsync).toHaveBeenCalled());
+
+        expect(mockFrameLogSince).toHaveBeenCalledWith(mockStartedAt);
     });
 
     it("shows the press-play notice without making it look pressable", async () => {

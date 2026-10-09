@@ -9,6 +9,7 @@ import BleManager, {
 
 import {
     ATT_HEADER_BYTES,
+    CONNECT_TIMEOUT_MS,
     DEFAULT_MTU,
     DEVICE_INFO_SERVICE,
     MACHINE_MTU,
@@ -286,6 +287,70 @@ export class BleTransport implements MachineTransport {
     async connect(id: string): Promise<void> {
         await this.start();
         await this.waitForRadio();
+
+        // `timedOut` is read by the catch block below to decide whether this
+        // particular rejection came from the timeout (and so needs the extra
+        // disconnect) or from the connect sequence itself (which has already
+        // cleaned up after its own failures). It is never read after that:
+        // whichever way `connect()` exits, it exits by throwing or by
+        // reaching the assignment below — there is no third path where a
+        // later timer firing could change what already happened.
+        let timedOut = false;
+        // Assigned synchronously inside the Promise executor immediately
+        // below, before any `await` gets a chance to run — safe to assert.
+        let timer!: ReturnType<typeof setTimeout>;
+        const timeout = new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(() => {
+                timedOut = true;
+                reject(new Error("The machine took too long to connect."));
+            }, CONNECT_TIMEOUT_MS);
+            timer.unref?.();
+        });
+
+        try {
+            await Promise.race([this.connectSequence(id), timeout]);
+            this.deviceId = id;
+        } catch (error) {
+            if (timedOut) {
+                // Best effort, same as the ghost-link cleanup inside
+                // connectSequence: a timed-out attempt must not leave the OS
+                // holding a link that the next attempt then has to discover
+                // and clear for itself.
+                //
+                // This disconnect can race connectSequence's own native
+                // connect call — if that call is still in flight when this
+                // fires, there may be nothing to disconnect yet, and it can
+                // still succeed moments later. That cannot leave this
+                // transport believing it is connected: `connect()` has
+                // already thrown by then, so the assignment above never
+                // runs for this call. A link the OS is still holding
+                // afterward is exactly the ghost-link case connectSequence's
+                // own retry-once already exists to clear on the *next*
+                // connect attempt. So it self-heals; it is not a gap this
+                // method needs to close itself.
+                //
+                // Deliberately not awaited: a native disconnect that hangs
+                // must not hold this catch block open with it, or a timeout
+                // that exists to bound one hang would be defeated by
+                // another. The caller gets its rejection either way.
+                BleManager.disconnect(id).catch(() => {});
+            }
+            throw error;
+        } finally {
+            // Without this, a connect that succeeds well under the timeout
+            // still leaves the timer armed, and it fires later anyway —
+            // harmless (its own `timedOut` and `reject` belong to this one
+            // closure, already done with), but needless.
+            clearTimeout(timer);
+        }
+    }
+
+    /**
+     * The native connect sequence, unchanged from before the timeout existed.
+     * It has no way to be cancelled once started: a timeout in `connect()`
+     * reports failure to the caller without waiting for this to settle.
+     */
+    private async connectSequence(id: string): Promise<void> {
         try {
             await BleManager.connect(id);
         } catch (error) {
@@ -316,7 +381,6 @@ export class BleTransport implements MachineTransport {
         // rather than acted on here: what to do with the answer is a decision
         // for the layer that owns the setting.
         await this.readModelNumber(id);
-        this.deviceId = id;
     }
 
     /**
