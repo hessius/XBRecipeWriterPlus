@@ -122,3 +122,14 @@ describe("the tea blob", () => {
         expect(blob[0]).toBe(24);
     });
 });
+
+describe("dripper overflow protection and the blob", () => {
+    it("does not change the coffee blob", () => {
+        const plain = recipeOf([60, 60], {cupType: CUP_TYPE.OTHER});
+        const before = Array.from(encodeCoffeeBlob(plain));
+        const configured = recipeOf([60, 60], {
+            cupType: CUP_TYPE.OTHER, overflowProtection: {retainedGrams: 40, checkSeconds: 30}
+        });
+        expect(Array.from(encodeCoffeeBlob(configured))).toEqual(before);
+    });
+});

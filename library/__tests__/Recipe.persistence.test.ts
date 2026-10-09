@@ -1,5 +1,6 @@
 import Recipe, {CUP_TYPE} from '../Recipe';
 import Pour from '../Pour';
+import {overflowFor} from '../brew/overflowConfig';
 import {buildCard, HASH_LENGTH, XPOD_CARD} from './cardFixtures';
 
 /**
@@ -429,5 +430,47 @@ describe("fingerprint", () => {
         const printed = sample().fingerprint();
         expect(printed).toMatch(/^[0-9a-f]+$/);
         expect(printed.length % 2).toBe(0);
+    });
+});
+
+describe('dripper overflow protection persistence', () => {
+    const config = {retainedGrams: 40, checkSeconds: 30};
+
+    it('stays absent for old JSON', () => {
+        const recipe = new Recipe(undefined, serialise({cupType: CUP_TYPE.OTHER}));
+        expect(recipe.overflowProtection).toBeUndefined();
+        expect('overflowProtection' in JSON.parse(JSON.stringify(recipe))).toBe(false);
+    });
+
+    it('round-trips through JSON and keeps only the two fields', () => {
+        const recipe = new Recipe(undefined, serialise({
+            cupType: CUP_TYPE.OTHER, overflowProtection: {...config, extra: 1}
+        }));
+        expect(recipe.overflowProtection).toEqual(config);
+        expect(Object.keys(recipe.overflowProtection!).sort()).toEqual(['checkSeconds', 'retainedGrams']);
+        const again = new Recipe(undefined, JSON.stringify(recipe));
+        expect(again.overflowProtection).toEqual(config);
+    });
+
+    it('is validated after the legacy cup migration (0x04 becomes Other)', () => {
+        const recipe = new Recipe(undefined, serialise({cupType: 0x04, overflowProtection: config}));
+        expect(recipe.cupType).toBe(CUP_TYPE.OTHER);
+        expect(recipe.overflowProtection).toEqual(config);
+    });
+
+    it.each([null, [], {}, {retainedGrams: 0, checkSeconds: 30}, {retainedGrams: 40, checkSeconds: 20}])(
+        'throws for a present invalid configuration %j', (bad) => {
+            expect(() => new Recipe(undefined, serialise({overflowProtection: bad})))
+                .toThrow('Invalid dripper overflow protection configuration.');
+        });
+
+    it('keeps the configuration when the cup type changes, and suppresses its use', () => {
+        const recipe = new Recipe(undefined, serialise({cupType: CUP_TYPE.OTHER, overflowProtection: config}));
+        expect(overflowFor(recipe)).toEqual(config);
+        recipe.cupType = CUP_TYPE.OMNI;
+        expect(overflowFor(recipe)).toBeUndefined();
+        expect(recipe.overflowProtection).toEqual(config);
+        recipe.cupType = CUP_TYPE.OTHER;
+        expect(overflowFor(recipe)).toEqual(config);
     });
 });

@@ -1256,3 +1256,25 @@ describe("mergeBrews", () => {
         expect(alreadyPresent).toBe(1);
     });
 });
+
+describe("dripper overflow protection in a backup", () => {
+    const config = {retainedGrams: 40, checkSeconds: 30 as const};
+
+    it("survives buildBackup and parseBackup", () => {
+        const recipe = recipeNamed("A", "u1");
+        recipe.cupType = 0x01;
+        recipe.overflowProtection = config;
+        const result = parseBackup(buildBackup([recipe], {}));
+        expect(result.ok).toBe(true);
+        if (!result.ok) return;
+        expect(result.payload.recipes[0].overflowProtection).toEqual(config);
+    });
+
+    it("names the field and refuses the recipe when the configuration is invalid", () => {
+        const result = parseBackup(backupFileWithRecipeFields(
+            {overflowProtection: {retainedGrams: 0, checkSeconds: 30}}));
+        expect(result.ok).toBe(false);
+        if (result.ok) return;
+        expect(result.reason).toMatch(/overflowProtection/);
+    });
+});

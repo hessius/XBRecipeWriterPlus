@@ -1,4 +1,5 @@
 import {isRating, type BrewRecord} from "./brew/BrewRecord";
+import {isOverflowProtection} from "./brew/overflowConfig";
 import {
     BEAN_FIELDS,
     type BeanField,
@@ -382,7 +383,9 @@ const RECIPE_FIELDS: Record<string, (value: unknown) => boolean> = {
     checksum:    isNumber,
     backup:         isNumberArray,
     offline_backup: isNumberArray,
-    uid:            isNumberArray
+    uid:            isNumberArray,
+    // Not droppable: a malformed limit must not be erased into "protection off".
+    overflowProtection: isOverflowProtection
 };
 
 const BREW_BASELINE_DOSE = {min: 1, max: 999};
