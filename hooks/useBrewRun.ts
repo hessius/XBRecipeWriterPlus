@@ -14,6 +14,7 @@ import {pauseSeconds, pourSeconds} from "@/library/brew/brewShape";
 import {stageOriginMl, stageWaterFrom, stalledNow, stallsInStage, type Stall}
     from "@/library/brew/stalls";
 import type {BrewPhase} from "@/library/machine/Machine";
+import type {SlotOperationError} from "@/library/machine/errors";
 import type {QuickEditRecordAdjustments} from "@/library/quickEdit";
 import type Recipe from "@/library/Recipe";
 
@@ -77,6 +78,10 @@ export function useBrewRun(
 ) {
     const brewer = useBrew();
     const {machine} = brewer;
+    const [refusal, setRefusal] = useState<{
+        from: typeof machine; runId: number; phase: Extract<BrewPhase, {name: "failed"}>;
+    } | null>(null);
+    const refused = refusal?.from === machine && refusal.runId === runId ? refusal : null;
     const [published, setPublished] = useState<
         {runId: number; samples: BrewSample[]; elapsed: number; pauseIntervals: PauseInterval[]}
     >({runId, samples: NO_SAMPLES, elapsed: 0, pauseIntervals: NO_PAUSES});
@@ -87,7 +92,8 @@ export function useBrewRun(
     const record = recorded?.runId === runId ? recorded.record : undefined;
     const pauseIntervals = record?.pauseIntervals ?? (current ? published.pauseIntervals : NO_PAUSES);
     const protection = useOverflowProtection({
-        machine, config: recipe === null ? undefined : overflowFor(recipe), runId
+        machine, config: recipe === null ? undefined : overflowFor(recipe), runId,
+        enabled: refused === null
     });
     // Track phase locally so React re-renders when it changes. The machine it
     // was heard from is remembered alongside it: a reconnect hands us a new
@@ -115,7 +121,7 @@ export function useBrewRun(
     // the recipe the run was started with.
     const ours = recipe !== null;
     const fresh = heard !== null && heard.from === machine && heard.runId === runId;
-    const phase: BrewPhase = fresh
+    const phase: BrewPhase = refused !== null ? refused.phase : fresh
         ? heard.phase
         : ours || OVER.has(machine.phase.name) ? {name: "waking"} : machine.phase;
     const recorder = useRef<BrewRecorder | null>(null);
@@ -207,8 +213,9 @@ export function useBrewRun(
     // The recorder has its own subscription (registered inside start()); the
     // real Machine keeps listeners in a Set so both are called independently.
     useEffect(() => {
+        if (refused !== null) return;
         return machine.onPhase((p) => { setHeard({from: machine, runId, phase: p}); });
-    }, [machine, runId]);
+    }, [machine, runId, refused]);
 
     const pouring = phase.name === "pouring";
     const bypassing = phase.name === "bypass";
@@ -339,11 +346,29 @@ export function useBrewRun(
             })
           };
 
+    function refuseAttempt(error: SlotOperationError): void {
+        const held = owner.current;
+        if (held === null || held.machine !== machine || held.runId !== runId) return;
+        // Nothing was sent: retire app ownership without a machine failure or history row.
+        held.recorder.stop();
+        recorder.current = null;
+        owner.current = null;
+        protection.cancel();
+        setRefusal({
+            from: machine, runId,
+            phase: {name: "failed", reason: "blocked", block: "busy", detail: error.message}
+        });
+    }
+
     async function brew(next: Recipe): Promise<void> {
         await brewer.brew(next, () => {
             protection.preflightRetry();
             replaceRecorder(machine, runId);
-        });
+        }, refuseAttempt);
+    }
+
+    async function switchToProAndRetry(next: Recipe): Promise<void> {
+        await brewer.switchToProAndRetry(next, refuseAttempt);
     }
 
     async function pauseBrew(): Promise<void> {
@@ -366,7 +391,8 @@ export function useBrewRun(
         // the brewer's raw one, is what callers should see.
         ...brewer, phase, samples, pauseIntervals, elapsed, stageElapsed, activeIndex, holding,
         heldSeconds, stalls, stageWater, pauseElapsed, bypass, record,
-        overflow: protection.overflow, overflowNow: protection.now, brew, pauseBrew, resumeBrew, cancelBrew
+        overflow: protection.overflow, overflowNow: protection.now, brew, pauseBrew, resumeBrew,
+        cancelBrew, switchToProAndRetry
     };
 }
 

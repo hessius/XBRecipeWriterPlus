@@ -20,9 +20,18 @@ import {FakeTransport, machineInfoFrame} from "@/library/machine/__tests__/FakeT
 import {event, float32, notification, status} from "@/library/machine/__tests__/protocolFixtures";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
+import {SlotDatabase} from "@/library/slots/SlotDatabase";
+import {installMachineSlotPort} from "@/library/slots/machineSlotPort";
+import {createTestDatabase} from "@/test-utils/sqlite";
+import {notify} from "@/components/XbrwToast";
+import {coffee} from "@/library/slots/__tests__/fixtures";
+
+jest.mock("@/components/XbrwToast", () => ({notify: jest.fn()}));
+
+let mockAutoStart = true;
 
 jest.mock("@/hooks/useSetting", () => ({
-    useSetting: (key: string) => [key === "machineAutoStart" ? true : "", () => undefined]
+    useSetting: (key: string) => [key === "machineAutoStart" ? mockAutoStart : "scaled", () => undefined]
 }));
 
 const mockConnect = jest.fn(async () => {});
@@ -89,7 +98,59 @@ async function run(machine: FakeMachine) {
     return result;
 }
 
-beforeEach(() => mockConnect.mockClear());
+beforeEach(() => {
+    mockConnect.mockClear();
+    mockAutoStart = true;
+    jest.mocked(notify).mockClear();
+});
+
+async function reserved() {
+    class Radio extends FakeTransport {
+        get connectedDeviceId() { return this.connectedTo; }
+    }
+    const radio = new Radio();
+    const machine = new Machine(radio, {frameGapMs: 0});
+    const port = installMachineSlotPort(machine, new SlotDatabase(createTestDatabase()));
+    await machine.connect("one");
+    const lease = await port.acquire(machine.slotIdentity!);
+    return {machine, radio, lease, port};
+}
+
+it("reports ambient configuration refusals without throwing from effects or replaying on unlock", async () => {
+    const {machine, lease, radio} = await reserved();
+    const configure = jest.spyOn(machine, "setAutoStart");
+    mockAutoStart = false;
+    const {rerender, result} = await renderHook(() => useBrew(machine));
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        tone: "error", message: expect.stringMatching(/Easy Mode/i)
+    }));
+    const traffic = radio.written.length;
+    lease.release(true);
+    await rerender(undefined);
+    expect(radio.written).toHaveLength(traffic);
+    expect(configure).not.toHaveBeenCalled();
+    expect(mockConnect).not.toHaveBeenCalled();
+    await act(async () => { await result.current.brew(coffee()); });
+    expect(configure).toHaveBeenCalledWith(false);
+    expect(machine.phase.name).toBe("readyToStart");
+    await act(async () => { await machine.disconnect(); });
+});
+
+it("does not treat a slot exclusion refusal as permission to disconnect and retry a brew", async () => {
+    const {machine, lease, radio, port} = await reserved();
+    // Mount before exclusion to isolate the explicit brew retry path from effects.
+    lease.release(true);
+    const {result} = await renderHook(() => useBrew(machine));
+    const next = await port.acquire(machine.slotIdentity!);
+    const traffic = radio.written.length;
+    const disconnect = jest.spyOn(machine, "disconnect");
+    await act(async () => { await result.current.brew(brewable()); });
+    expect(result.current.error).toMatch(/Easy Mode/i);
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(radio.written).toHaveLength(traffic);
+    next.release(true);
+    await machine.disconnect();
+});
 
 describe("ordinary user pause, resume and cancel errors", () => {
     it.each(["pauseBrew", "resumeBrew", "cancelBrew"] as const)(

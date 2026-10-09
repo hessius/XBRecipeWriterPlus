@@ -6,6 +6,7 @@ import DigitRoll from "@/components/DigitRoll";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText, {DOTO_MAX_FONT_SCALE} from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
+import SlotMarker from "@/components/SlotMarker";
 import Recipe from "@/library/Recipe";
 import {evidenceLine, isSet, spokenEvidence} from "@/library/recipeEvidence";
 import type {RecipeEvidence} from "@/library/libraryQuery";
@@ -172,6 +173,8 @@ type Props = {
      * either.
      */
     evidence?: RecipeEvidence;
+    slotMarker?: string;
+    onEasyMode?: () => void;
 };
 
 /**
@@ -196,7 +199,9 @@ export default function RecipeCard({
     onWrite,
     onToggleFavourite,
     onLongPress,
-    onHistory
+    onHistory,
+    slotMarker,
+    onEasyMode
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -216,6 +221,7 @@ export default function RecipeCard({
         hasNote ? recipe.description : undefined,
         marker.toLowerCase(),
         recipe.favourite ? "starred" : undefined,
+        slotMarker,
         isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
         isSet(recipe.ratio) ? `ratio 1 to ${recipe.ratio}` : undefined,
         !isTea && !recipe.grinder ? "grinder off" : undefined,
@@ -238,6 +244,8 @@ export default function RecipeCard({
     // tile behind a pan gesture, so removing this action would leave screen
     // reader users with no path to brew from the library.
     const actions = [
+        ...(onEasyMode !== undefined
+            ? [{name: "easyMode", label: "Assign to Easy Mode"}] : []),
         ...(onDuplicate !== undefined
             ? [{name: "duplicate", label: "Duplicate recipe"}]
             : []),
@@ -301,7 +309,9 @@ export default function RecipeCard({
             onPress={onPress}
             onLongPress={onLongPress}
             onAccessibilityAction={(event) => {
-                if (event.nativeEvent.actionName === "duplicate") {
+                if (event.nativeEvent.actionName === "easyMode") {
+                    onEasyMode?.();
+                } else if (event.nativeEvent.actionName === "duplicate") {
                     onDuplicate?.();
                 } else if (event.nativeEvent.actionName === "delete") {
                     onDelete?.();
@@ -353,6 +363,7 @@ export default function RecipeCard({
                                  width={200} height={PROFILE_HEIGHT} dotted={dottedProfile}/>
                 </View>
 
+                <SlotMarker label={slotMarker}/>
                 <XStack testID="recipe-card-title-row"
                         justifyContent="space-between" alignItems="flex-start" gap="$2"
                         paddingRight={0}>

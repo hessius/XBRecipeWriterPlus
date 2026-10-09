@@ -1,6 +1,6 @@
 import {act, renderHook} from "@testing-library/react-native";
 
-import steadyRouter, {forgetLastMove, isRepeat, noteRoute, SETTLE_MS, useSteadyRouter} from "@/hooks/steadyRouter";
+import steadyRouter, {forgetLastMove, isRepeat, noteRoute, pushPrepared, SETTLE_MS, useSteadyRouter} from "@/hooks/steadyRouter";
 
 const mockPush = jest.fn();
 const mockBack = jest.fn();
@@ -9,7 +9,11 @@ const mockReplace = jest.fn();
 const mockRouter = {push: mockPush, back: mockBack, replace: mockReplace};
 
 jest.mock("expo-router", () => ({
-    router:    mockRouter,
+    router: {
+        push: (...args: unknown[]) => mockPush(...args),
+        back: () => mockBack(),
+        replace: (...args: unknown[]) => mockReplace(...args)
+    },
     useRouter: () => mockRouter
 }));
 
@@ -50,6 +54,17 @@ describe("deciding whether a move is a repeat", () => {
 });
 
 describe("the steady router", () => {
+    it("claims before durable preparation and releases a failed preparation for retry", () => {
+        const prepare = jest.fn(() => "/easyMode" as const);
+        prepare.mockImplementationOnce(() => { throw new Error("Storage failed"); });
+        expect(() => pushPrepared("slot-entry", prepare)).toThrow("Storage failed");
+        pushPrepared("slot-entry", prepare);
+        pushPrepared("slot-entry", prepare);
+        expect(prepare).toHaveBeenCalledTimes(2);
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledWith("/easyMode");
+    });
+
     it("pushes once when a row is tapped twice", async () => {
         // The bug this exists for: a quick double tap on the about row opened
         // the about screen twice, and the second one had to be dismissed.

@@ -78,6 +78,20 @@ function claim(move: string): boolean {
     return true;
 }
 
+/** Claim before preparation that has durable side effects, not after it. */
+export function pushPrepared(
+    key: string, prepare: () => Parameters<typeof router.push>[0]
+): void {
+    const previous = last;
+    if (!claim(`prepared:${key}`)) return;
+    try {
+        router.push(prepare());
+    } catch (error) {
+        last = previous;
+        throw error;
+    }
+}
+
 /**
  * Wraps a router so the moves that stack up are guarded against a double tap.
  *

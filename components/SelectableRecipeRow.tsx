@@ -38,18 +38,19 @@ const ROW_PADDING  = 6;
  * distrust.
  */
 export default function SelectableRecipeRow({
-    recipe, selected, onToggle, showCoffeeMarker, dottedProfile
+    recipe, selected, onToggle, showCoffeeMarker, dottedProfile, slotMarker
 }: {
     recipe: Recipe;
     selected: boolean;
     onToggle: () => void;
     showCoffeeMarker?: boolean;
     dottedProfile?: boolean;
+    slotMarker?: string;
 }) {
     return (
         <Pressable accessibilityRole="checkbox"
                    accessibilityState={{checked: selected}}
-                   accessibilityLabel={recipe.displayName()}
+                   accessibilityLabel={[recipe.displayName(), slotMarker].filter(Boolean).join(", ")}
                    testID={`select-${recipe.uuid}`}
                    onPress={onToggle}>
             <XStack alignItems="center" maxWidth={600}
@@ -66,6 +67,7 @@ export default function SelectableRecipeRow({
                         opacity={selected ? 1 : 0.65}>
                     <RecipeCard recipe={recipe} onPress={onToggle}
                                 showCoffeeMarker={showCoffeeMarker}
+                                slotMarker={slotMarker}
                                 dottedProfile={dottedProfile}/>
                 </YStack>
 

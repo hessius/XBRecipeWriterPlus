@@ -6,8 +6,10 @@ import {
 import {brewProblems} from "@/library/cardLimits";
 import {clampBypassTemp} from "@/library/bypassLimits";
 import type Recipe from "@/library/Recipe";
+import type {SlotDatabase} from "@/library/slots/SlotDatabase";
+import type {SlotIdentity} from "@/library/slots/slotWriter";
 
-import {RadioUnavailableError} from "./errors";
+import {RadioUnavailableError, SlotOperationError} from "./errors";
 
 import {frameLogText, historyLine} from "./frameLog";
 import {
@@ -32,7 +34,15 @@ import {
     type MachineInfo,
     type Notification,
 } from "./protocol";
-import type {FoundMachine, MachineTransport} from "./Transport";
+import type {ConnectionScope, FoundMachine, MachineTransport} from "./Transport";
+
+export type SlotSession = {
+    send: (frame: Uint8Array, dispatching: () => void) => Promise<void>;
+    check: () => void;
+    invalidate: (error: Error) => void;
+    onInvalidated: (listener: (error: Error) => void) => () => void;
+    release: (safe: boolean) => void;
+};
 
 /**
  * A subscriber to every frame in either direction, decoded. The console uses it.
@@ -275,6 +285,149 @@ export default class Machine {
     public readonly frameHistory: FrameLogEntry[] = [];
 
     private transport: MachineTransport;
+    private slotStore: SlotDatabase | undefined;
+    private slotSession: {token: symbol; invalidate: (error: Error) => void} | null = null;
+    private generation = 0;
+    private ordinaryOperations = new Set<{generation: number}>();
+    private backgrounded = false;
+    private connectedId: string | null = null;
+    private unsettledCommand = false;
+
+    installSlotDatabase(store: SlotDatabase): void {
+        if (this.slotStore !== undefined && this.slotStore !== store) {
+            throw new Error("The shared machine already has an Easy Mode database.");
+        }
+        // Read synchronously before exposing the owner to any other consumer.
+        if (this.connectedId !== null) store.read(this.connectedId);
+        this.slotStore = store;
+    }
+
+    get slotIdentity(): SlotIdentity | null {
+        const deviceId = this.transport.connectedDeviceId;
+        if (!this.isConnected() || deviceId == null || deviceId !== this.connectedId) return null;
+        const serial = this.info?.serial.trim();
+        return Object.freeze({deviceId, serial: serial === undefined || serial === "" ? null : serial});
+    }
+
+    setAppState(state: string | null): void {
+        this.backgrounded = state !== "active";
+        if (this.backgrounded) this.slotSession?.invalidate(
+            new Error("Easy Mode writing stopped because the app entered the background.")
+        );
+    }
+
+    assertCanForgetDevice(deviceId: string): void {
+        if (this.slotStore === undefined) return;
+        if (this.slotStore.read(deviceId).journal !== null
+            || (this.slotSession !== null && this.slotIdentity?.deviceId === deviceId)) {
+            throw new SlotOperationError("Finish the incomplete Easy Mode write before forgetting this machine.");
+        }
+    }
+
+    private beginOrdinaryOperation(): () => void {
+        const operation = {generation: this.generation};
+        this.ordinaryOperations.add(operation);
+        return () => { this.ordinaryOperations.delete(operation); };
+    }
+
+    private assertOrdinaryOperation(): void {
+        const ids = [this.connectedId, this.transport.connectedDeviceId];
+        if (this.slotSession !== null || ids.some((id) => id != null
+            && this.slotStore?.read(id).journal != null)) {
+            throw new SlotOperationError("Finish the incomplete Easy Mode write before using the machine.");
+        }
+    }
+
+    acquireSlotSession(identity: SlotIdentity): SlotSession {
+        if (this.slotStore === undefined) throw new Error("Install the shared Easy Mode database first.");
+        if (this.backgrounded) throw new Error("Easy Mode writing is unavailable in the background.");
+        const actual = this.slotIdentity;
+        if (actual === null || actual.deviceId !== identity.deviceId) {
+            throw new Error("The selected machine is not the connected peripheral.");
+        }
+        if (actual.serial !== identity.serial) throw new Error("The connected machine serial must match.");
+        const journal = this.slotStore.read(actual.deviceId).journal;
+        if (journal?.serial != null && journal.serial !== actual.serial) {
+            throw new Error("The recovery journal serial belongs to a different machine.");
+        }
+        if (journal !== null && (journal.inFlight !== null || journal.acknowledged === 3)) {
+            throw new Error("The Easy Mode recovery boundary is unknown; verified evidence is required.");
+        }
+        if (this.slotSession !== null
+            || this.unsettledCommand
+            || Array.from(this.ordinaryOperations).some((operation) => operation.generation === this.generation)
+            || isActiveBrewPhase(this.phase)
+            || (this.state !== null && !STARTABLE.has(this.state)
+                && !(journal !== null && this.state === MACHINE_STATE.SAVING_SLOTS))) {
+            throw new Error("The machine is busy. Finish its operation before writing Easy Mode slots.");
+        }
+        if (!this.sessionIsFresh()) {
+            throw new Error("The machine session has expired. Reconnect before writing Easy Mode slots.");
+        }
+        const token = Symbol("slots");
+        const generation = this.generation;
+        let failure: Error | null = null;
+        let released = false;
+        let sent = false;
+        const listeners = new Set<(error: Error) => void>();
+        const invalidate = (error: Error) => {
+            if (failure !== null || released) return;
+            failure = error;
+            this.note(error.message);
+            listeners.forEach((listener) => listener(error));
+        };
+        const check = () => {
+            if (failure !== null) throw failure;
+            if (released || this.slotSession?.token !== token || generation !== this.generation
+                || !this.isConnected() || this.slotIdentity?.deviceId !== actual.deviceId
+                || this.slotIdentity.serial !== actual.serial || this.backgrounded) {
+                throw new Error("The Easy Mode connection changed. Receipt is unknown.");
+            }
+        };
+        this.slotSession = {token, invalidate};
+        return {
+            check, invalidate,
+            onInvalidated: (listener) => {
+                listeners.add(listener);
+                if (failure !== null) listener(failure);
+                return () => { listeners.delete(listener); };
+            },
+            send: async (frame, dispatching) => {
+                check();
+                if (sent && this.frameGapMs > 0) {
+                    await new Promise<void>((resolve, reject) => {
+                        const onFailure = (error: Error) => {
+                            clearTimeout(timer);
+                            listeners.delete(onFailure);
+                            reject(error);
+                        };
+                        const timer = setTimeout(() => {
+                            listeners.delete(onFailure);
+                            resolve();
+                        }, this.frameGapMs);
+                        timer.unref?.();
+                        listeners.add(onFailure);
+                    });
+                }
+                check();
+                sent = true;
+                dispatching();
+                await this.writeFrame(frame, check);
+                check();
+            },
+            release: (safe) => {
+                if (released) return;
+                if (safe && this.slotStore?.read(actual.deviceId).journal != null) {
+                    throw new Error("Cannot release an incomplete durable Easy Mode journal.");
+                }
+                if (!safe) invalidate(new Error("Easy Mode writing stopped; its recovery journal is retained."));
+                released = true;
+                listeners.clear();
+                if (this.slotSession?.token === token) this.slotSession = null;
+                // The durable journal, not a route or lease, retains exclusion.
+            }
+        };
+    }
     private frameListeners = new Set<FrameListener>();
     private notificationListeners = new Set<(parsed: Notification) => void>();
     private linkListeners = new Set<() => void>();
@@ -300,6 +453,7 @@ export default class Machine {
      * Compiler believes it owns.
      */
     setBypassTempEncoding(encoding: BypassTempEncoding): void {
+        this.assertOrdinaryOperation();
         this.bypassEncoding = encoding;
     }
 
@@ -316,6 +470,7 @@ export default class Machine {
     private autoStart = true;
 
     setAutoStart(autoStart: boolean): void {
+        this.assertOrdinaryOperation();
         this.autoStart = autoStart;
     }
 
@@ -428,16 +583,18 @@ export default class Machine {
      * flow-controlled in any way, and the machine simply loses most of it.
      */
     private async sendPaced(frames: Uint8Array[]): Promise<void> {
-        const mine = ++this.sequence;
-        for (let index = 0; index < frames.length; index++) {
-            if (index > 0) await this.gap();
-            // A sequence spends most of its life asleep in `gap`, and a cancel
-            // arriving in one of those gaps used to change the phase and leave
-            // the loop walking: the stop went out, and then the rest of the
-            // recipe followed it. Whoever started a sequence more recently owns
-            // the radio, so an overtaken sequence stops here.
-            if (this.sequence !== mine) return;
-            await this.send(frames[index]);
+        this.assertOrdinaryOperation();
+        const finish = this.beginOrdinaryOperation();
+        try {
+            const mine = ++this.sequence;
+            for (let index = 0; index < frames.length; index++) {
+                if (index > 0) await this.gap();
+                // A newer sequence, including cancel, owns the radio.
+                if (this.sequence !== mine) return;
+                await this.send(frames[index]);
+            }
+        } finally {
+            finish();
         }
     }
 
@@ -452,7 +609,21 @@ export default class Machine {
     get advertisedName(): string { return this.transport.advertisedName; }
 
     async connect(id: string): Promise<void> {
+        this.slotSession?.invalidate(new Error("Easy Mode connection was replaced."));
+        this.forget();
+        const generation = this.generation;
+        this.slotStore?.read(id);
+        this.connectedId = id;
         this.note(`connecting to ${id}`);
+        const finish = this.beginOrdinaryOperation();
+        try {
+            await this.connectAttempt(id, generation);
+        } finally {
+            finish();
+        }
+    }
+
+    private async connectAttempt(id: string, generation: number): Promise<void> {
         try {
             await this.transport.connect(id);
         } catch (e) {
@@ -476,14 +647,20 @@ export default class Machine {
             // slot. Guess that, rather than implying the hardware is at fault.
             throw new Error("The machine is already in use by another app.");
         }
+        if (generation !== this.generation) throw new Error("Connection was superseded.");
+        this.connectedId = this.transport.connectedDeviceId ?? id;
+        this.slotStore?.read(this.connectedId);
         this.note("connected");
         // Which notification channels actually opened. A channel that refused
         // and a channel the machine never uses are indistinguishable from up
         // here, and only one of them is our fault.
         (this.transport.channels ?? []).forEach((channel) => this.note(channel));
         this.unsubscribe.push(
-            this.transport.onFrame((frame, source) => this.receive(frame, source)),
-            this.transport.onDisconnect(() => {
+            this.transport.onFrame((frame, source, scope) => {
+                if (this.matchesConnection(generation, scope)) this.receive(frame, source);
+            }),
+            this.transport.onDisconnect((scope) => {
+                if (!this.matchesConnection(generation, scope)) return;
                 this.note("link dropped by the radio");
                 this.forget();
             })
@@ -513,7 +690,14 @@ export default class Machine {
         // how much water it has. Waiting here rather than at the brew means a
         // recipe is never sent into the gap, and the settings screen shows
         // vitals rather than blanks the moment it says "connected".
-        await this.ensureInfo();
+        if (generation !== this.generation) throw new Error("Connection was superseded.");
+        if (this.info === null) await this.askInfo();
+    }
+
+    private matchesConnection(generation: number, scope?: ConnectionScope): boolean {
+        return generation === this.generation && (scope === undefined
+            || (scope.deviceId === this.connectedId
+                && scope.generation === this.transport.connectionGeneration));
     }
 
     /**
@@ -587,7 +771,9 @@ export default class Machine {
      * The machine beeps at this, so it is not sent for its own sake.
      */
     private async shakeHands(): Promise<void> {
+        const generation = this.generation;
         await this.transport.write(buildType1(8100, [185, 1]));
+        if (generation !== this.generation) throw new Error("The machine connection changed during the handshake.");
         this.lastHandshakeAt = Date.now();
     }
 
@@ -597,6 +783,17 @@ export default class Machine {
     }
 
     async askHowItIsDoing(): Promise<boolean> {
+        this.assertOrdinaryOperation();
+        const finish = this.beginOrdinaryOperation();
+        try {
+            return await this.askInfo();
+        } finally {
+            finish();
+        }
+    }
+
+    private async askInfo(): Promise<boolean> {
+        const generation = this.generation;
         const infoBeforeRequest = this.info;
         // The machine will not answer a question asked outside a session, and
         // the session goes stale on its own — settled on hardware, where a
@@ -609,6 +806,7 @@ export default class Machine {
         }
         for (let attempt = 0; attempt < INFO_ATTEMPTS; attempt++) {
             if (attempt > 0) await this.gap();
+            if (generation !== this.generation) throw new Error("The machine connection changed.");
             // A late answer to the previous attempt can land in the gap, when
             // no per-attempt listener is mounted. It is still an answer to this
             // refresh and must not leave the control waiting for another frame.
@@ -619,7 +817,7 @@ export default class Machine {
             // for a reply that had already come.
             const answered = this.waitForInfo();
             try {
-                await this.requestInfo();
+                await this.writeInfo();
             } catch {
                 // A question the radio would not carry is not a reason to
                 // abandon what the caller was actually doing. The brew decides
@@ -649,13 +847,23 @@ export default class Machine {
      * hardware checklist is what settles whether it was ever needed.
      */
     async requestInfo(): Promise<void> {
+        this.assertOrdinaryOperation();
+        const finish = this.beginOrdinaryOperation();
+        try {
+            await this.writeInfo();
+        } finally {
+            finish();
+        }
+    }
+
+    private async writeInfo(): Promise<void> {
         await this.transport.write(buildType1(EVENT.MACHINE_INFO));
     }
 
     async disconnect(): Promise<void> {
         this.note("disconnected by the app");
-        await this.transport.disconnect();
         this.forget();
+        await this.transport.disconnect();
     }
 
     /**
@@ -672,7 +880,7 @@ export default class Machine {
     }
 
     isConnected(): boolean {
-        return this.transport.isConnected();
+        return this.connectedId !== null && this.transport.isConnected();
     }
 
     /**
@@ -700,6 +908,20 @@ export default class Machine {
 
     /** Send an already-built frame. The brew path and the console both use it. */
     async send(frame: Uint8Array): Promise<void> {
+        this.assertOrdinaryOperation();
+        // Native acceptance is not completion of a standalone console action.
+        // Keep slots out until a fresh terminal state or a new connection.
+        if (!isActiveBrewPhase(this.phase)) this.unsettledCommand = true;
+        const finish = this.beginOrdinaryOperation();
+        try {
+            await this.writeFrame(frame);
+        } finally {
+            finish();
+        }
+    }
+
+    private async writeFrame(frame: Uint8Array, check?: () => void): Promise<void> {
+        const generation = this.generation;
         // The MTU the radio actually granted, which on Android may be the
         // 20-byte floor. A recipe blob does not fit in that, and a write that
         // is quietly truncated arrives as a brew that never starts and a
@@ -717,6 +939,8 @@ export default class Machine {
         // written before the radio has accepted the frame says a frame was
         // sent when the write is about to throw.
         await this.transport.write(frame);
+        if (generation !== this.generation) throw new Error("The machine connection changed during the write.");
+        check?.();
         // A pause reports the same ARMED state a loaded recipe does, so the
         // only thing that can tell them apart is having sent one. Read off the
         // bytes here rather than tracked by a caller, because the machine
@@ -773,6 +997,7 @@ export default class Machine {
         if (parsed.kind === "status") {
             this.state = parsed.state;
             this.stateAt = Date.now();
+            if (STARTABLE.has(parsed.state)) this.unsettledCommand = false;
             this.onState(parsed.state);
         }
         if (parsed.kind === "info") {
@@ -939,6 +1164,16 @@ export default class Machine {
      * over — the brew's progress arrives as phases.
      */
     async brew(recipe: Recipe): Promise<void> {
+        this.assertOrdinaryOperation();
+        const finish = this.beginOrdinaryOperation();
+        try {
+            await this.brewAttempt(recipe);
+        } finally {
+            finish();
+        }
+    }
+
+    private async brewAttempt(recipe: Recipe): Promise<void> {
         // A fresh attempt: the PRO-mode offer is per-brew, and this was not
         // reached through `switchToProAndRetry`, so the machine may be asked
         // about its mode again if this send also goes nowhere.
@@ -977,6 +1212,7 @@ export default class Machine {
     }
 
     private async brewOnce(recipe: Recipe): Promise<void> {
+        this.assertOrdinaryOperation();
         const blocked = this.brewBlock(recipe);
         if (blocked !== null) {
             // The phase as well as the throw. The caller gets an exception to
@@ -1081,6 +1317,7 @@ export default class Machine {
      * one: same phase, same acknowledgement question.
      */
     async startBrew(): Promise<void> {
+        this.assertOrdinaryOperation();
         const commit = this.pendingCommit;
         if (commit === null) throw new Error("There is no recipe waiting to be started.");
         this.pendingCommit = null;
@@ -1114,6 +1351,7 @@ export default class Machine {
 
     /** Switch the machine to PRO, then send the recipe again. Once. */
     async switchToProAndRetry(recipe: Recipe): Promise<void> {
+        this.assertOrdinaryOperation();
         this.retriedInPro = true;
         // Byte-exact, confirmed on hardware: "00000000" is PRO, "91327856" EASY.
         await this.send(buildType2(11511, ascii("00000000")));
@@ -1198,6 +1436,7 @@ export default class Machine {
      * Inert when nothing is running, so there is no state guard.
      */
     async pauseBrew(pauseKind?: "overflow"): Promise<void> {
+        this.assertOrdinaryOperation();
         this.clearPauseRequest();
         const token = ++this.pauseRequestToken;
         this.pauseRequested = true;
@@ -1226,6 +1465,7 @@ export default class Machine {
      * instead would leave it saying "paused" about a machine pouring water.
      */
     async resumeBrew(): Promise<void> {
+        this.assertOrdinaryOperation();
         this.leavePause();
         await this.send(buildType1(COMMAND_RESUME, [1]));
     }
@@ -1454,6 +1694,12 @@ export default class Machine {
     }
 
     private forget(): void {
+        ++this.generation;
+        ++this.sequence;
+        this.ordinaryOperations.clear();
+        this.unsettledCommand = false;
+        this.slotSession?.invalidate(new Error("Easy Mode link lost. Receipt is unknown."));
+        this.connectedId = null;
         this.unsubscribe.forEach((off) => off());
         this.unsubscribe = [];
         // The acknowledgement timer must not outlive the link it was asking

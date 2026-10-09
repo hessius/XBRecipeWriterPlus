@@ -3,13 +3,17 @@ import {AppState, Linking} from "react-native";
 
 import {CONNECT_DELAYS_MS, STUDIO_MODEL_STRINGS} from "@/constants/machine";
 import {sharedSettings, useSetting} from "@/hooks/useSetting";
+import {sharedSlotDatabase} from "@/hooks/useEasyModeSlots";
+import {installMachineSlotPort} from "@/library/slots/machineSlotPort";
+import {unavailableSlotPort, type SlotPort} from "@/library/slots/slotWriter";
+import {notify} from "@/components/XbrwToast";
 import Machine, {
     isActiveBrewPhase,
     type BrewPhase
 } from "@/library/machine/Machine";
 import {asMachineModel, type MachineModel} from "@/library/machine/machineModel";
 import type {Settings} from "@/library/Settings";
-import {BluetoothPermissionError} from "@/library/machine/errors";
+import {BluetoothPermissionError, SlotOperationError} from "@/library/machine/errors";
 import {
     BleTransport,
     ensureBluetoothPermission,
@@ -26,12 +30,15 @@ export type LinkStatus = "idle" | "disconnected" | "connecting" | "connected" | 
  * the transport touches the native module and importing a screen must not.
  */
 let shared: Machine | undefined;
+let sharedPort: SlotPort = unavailableSlotPort;
+let stopSharedLifecycle: (() => void) | undefined;
 
 export function sharedMachine(): Machine {
     if (shared === undefined) {
         const machine = new Machine(new BleTransport());
+        sharedPort = installMachineSlotPort(machine, sharedSlotDatabase());
+        stopSharedLifecycle = holdLinkAcrossAppState(machine, () => openLink(machine, settingsStore()));
         shared = machine;
-        holdLinkAcrossAppState(machine, () => openLink(machine, settingsStore()));
     }
     return shared;
 }
@@ -72,6 +79,7 @@ export type MachineOptions = RetryOptions & {settings?: Settings};
 
 /** The part of `AppState` this file uses, so a test can supply its own. */
 export type AppStateLike = {
+    currentState?: string | null;
     addEventListener: (
         type: "change", handler: (state: string) => void
     ) => {remove: () => void};
@@ -136,6 +144,7 @@ type LinkLifecycleMachine = {
     disconnect: () => Promise<void>;
     note: (text: string) => void;
     onPhase: (listener: (phase: BrewPhase) => void) => () => void;
+    setAppState?: (state: string | null) => void;
 };
 
 /**
@@ -161,7 +170,8 @@ export function holdLinkAcrossAppState(
     reconnect: () => Promise<void>,
     options: {appState?: AppStateLike} = {}
 ): () => void {
-    const appState = options.appState ?? (AppState as unknown as AppStateLike);
+    const appState = options.appState ?? AppState;
+    machine.setAppState?.(appState.currentState ?? null);
 
     let released = false;
     let reconnecting = false;
@@ -198,6 +208,7 @@ export function holdLinkAcrossAppState(
     });
 
     const appStateSubscription = appState.addEventListener("change", (next) => {
+        machine.setAppState?.(next);
         if (next === "background") {
             backgrounded = true;
             if (!machine.isConnected()) return;
@@ -305,7 +316,10 @@ export function startMachineLink(): void {
 
 /** Tests only. */
 export function __resetSharedMachine(): void {
+    stopSharedLifecycle?.();
+    stopSharedLifecycle = undefined;
     shared = undefined;
+    sharedPort = unavailableSlotPort;
 }
 
 /**
@@ -418,6 +432,7 @@ async function attemptLink(machine: Machine, store: LinkStore): Promise<void> {
 
 export type MachineLink = {
     machine: Machine;
+    slotPort?: SlotPort;
     status: LinkStatus;
     error: string | null;
     /** The remembered device id, or "" if no machine has ever connected. */
@@ -489,7 +504,7 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
         // `onLink`, not `onFrame`: the case that matters most — the link
         // dropping — produces no frame at all, so a frame subscription leaves
         // the view saying "Connected" about a machine that has gone away.
-        return machine.onLink(() => {
+        const offLink = machine.onLink(() => {
             setStatus(prev =>
                 // A link event saying "connected" is always correct — take it.
                 // A link event saying "not connected" means the state changed:
@@ -502,6 +517,8 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
             );
             setLinkVersion((n) => n + 1);
         });
+        const offPhase = machine.onPhase(() => setLinkVersion((n) => n + 1));
+        return () => { offLink(); offPhase(); };
     }, [machine]);
 
     async function connect(): Promise<void> {
@@ -531,6 +548,16 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
     }
 
     async function forget(): Promise<void> {
+        try {
+            const actual = machine.slotIdentity;
+            if (actual !== null) machine.assertCanForgetDevice(actual.deviceId);
+            if (remembered !== "") machine.assertCanForgetDevice(remembered);
+        } catch (failure) {
+            if (!(failure instanceof SlotOperationError)) throw failure;
+            setError(failure.message);
+            notify({tone: "error", message: failure.message});
+            return;
+        }
         await machine.disconnect();
         setRemembered("");
         forgetMachineReadings(options.settings ?? sharedSettings());
@@ -540,7 +567,8 @@ export function useMachine(injected?: Machine, options: MachineOptions = {}): Ma
     }
 
     return {
-        machine, status, error, remembered, connect, forget,
+        machine, slotPort: injected === undefined ? sharedPort : unavailableSlotPort,
+        status, error, remembered, connect, forget,
         canOpenSettings,
         /** Send the user to the app's own page in the system settings. */
         openSettings: () => { void Linking.openSettings(); },

@@ -3,7 +3,8 @@ import {Share, StyleSheet, TextInput} from "react-native";
 import {act, fireEvent, screen, waitFor, within} from "@testing-library/react-native";
 
 import EditRecipe, {PROFILE_HEIGHT, stageScrollTarget} from "@/app/editRecipe";
-import {renderWithProviders} from "@/test-utils/render";
+import {renderWithProviders, SHEET_PRESS_TIMEOUT} from "@/test-utils/render";
+import {sharedSlotDatabase} from "@/hooks/useEasyModeSlots";
 
 import Pour, {POUR_PATTERN} from "@/library/Pour";
 import Recipe, {CUP_TYPE} from "@/library/Recipe";
@@ -37,6 +38,9 @@ jest.mock("expo-router", () => ({
 }));
 
 jest.mock("@/library/RecipeDatabase");
+jest.mock("expo-sqlite", () => ({
+    openDatabaseSync: () => jest.requireActual("@/test-utils/sqlite").createTestDatabase()
+}));
 
 // How a recipe has gone comes from the brew database, which is SQLite and has
 // no business being opened by a test of the editor. The hook is stubbed rather
@@ -224,6 +228,20 @@ async function renderEditor(overrides: Partial<Recipe> = {}) {
 async function openAbout(): Promise<void> {
     await fireEvent.press(screen.getByLabelText("About this recipe"));
 }
+
+it("opens Easy Mode with the editor's current recipe through the recipe menu", async () => {
+    const deviceId = "slot-device";
+    mockSettings = {machineDeviceId: deviceId};
+    await renderEditor({name: "Current slot recipe"});
+    await fireEvent.press(screen.getByLabelText("More"));
+    await waitFor(async () => {
+        if (mockPush.mock.calls.length === 0) {
+            await fireEvent.press(screen.getByRole("button", {name: "Assign to Easy Mode"}));
+        }
+        expect(mockPush).toHaveBeenCalledWith({pathname: "/easyMode"});
+    }, {timeout: SHEET_PRESS_TIMEOUT});
+    expect(sharedSlotDatabase().read(deviceId).drafts[0]?.name).toBe("Current slot recipe");
+});
 
 async function openTheQuickEditPanel(): Promise<void> {
     mockSettings = {machineDeviceId: "AA:BB:CC:DD:EE:FF"};

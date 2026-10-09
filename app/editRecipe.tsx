@@ -1,5 +1,6 @@
 import {useLocalSearchParams, useNavigation} from "expo-router";
 import router from "@/hooks/steadyRouter";
+import {openEasyModeRecipe} from "@/hooks/useEasyModeSlots";
 import React, {useEffect, useRef, useState} from "react";
 import {Pressable, ScrollView, Share, View, useWindowDimensions} from "react-native";
 import Animated, {FadeIn, FadeOut, SlideInDown, SlideOutDown} from "react-native-reanimated";
@@ -1488,6 +1489,10 @@ export default function EditRecipe(
                                  showHints={showHint} onShowHintsChange={setShowHint}
                                  onShare={onSharePress}
                                  onDuplicate={duplicateRecipe}
+                                 onEasyMode={rememberedMachine !== "" ? async () => {
+                                     await flushDrafts();
+                                     openEasyModeRecipe(recipe, rememberedMachine);
+                                 } : undefined}
                                  onRefreshName={async () => {
                                      // Refresh fetches against the recipe ID, so
                                      // a just-typed ID has to be committed first

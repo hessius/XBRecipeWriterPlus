@@ -5,6 +5,7 @@ import {Text, XStack, YStack} from "tamagui";
 import DotIcon from "@/components/DotIcon";
 import DotMatrixText from "@/components/DotMatrixText";
 import PourProfile, {PROFILE_BLEED} from "@/components/PourProfile";
+import SlotMarker from "@/components/SlotMarker";
 import {TILE_HEIGHT} from "@/components/ShelfTile";
 import Recipe from "@/library/Recipe";
 import {accentGroupFor, resolveAccent} from "@/library/accent";
@@ -105,6 +106,8 @@ type Props = {
      * that can be seen.
      */
     editing?: boolean;
+    slotMarker?: string;
+    onEasyMode?: () => void;
 };
 
 /**
@@ -124,7 +127,7 @@ type Props = {
 export default function RecipeShelfTile({
     recipe, onPress, onLongPress, showCoffeeMarker = true, dottedProfile = false,
     evidence, onBrew, onShare, onWrite, onDuplicate, onDelete, onToggleFavourite,
-    onHistory, editing = false
+    onHistory, editing = false, slotMarker, onEasyMode
 }: Props) {
     const accent = resolveAccent(recipe);
     const isTea = accentGroupFor(recipe) === "tea";
@@ -140,6 +143,7 @@ export default function RecipeShelfTile({
         recipe.displayName(),
         marker.toLowerCase(),
         recipe.favourite ? "starred" : undefined,
+        slotMarker,
         // Spoken in words rather than as the drawn line: "12G · 1:16 · 22" is a
         // glance's shorthand and reads as noise when it is read aloud.
         isSet(recipe.dosage) ? `${recipe.dosage} grams` : undefined,
@@ -160,6 +164,8 @@ export default function RecipeShelfTile({
     // and the sheet's rows is the failure the shared-sheet design guards, and a
     // test pins the two together.
     const actions = [
+        ...(onEasyMode !== undefined
+            ? [{name: "easyMode", label: "Assign to Easy Mode"}] : []),
         ...(onBrew !== undefined ? [{name: "brew", label: "Brew this recipe"}] : []),
         {name: "share", label: "Share recipe"},
         ...(onWrite !== undefined && canWriteToCard(recipe)
@@ -189,7 +195,9 @@ export default function RecipeShelfTile({
             onPress={onPress}
             onLongPress={onLongPress}
             onAccessibilityAction={(event) => {
-                if (event.nativeEvent.actionName === "brew") {
+                if (event.nativeEvent.actionName === "easyMode") {
+                    onEasyMode?.();
+                } else if (event.nativeEvent.actionName === "brew") {
                     onBrew?.();
                 } else if (event.nativeEvent.actionName === "share") {
                     onShare();
@@ -278,9 +286,10 @@ export default function RecipeShelfTile({
                 </XStack>
 
                 <YStack gap="$1">
+                    <SlotMarker label={slotMarker} compact/>
                     {/* One line rather than two once there are figures under
-                        it. The tile's height is the grid's and does not grow:
-                        a tile that reflowed on its contents would break the
+                        it. Every tile keeps the grid's fixed height:
+                        a name that reflowed on its contents would break the
                         row alignment the whole grid is built on. */}
                     <Text fontSize={15} fontWeight="700"
                           numberOfLines={figures === null ? 2 : 1}

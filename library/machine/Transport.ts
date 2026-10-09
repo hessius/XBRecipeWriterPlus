@@ -23,6 +23,8 @@ import {
 } from "@/constants/machine";
 
 export type FoundMachine = {id: string; name: string};
+export type ConnectionScope = {deviceId: string; generation: number};
+type ConnectionAttempt = ConnectionScope & {dropped: boolean};
 
 /**
  * What `Machine` needs of a radio.
@@ -33,6 +35,8 @@ export type FoundMachine = {id: string; name: string};
  * able to run without it.
  */
 export interface MachineTransport {
+    readonly connectedDeviceId?: string | null;
+    readonly connectionGeneration?: number;
     scan(seconds?: number): Promise<FoundMachine[]>;
     /** What the connected machine says it is, or empty when it will not say. */
     readonly modelNumber: string;
@@ -49,9 +53,9 @@ export interface MachineTransport {
      * more than one, and a log that does not say which cannot answer whether a
      * given channel is ever used.
      */
-    onFrame(listener: (frame: Uint8Array, source?: string) => void): () => void;
+    onFrame(listener: (frame: Uint8Array, source?: string, scope?: ConnectionScope) => void): () => void;
     /** Fires when the link drops for any reason, including a deliberate one. */
-    onDisconnect(listener: () => void): () => void;
+    onDisconnect(listener: (scope?: ConnectionScope) => void): () => void;
     isConnected(): boolean;
     /** What happened to each notify subscription at the last connect. */
     channels?: string[];
@@ -132,6 +136,8 @@ function propertyNames(properties: unknown): string[] {
  */
 export class BleTransport implements MachineTransport {
     private deviceId: string | null = null;
+    get connectedDeviceId(): string | null { return this.deviceId; }
+    public connectionGeneration = 0;
     /** What the machine last said it was, or empty when it would not say. */
     public modelNumber = "";
     /** The names machines advertised, keyed by their peripheral identifiers. */
@@ -146,8 +152,8 @@ export class BleTransport implements MachineTransport {
         return this.deviceId === null ? "" : this.advertisedNames.get(this.deviceId) ?? "";
     }
     private started = false;
-    private frameListeners = new Set<(frame: Uint8Array, source?: string) => void>();
-    private disconnectListeners = new Set<() => void>();
+    private frameListeners = new Set<(frame: Uint8Array, source?: string, scope?: ConnectionScope) => void>();
+    private disconnectListeners = new Set<(scope?: ConnectionScope) => void>();
     private subscriptions: EventSubscription[] = [];
     /**
      * What happened to each notify subscription at the last connect.
@@ -173,20 +179,35 @@ export class BleTransport implements MachineTransport {
     private async start(): Promise<void> {
         if (this.started) return;
         await BleManager.start({showAlert: false});
-        this.subscriptions.push(
+        this.started = true;
+    }
+
+    private observeConnection(attempt: ConnectionAttempt): () => void {
+        this.assertAttempt(attempt);
+        this.subscriptions.forEach((subscription) => subscription.remove());
+        const {deviceId: id, generation} = attempt;
+        const scope = {deviceId: id, generation};
+        const subscriptions = [
             BleManager.onDidUpdateValueForCharacteristic(
-                ({value, characteristic}: BleManagerDidUpdateValueForCharacteristicEvent) => {
+                ({value, characteristic, peripheral}: BleManagerDidUpdateValueForCharacteristicEvent) => {
+                    if (peripheral !== id || this.deviceId !== id
+                        || this.connectionGeneration !== generation || attempt.dropped) return;
                     const frame = Uint8Array.from(value);
                     const source = shortUuid(characteristic ?? "");
-                    this.frameListeners.forEach((listener) => listener(frame, source));
+                    this.frameListeners.forEach((listener) => listener(frame, source, scope));
                 }
             ),
-            BleManager.onDisconnectPeripheral(() => {
+            BleManager.onDisconnectPeripheral(({peripheral}) => {
+                if (peripheral !== id || this.connectionGeneration !== generation
+                    || attempt.dropped) return;
+                attempt.dropped = true;
+                if (this.deviceId !== id) return;
                 this.deviceId = null;
-                this.disconnectListeners.forEach((listener) => listener());
+                this.disconnectListeners.forEach((listener) => listener(scope));
             })
-        );
-        this.started = true;
+        ];
+        this.subscriptions = subscriptions;
+        return () => subscriptions.forEach((subscription) => subscription.remove());
     }
 
     /**
@@ -285,8 +306,14 @@ export class BleTransport implements MachineTransport {
     }
 
     async connect(id: string): Promise<void> {
+        const generation = ++this.connectionGeneration;
+        const attempt: ConnectionAttempt = {deviceId: id, generation, dropped: false};
+        this.deviceId = null;
         await this.start();
+        this.assertAttempt(attempt);
         await this.waitForRadio();
+        this.assertAttempt(attempt);
+        let stopObserving = this.observeConnection(attempt);
 
         // `timedOut` is read by the catch block below to decide whether this
         // particular rejection came from the timeout (and so needs the extra
@@ -308,10 +335,18 @@ export class BleTransport implements MachineTransport {
         });
 
         try {
-            await Promise.race([this.connectSequence(id), timeout]);
+            await Promise.race([this.connectSequence(attempt, () => {
+                // The ghost-link retry deliberately disconnects. Its events
+                // must not count as a drop of the replacement native link.
+                stopObserving();
+                return () => { stopObserving = this.observeConnection(attempt); };
+            }), timeout]);
+            this.assertAttempt(attempt);
             this.deviceId = id;
         } catch (error) {
-            if (timedOut) {
+            stopObserving();
+            if (timedOut && generation === this.connectionGeneration) {
+                ++this.connectionGeneration;
                 // Best effort, same as the ghost-link cleanup inside
                 // connectSequence: a timed-out attempt must not leave the OS
                 // holding a link that the next attempt then has to discover
@@ -346,41 +381,64 @@ export class BleTransport implements MachineTransport {
     }
 
     /**
-     * The native connect sequence, unchanged from before the timeout existed.
-     * It has no way to be cancelled once started: a timeout in `connect()`
-     * reports failure to the caller without waiting for this to settle.
+     * A native call cannot be cancelled. Generation checks stop its late
+     * completion from issuing more calls or overwriting a newer connection.
      */
-    private async connectSequence(id: string): Promise<void> {
+    private assertGeneration(generation: number): void {
+        if (generation !== this.connectionGeneration) throw new Error("Connection was superseded.");
+    }
+
+    private assertAttempt(attempt: ConnectionAttempt): void {
+        this.assertGeneration(attempt.generation);
+        if (attempt.dropped) throw new Error("The machine disconnected while connecting.");
+    }
+
+    private async connectSequence(
+        attempt: ConnectionAttempt, suspendObservation: () => () => void
+    ): Promise<void> {
+        const {deviceId: id} = attempt;
+        this.assertAttempt(attempt);
         try {
             await BleManager.connect(id);
+            this.assertAttempt(attempt);
         } catch (error) {
+            this.assertAttempt(attempt);
             // A link the operating system is still holding from a previous run
             // of the JavaScript — a reload in development, or a crash — is
             // invisible up here, because `deviceId` was reset and the radio's
             // was not. The machine allows one link, so that ghost is enough to
             // lock the user out until they power-cycle the machine, which is
             // not a thing anybody should have to work out for themselves.
+            const resumeObservation = suspendObservation();
             await BleManager.disconnect(id).catch(() => {});
+            this.assertAttempt(attempt);
+            resumeObservation();
             try {
                 await BleManager.connect(id);
             } catch {
+                this.assertAttempt(attempt);
                 throw error;
             }
         }
+        this.assertAttempt(attempt);
         const services = await BleManager.retrieveServices(id);
-        await this.listenToEverythingThatTalks(id, services);
+        this.assertAttempt(attempt);
+        await this.listenToEverythingThatTalks(attempt, services);
+        this.assertAttempt(attempt);
         // Best effort: a stack that refuses still carries every frame short
         // enough to fit the default, so this is not a reason to fail the
         // connection. It is a reason to say what happened. Swallowed entirely,
         // a refusal looked exactly like a grant, and the only symptom would
         // have been long frames quietly not arriving.
-        await this.negotiateMtu(id);
+        await this.negotiateMtu(attempt);
+        this.assertAttempt(attempt);
         // Best effort, like the MTU above. The Device Information Service is
         // optional and older firmware need not carry it, so a machine that
         // will not say what it is still connects and still brews. Recorded
         // rather than acted on here: what to do with the answer is a decision
         // for the layer that owns the setting.
-        await this.readModelNumber(id);
+        await this.readModelNumber(attempt);
+        this.assertAttempt(attempt);
     }
 
     /**
@@ -390,7 +448,8 @@ export class BleTransport implements MachineTransport {
      * every LE stack must support, so 20 is what a refusal leaves us with --
      * enough for a command, not enough for a recipe blob.
      */
-    private async negotiateMtu(id: string): Promise<void> {
+    private async negotiateMtu(attempt: ConnectionAttempt): Promise<void> {
+        this.assertAttempt(attempt);
         if (Platform.OS !== "android") {
             // Not a failure, and not a budget. Say so, so the log does not read
             // like something went wrong.
@@ -398,11 +457,13 @@ export class BleTransport implements MachineTransport {
             return;
         }
         try {
-            const granted = await BleManager.requestMTU(id, MACHINE_MTU);
+            const granted = await BleManager.requestMTU(attempt.deviceId, MACHINE_MTU);
+            this.assertAttempt(attempt);
             const mtu = typeof granted === "number" && granted > 0 ? granted : DEFAULT_MTU;
             this.frameBudget = mtu - ATT_HEADER_BYTES;
             this.channels.push(`MTU ${mtu}, so ${this.frameBudget} bytes a frame`);
         } catch (e) {
+            this.assertAttempt(attempt);
             this.frameBudget = DEFAULT_MTU - ATT_HEADER_BYTES;
             this.channels.push(
                 `MTU refused (${(e as Error).message}) — ${this.frameBudget} bytes a frame`
@@ -429,13 +490,16 @@ export class BleTransport implements MachineTransport {
      * but it does mean `STUDIO_MODEL_STRINGS` must be filled from a value this
      * code produced rather than transcribed off a datasheet or a label.
      */
-    private async readModelNumber(id: string): Promise<void> {
+    private async readModelNumber(attempt: ConnectionAttempt): Promise<void> {
+        this.assertAttempt(attempt);
         try {
             const bytes = await BleManager.read(
-                id, DEVICE_INFO_SERVICE, MODEL_NUMBER_CHARACTERISTIC
+                attempt.deviceId, DEVICE_INFO_SERVICE, MODEL_NUMBER_CHARACTERISTIC
             );
+            this.assertAttempt(attempt);
             this.modelNumber = String.fromCharCode(...bytes).replace(/\0+$/, "").trim();
         } catch {
+            this.assertAttempt(attempt);
             this.modelNumber = "";
         }
     }
@@ -454,10 +518,12 @@ export class BleTransport implements MachineTransport {
      * worth the connection.
      */
     private async listenToEverythingThatTalks(
-        id: string, services: {characteristics?: unknown[]} | undefined
+        attempt: ConnectionAttempt, services: {characteristics?: unknown[]} | undefined
     ): Promise<void> {
+        this.assertAttempt(attempt);
         this.channels = [];
-        await this.listen(id, MACHINE_SERVICE, MACHINE_NOTIFY_CHARACTERISTIC);
+        await this.listen(attempt, MACHINE_SERVICE, MACHINE_NOTIFY_CHARACTERISTIC);
+        this.assertAttempt(attempt);
 
         const listed = (services?.characteristics ?? []) as {
             service?: string; characteristic?: string; properties?: unknown;
@@ -469,17 +535,23 @@ export class BleTransport implements MachineTransport {
             if (!propertyNames(entry.properties).some((name) => /notify|indicate/i.test(name))) {
                 continue;
             }
-            await this.listen(id, entry.service ?? MACHINE_SERVICE, characteristic);
+            await this.listen(attempt, entry.service ?? MACHINE_SERVICE, characteristic);
+            this.assertAttempt(attempt);
         }
     }
 
-    /** Subscribe, and record what came of it. Never throws. */
-    private async listen(id: string, service: string, characteristic: string): Promise<void> {
+    /** Native refusal is best effort; a dropped or superseded attempt is not. */
+    private async listen(
+        attempt: ConnectionAttempt, service: string, characteristic: string
+    ): Promise<void> {
+        this.assertAttempt(attempt);
         const name = shortUuid(characteristic);
         try {
-            await BleManager.startNotification(id, service, characteristic);
+            await BleManager.startNotification(attempt.deviceId, service, characteristic);
+            this.assertAttempt(attempt);
             this.channels.push(`${name} listening`);
         } catch (e) {
+            this.assertAttempt(attempt);
             this.channels.push(`${name} refused — ${(e as Error).message}`);
         }
     }
@@ -496,6 +568,7 @@ export class BleTransport implements MachineTransport {
     async disconnect(): Promise<void> {
         const id = this.deviceId;
         this.deviceId = null;
+        ++this.connectionGeneration;
         if (id === null) return;
         await BleManager.disconnect(id).catch(() => {});
     }
@@ -519,14 +592,14 @@ export class BleTransport implements MachineTransport {
         );
     }
 
-    onFrame(listener: (frame: Uint8Array, source?: string) => void): () => void {
+    onFrame(listener: (frame: Uint8Array, source?: string, scope?: ConnectionScope) => void): () => void {
         this.frameListeners.add(listener);
         return () => {
             this.frameListeners.delete(listener);
         };
     }
 
-    onDisconnect(listener: () => void): () => void {
+    onDisconnect(listener: (scope?: ConnectionScope) => void): () => void {
         this.disconnectListeners.add(listener);
         return () => {
             this.disconnectListeners.delete(listener);

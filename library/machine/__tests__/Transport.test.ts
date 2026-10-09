@@ -51,6 +51,298 @@ jest.mock("react-native-ble-manager", () => ({
 
 const write = BleManager.writeWithoutResponse as jest.Mock;
 
+it("filters peripheral events and rejects callbacks captured by an old connection", async () => {
+    jest.clearAllMocks();
+    const transport = new BleTransport();
+    await transport.connect("one");
+    const frames = jest.fn();
+    const drops = jest.fn();
+    transport.onFrame(frames);
+    transport.onDisconnect(drops);
+    const oldFrame = (BleManager.onDidUpdateValueForCharacteristic as jest.Mock).mock.calls[0][0];
+    const oldDrop = (BleManager.onDisconnectPeripheral as jest.Mock).mock.calls[0][0];
+    await transport.disconnect();
+    await transport.connect("two");
+    oldFrame({value: [1], characteristic: "ffe2", peripheral: "one"});
+    oldDrop({peripheral: "one"});
+    const currentFrame = (BleManager.onDidUpdateValueForCharacteristic as jest.Mock).mock.calls[1][0];
+    const currentDrop = (BleManager.onDisconnectPeripheral as jest.Mock).mock.calls[1][0];
+    currentFrame({value: [2], characteristic: "ffe2", peripheral: "one"});
+    currentDrop({peripheral: "one"});
+    expect(frames).not.toHaveBeenCalled();
+    expect(drops).not.toHaveBeenCalled();
+    expect(transport.connectedDeviceId).toBe("two");
+    currentFrame({value: [3], characteristic: "ffe2", peripheral: "two"});
+    expect(frames).toHaveBeenCalledWith(Uint8Array.from([3]), "ffe2", {
+        deviceId: "two", generation: transport.connectionGeneration
+    });
+    currentDrop({peripheral: "two"});
+    expect(drops).toHaveBeenCalledWith({deviceId: "two", generation: transport.connectionGeneration});
+    expect(transport.connectedDeviceId).toBeNull();
+});
+
+it("cannot overwrite a new connection's identity with a late native model read", async () => {
+    jest.clearAllMocks();
+    let finishOld!: (bytes: number[]) => void;
+    (BleManager.read as jest.Mock)
+        .mockImplementationOnce(() => new Promise<number[]>((resolve) => { finishOld = resolve; }))
+        .mockResolvedValueOnce(Array.from("NEW", (char) => char.charCodeAt(0)));
+    const transport = new BleTransport();
+    const old = transport.connect("one").catch((error: Error) => error);
+    for (let index = 0; index < 40; index++) await Promise.resolve();
+    await transport.connect("two");
+    finishOld(Array.from("OLD", (char) => char.charCodeAt(0)));
+    expect(await old).toBeInstanceOf(Error);
+    expect(transport.connectedDeviceId).toBe("two");
+    expect(transport.modelNumber).toBe("NEW");
+});
+
+describe("native connection setup lifecycle", () => {
+    const platform = Platform.OS;
+    const frameCallbacks = new Set<Parameters<typeof BleManager.onDidUpdateValueForCharacteristic>[0]>();
+    const dropCallbacks = new Set<Parameters<typeof BleManager.onDisconnectPeripheral>[0]>();
+
+    function deferred<T>() {
+        let resolve!: (value: T) => void;
+        let reject!: (error: Error) => void;
+        const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+        return {promise, resolve, reject};
+    }
+
+    function drop(peripheral: string) {
+        dropCallbacks.forEach((callback) => callback({peripheral}));
+    }
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        frameCallbacks.clear();
+        dropCallbacks.clear();
+        (BleManager.onDidUpdateValueForCharacteristic as jest.Mock).mockImplementation(
+            (callback: Parameters<typeof BleManager.onDidUpdateValueForCharacteristic>[0]) => {
+                frameCallbacks.add(callback);
+                return {remove: () => frameCallbacks.delete(callback)};
+            }
+        );
+        (BleManager.onDisconnectPeripheral as jest.Mock).mockImplementation(
+            (callback: Parameters<typeof BleManager.onDisconnectPeripheral>[0]) => {
+                dropCallbacks.add(callback);
+                return {remove: () => dropCallbacks.delete(callback)};
+            }
+        );
+        (BleManager.startNotification as jest.Mock).mockReset().mockResolvedValue(undefined);
+        (BleManager.retrieveServices as jest.Mock).mockResolvedValue({characteristics: [
+            {service: MACHINE_SERVICE, characteristic: "ffe2", properties: ["Notify"]},
+            {service: MACHINE_SERVICE, characteristic: "ffe3", properties: ["Notify"]}
+        ]});
+        (BleManager.read as jest.Mock).mockReset().mockResolvedValue(
+            Array.from("NEW", (char) => char.charCodeAt(0))
+        );
+    });
+
+    afterEach(() => {
+        Platform.OS = platform;
+        (BleManager.retrieveServices as jest.Mock).mockResolvedValue({});
+        (BleManager.read as jest.Mock).mockResolvedValue([]);
+        (BleManager.onDidUpdateValueForCharacteristic as jest.Mock)
+            .mockImplementation(() => ({remove: jest.fn()}));
+        (BleManager.onDisconnectPeripheral as jest.Mock)
+            .mockImplementation(() => ({remove: jest.fn()}));
+    });
+
+    it.each(["native connect", "services", "notification", "MTU", "model"] as const)(
+        "rejects a native disconnect during the %s await before publishing the link", async (stage) => {
+            if (stage === "MTU") Platform.OS = "android";
+            const entered = deferred<void>();
+            const pending = deferred<unknown>();
+            const native = stage === "native connect" ? BleManager.connect
+                : stage === "services" ? BleManager.retrieveServices
+                : stage === "notification" ? BleManager.startNotification
+                : stage === "MTU" ? BleManager.requestMTU : BleManager.read;
+            (native as jest.Mock).mockImplementationOnce(() => {
+                entered.resolve(undefined);
+                return pending.promise;
+            });
+            const transport = new BleTransport();
+            const result = transport.connect("one").catch((error: Error) => error);
+            await entered.promise;
+            drop("one");
+            pending.resolve(stage === "model" ? [79, 76, 68] : stage === "MTU" ? 185
+                : stage === "services" ? {} : undefined);
+
+            expect(await result).toEqual(new Error("The machine disconnected while connecting."));
+            expect(transport.connectedDeviceId).toBeNull();
+            expect(transport.isConnected()).toBe(false);
+            expect(transport.modelNumber).toBe("");
+            expect(transport.channels.join(" ")).not.toMatch(/refused/);
+            if (stage === "notification") {
+                expect(BleManager.startNotification).toHaveBeenCalledTimes(1);
+                expect(BleManager.read).not.toHaveBeenCalled();
+            }
+            if (stage === "MTU") expect(BleManager.read).not.toHaveBeenCalled();
+        }
+    );
+
+    it("keeps a ghost-link cleanup disconnect out of the replacement attempt", async () => {
+        (BleManager.connect as jest.Mock).mockRejectedValueOnce(new Error("already connected"));
+        (BleManager.disconnect as jest.Mock).mockImplementationOnce(async (id: string) => drop(id));
+        const transport = new BleTransport();
+
+        await transport.connect("one");
+
+        expect(transport.connectedDeviceId).toBe("one");
+        expect(transport.modelNumber).toBe("NEW");
+        expect(BleManager.connect).toHaveBeenCalledTimes(2);
+    });
+
+    it("a superseded ghost-link cleanup cannot retry or remove the new observer", async () => {
+        const entered = deferred<void>();
+        const pending = deferred<void>();
+        (BleManager.connect as jest.Mock).mockRejectedValueOnce(new Error("already connected"));
+        (BleManager.disconnect as jest.Mock).mockImplementationOnce(() => {
+            entered.resolve(undefined);
+            return pending.promise;
+        });
+        const transport = new BleTransport();
+        const old = transport.connect("one").catch((error: Error) => error);
+        await entered.promise;
+        await transport.connect("two");
+        pending.resolve(undefined);
+
+        expect(await old).toEqual(new Error("Connection was superseded."));
+        expect(BleManager.connect).toHaveBeenCalledTimes(2);
+        expect(BleManager.disconnect).toHaveBeenCalledTimes(1);
+        expect(transport.modelNumber).toBe("NEW");
+        expect(transport.connectedDeviceId).toBe("two");
+        drop("two");
+        expect(transport.connectedDeviceId).toBeNull();
+    });
+
+    it("does not mistake an old target's disconnect for a setup failure", async () => {
+        const entered = deferred<void>();
+        const pending = deferred<void>();
+        (BleManager.startNotification as jest.Mock).mockImplementationOnce(() => {
+            entered.resolve(undefined);
+            return pending.promise;
+        });
+        const transport = new BleTransport();
+        const result = transport.connect("two");
+        await entered.promise;
+        drop("one");
+        pending.resolve(undefined);
+
+        await result;
+        expect(transport.connectedDeviceId).toBe("two");
+        expect(transport.modelNumber).toBe("NEW");
+    });
+
+    it.each(["resolve", "reject"] as const)(
+        "a superseded first notification that later %ss cannot call the next native channel",
+        async (settlement) => {
+            const entered = deferred<void>();
+            const pending = deferred<void>();
+            (BleManager.startNotification as jest.Mock).mockImplementationOnce(() => {
+                entered.resolve(undefined);
+                return pending.promise;
+            });
+            const transport = new BleTransport();
+            const frames = jest.fn();
+            const drops = jest.fn();
+            transport.onFrame(frames);
+            transport.onDisconnect(drops);
+            const old = transport.connect("one").catch((error: Error) => error);
+            await entered.promise;
+            await transport.connect("two");
+            const channels = [...transport.channels];
+            const nativeCalls = [...(BleManager.startNotification as jest.Mock).mock.calls];
+            frameCallbacks.forEach((callback) => callback({
+                peripheral: "one", service: MACHINE_SERVICE, characteristic: "ffe3", value: [1]
+            }));
+            drop("one");
+            if (settlement === "resolve") pending.resolve(undefined);
+            else pending.reject(new Error("native subscription refused"));
+
+            expect(await old).toEqual(new Error("Connection was superseded."));
+            expect((BleManager.startNotification as jest.Mock).mock.calls).toEqual(nativeCalls);
+            expect(transport.channels).toEqual(channels);
+            expect(transport.modelNumber).toBe("NEW");
+            expect(transport.connectedDeviceId).toBe("two");
+            expect(BleManager.disconnect).not.toHaveBeenCalled();
+            expect(frames).not.toHaveBeenCalled();
+            expect(drops).not.toHaveBeenCalled();
+            frameCallbacks.forEach((callback) => callback({
+                peripheral: "two", service: MACHINE_SERVICE, characteristic: "ffe3", value: [2]
+            }));
+            expect(frames).toHaveBeenCalledWith(Uint8Array.from([2]), "ffe3", {
+                deviceId: "two", generation: transport.connectionGeneration
+            });
+        }
+    );
+
+    it.each(["MTU", "model"] as const)(
+        "a superseded %s refusal cannot reset the new link's diagnostics", async (stage) => {
+            if (stage === "MTU") Platform.OS = "android";
+            const entered = deferred<void>();
+            const pending = deferred<never>();
+            const native = stage === "MTU" ? BleManager.requestMTU : BleManager.read;
+            (native as jest.Mock).mockImplementationOnce(() => {
+                entered.resolve(undefined);
+                return pending.promise;
+            });
+            const transport = new BleTransport();
+            const old = transport.connect("one").catch((error: Error) => error);
+            await entered.promise;
+            await transport.connect("two");
+            const channels = [...transport.channels];
+            const budget = transport.frameBudget;
+            const reads = [...(BleManager.read as jest.Mock).mock.calls];
+            pending.reject(new Error("native characteristic refused"));
+
+            expect(await old).toEqual(new Error("Connection was superseded."));
+            expect(transport.channels).toEqual(channels);
+            expect(transport.frameBudget).toBe(budget);
+            expect((BleManager.read as jest.Mock).mock.calls).toEqual(reads);
+            expect(transport.modelNumber).toBe("NEW");
+            expect(transport.connectedDeviceId).toBe("two");
+            expect(BleManager.disconnect).not.toHaveBeenCalled();
+        }
+    );
+
+    it("rejects captured setup callbacks after reconnecting to the same peripheral", async () => {
+        const entered = deferred<void>();
+        const pending = deferred<void>();
+        (BleManager.startNotification as jest.Mock).mockImplementationOnce(() => {
+            entered.resolve(undefined);
+            return pending.promise;
+        });
+        const transport = new BleTransport();
+        const frames = jest.fn();
+        const drops = jest.fn();
+        transport.onFrame(frames);
+        transport.onDisconnect(drops);
+        const old = transport.connect("one").catch((error: Error) => error);
+        await entered.promise;
+        const oldFrame = [...frameCallbacks][0];
+        const oldDrop = [...dropCallbacks][0];
+        await transport.connect("one");
+        const channels = [...transport.channels];
+        pending.resolve(undefined);
+
+        expect(await old).toEqual(new Error("Connection was superseded."));
+        oldFrame({peripheral: "one", service: MACHINE_SERVICE, characteristic: "ffe3", value: [1]});
+        oldDrop({peripheral: "one"});
+        expect(frames).not.toHaveBeenCalled();
+        expect(drops).not.toHaveBeenCalled();
+        expect(transport.connectedDeviceId).toBe("one");
+        expect(transport.modelNumber).toBe("NEW");
+        expect(transport.channels).toEqual(channels);
+        drop("one");
+        expect(drops).toHaveBeenCalledWith({
+            deviceId: "one", generation: transport.connectionGeneration
+        });
+        expect(transport.connectedDeviceId).toBeNull();
+    });
+});
+
 async function connected(): Promise<BleTransport> {
     const transport = new BleTransport();
     await transport.connect("AA:BB:CC");

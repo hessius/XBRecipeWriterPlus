@@ -3,9 +3,54 @@
 This is the source for the full release-testing checklist, not a claim that
 device testing is complete. Update it whenever release scope or behaviour changes.
 
-## Integration
+## Final slot/overflow consolidation
 
-`integration/2.1.0` starts at main `9dbe819` and includes all four open PRs:
+PR #209 was merged into `integration/2.1.0` as `3c6f0230` after its single
+Copilot review finding was fixed in `01d2897` and CI passed. Pending manual
+pause suppression now rolls back on native rejection and expires at the
+existing acknowledgement deadline; confirmed manual pauses remain manual.
+No additional automated review round was requested.
+
+PR #207 finalization implements the previously disconnected production port:
+exclusive machine operations, actual connection identity/generation,
+bounded notification-driven receipts/completion, durable recovery reservations
+and shared-owner installation before link opening. Raw dosage is validated
+before Recipe construction, and the overwrite/EASY warning remains beside the
+write/recovery action. An app-side pre-send slot refusal now terminates and
+releases the rejected live-run owner without sending, reconnecting, recording
+a brew or replaying after recovery.
+
+The shared Machine merge retains both slot exclusion and overflow pause
+provenance/request tokens. Parent validation of combined head `6df753d6`:
+
+| Command | Result |
+|---------|--------|
+| `npm run typecheck` | Passed, no diagnostics. |
+| `npm run lint` | Passed; 0 errors, 27 warnings. |
+| `npx expo-doctor` | Passed; 21/21 checks. |
+| `npm test -- --ci` | 710 suites passed; 13,640 tests passed, 24 skipped, 13,664 total; two snapshots passed. Both iOS and Android, 579.735 seconds. |
+
+Logs are session artifacts `release-combined-{typecheck,lint,doctor,full}.log`.
+The finalization received independent local reviews; fixes cover setup-time
+disconnects, superseded notification subscriptions and refused brew ownership.
+The original three #207 automated review findings remain fixed; no second
+automated review was requested.
+
+The heads of #202, #204, #205 and #206 are already ancestors of the release
+branch through `6c1cdb97`, `d06d249e`, `27a2f931` and `61521aaa`, respectively.
+GitHub refuses to retarget an already-included PR with no new commits.
+Closing those superseded PRs references their existing release integration;
+it does not merge their main-targeted PRs or change `main`.
+
+This is completed software integration, not a release safety sign-off.
+Physical BLE/NFC and native layout/accessibility gates below remain open.
+Slot dispatch/receipt/completion budgets are unmeasured software choices;
+code-only delayed receipts and unknown recovery still require firmware
+evidence. No native configuration, app version or backup version changed.
+
+## Initial integration
+
+`integration/2.1.0` starts at main `9dbe819` and includes the original four PRs:
 #204, #205, #206 and prototype #202. Main and the original PR branches remain
 unchanged. Including #202 here is permission to test it together, not approval
 to ship its unmeasured hardware behaviour.
@@ -31,7 +76,7 @@ The package numbers refer to
 | 7: Hardware spike | Initial questions answered via #198 | 40518 pauses, 40524 resumes without restarting; 8019 instead abandons the recipe for a water pour. Easy Mode batch behaviour documented. Pause latency, overshoot and reconnect survival still require measurement below. |
 | 8: Pause/resume | Prototype integrated from #202; hardware-blocked | Pause is acknowledged rather than inferred from ARMED; resume is optimistic; pause time is recorded, backed up and excluded from held-time/delay; paused readings are omitted; ladder/bypass remain in place. |
 | 9: Custom overflow protection | Tasks 1-10 software-complete; hardware/native release gates open | Protect the dripper using estimated retained water (brew water minus collected coffee), not receiving-cup weight. Explicit positive per-recipe limit beside OTHER controls; check every 15/30/45 seconds, default 15. Extend while high/unavailable; resume and re-arm when freshly below. Manual RESUME overrides protection for that brew. Background/link loss disable it for the run, without automatic restoration. UI, ladder, full/compact/history/export/compare traces and persisted intervals are wired. This is not validated overflow safety. |
-| 10: Easy Mode slots | Promoted to implementation scope on 2026-10-09 | Ship a dedicated three-slot screen, recipe-context entry and library markers. Warn that every write replaces all three slots and leaves the machine in EASY. Slots are write-only, so last-written state must not imply read-back verification. Detailed design and implementation remain to be completed. |
+| 10: Easy Mode slots | Production software wired; hardware/native verification pending | Persistent machine-bound A/B/C snapshots, whole-set replacement, coffee only, no bypass. The shared owner installs the bounded port before exposing Machine or opening its link. The route uses the actual connected identity and installed port, with busy/serial guards, persistent overwrite copy and strict raw-dose validation. Receipts and recovery remain subject to the hardware gates below. |
 
 ## Additional 2.0 feedback and integration changes
 
@@ -155,15 +200,132 @@ and `pr209-manual-app.log`.
    TalkBack checks, including narrow widths and large text.
 7. Confirm Beanconqueror's public release before package 4. Package 9 is in
    planned 2.1.0 scope under the approved fixed-check-interval v1 design.
-8. Implement and verify the three-slot writer. Prepare all three valid blobs
-   before sending A; recover incomplete batches without pretending a sent frame
-   proves storage; verify distinct ratios, grinder on/off, interrupted writes,
-   reconnect and ordinary brewing after the machine changes to EASY.
+8. Wire the implemented three-slot production port at shared-owner construction
+   and restore incomplete reservations before allowing other machine operations. Verify
+   real receipt correlation and fresh final completion, not native dispatch or
+   idle. Physical checks must use three distinct ratios, grinder on/off,
+   interrupted A/B writes, lost acknowledgements, restart/reconnect and ordinary
+   brewing after the machine changes to EASY. Establish safe recovery for an
+   unknown receipt or missing final completion before enabling production writes.
+9. Check the Easy Mode screen and library markers on native iOS/Android:
+   narrow widths, large text, fixed marked shelf tile geometry, pinned action,
+   VoiceOver/TalkBack and recipe-picker accessibility isolation.
+10. Verify the brewer/cup and overflow behaviour of stored slots before release.
+    The documented coffee blob does not encode cup type or phone-side overflow
+    policy; do not imply those protections carry over to standalone EASY brewing.
 
 Package 10 was promoted from issue-only/deferred to an actual 2.1.0 feature
 by the user's decision on 2026-10-09. This supersedes the older release design
-and #62's deferral wording; it does not resolve the detailed first-use,
-acknowledgement-loss or persistence/recovery design.
+and #62's deferral wording. Its approved bounded design is
+`docs/superpowers/specs/2026-10-09-easy-mode-slots-design.md`; uncertain receipt
+and final-completion recovery remain deliberately blocked pending verified
+machine evidence.
+
+## Package 10 software and shared-owner handoff
+
+The original domain/UI package was implemented in `feat/easy-mode-slots` based on
+`origin/integration/2.1.0` at `d0f60dd`; not merged into this integration branch.
+That original package did not edit the shared Machine/protocol or Recipe/backup.
+The separate production-port finalization on `integration/finalize-easy-mode-slots`
+adds Machine/Transport exclusion and connection scoping; Recipe/backup and UI
+remain unchanged. It does not integrate or merge the separate overflow #209.
+
+`easy_mode_slots` uses the existing app database and BLE device ID. Drafts,
+last-written snapshots and incomplete journals survive relaunch and source
+recipe deletion. Library changes require an explicit snapshot update; markers
+distinguish draft and last-written letters, including repeated assignments.
+Machine-bound slot records are intentionally excluded from recipe backups.
+All three frames are prepared before A. The journal persists before each send
+and after each receipt; only three receipts plus fresh final completion promote
+the set. A failed replacement retains the previous last-written set.
+
+The dedicated `/easyMode` screen has entries in the machine panel, library
+recipe actions and editor recipe actions. The picker reads `allRecipes()`,
+not the current search/shelf answer. Full sets require an explicit replacement
+choice; incomplete sets lock assignment and display the frozen recovery set.
+Incoming route JSON and persisted snapshots share `readSlotRecipe`, which
+validates raw dosage against the existing coffee DOSE bounds before the
+forgiving Recipe constructor can invent a default. Grinder, brewer, stages and
+prepared bytes are also validated. Legacy Recipe migrations are unchanged.
+
+`installMachineSlotPort(machine, sharedSlotDatabase())` now implements
+`SlotPort` / `SlotLease`. `sharedMachine()` installs it while constructing the
+shared Machine, **before exposing the singleton or calling openLink, not in a
+route effect**. It retains the port/database across navigation and passes it
+through `useMachine` to `useEasyModeSlots`. The route uses `machine.slotIdentity`,
+not the remembered setting, for
+the actual peripheral and freshly reported serial. A known serial cannot be
+replaced by null. Installation and reconnect read the per-device journal
+synchronously; ordinary operations are refused while that journal remains.
+Connection setup alone may send the existing handshake (8100) and info probe
+(40521), so a reserved machine can reconnect and identify itself. Public probes
+are not a bypass during an attempt or incomplete journal.
+
+The shared owner seeds and forwards AppState through `machine.setAppState`
+before its existing background/link handling. Any non-active or unknown state
+blocks acquisition and invalidates the attempt; only `background` gives back an
+idle link. Returning to the foreground reconnects where the existing lifecycle
+requires it but never replays slot frames. The AppState listener belongs to the
+singleton, not a route or each hook consumer.
+
+Settings forget checks both actual and remembered device IDs before disconnect
+or cleanup, notifies on an incomplete-write refusal and preserves the records.
+An offline route may display last-known assignments, but cannot send without
+the actual connected identity. A conflicting known serial, running brew or held
+brew disables WRITE and recovery with an explicit explanation.
+
+The complete A/B/C overwrite and EASY-mode warning lives with the bottom action,
+outside the card scroll. Its bounded action scroll keeps warning and button
+together when large text outgrows the space; neither gets a truncating fixed
+height or extra confirmation tap. Native layout/accessibility verification
+remains a gate, not something the renderer's style assertions can prove.
+
+`SlotOperationError` prevents ambient `useBrew` configuration effects from
+crashing or treating exclusion as a reason to reconnect and retry. Refused
+settings updates notify, are not queued behind slot completion, and are applied
+only on an explicit new brew. The local setters send no native commands.
+Settings refresh refusals also notify rather than disappearing in a catch.
+The single live RunOwner and pause/resume signatures are unchanged.
+
+Acquisition rejects busy operations immediately. A standalone console command
+also blocks slot acquisition until a fresh terminal machine state or reconnect:
+native acceptance alone cannot prove a grind/water action ended. The entire
+brew upload/preflight and its pacing gaps are excluded, as are held/paused
+brews. Pause/resume retain their existing SEND promise semantics; the surgical
+entry guards must coexist with #209's later pause-provenance integration.
+Slot traffic reuses the whole-frame Write Without Response, budget checks and
+accepted-send log, with the existing 2,000 ms gap and no retries. A stale session
+is refused before journal creation; reconnect explicitly rather than assuming
+the machine still accepts it.
+
+`release(false)` removes attempt observers/timers but leaves durable recovery
+exclusion. Recovery sends only remaining immutable frames from a known boundary;
+SAVING_SLOTS is the only non-terminal machine state allowed for that recovery.
+An in-flight slot or all receipts without final completion stays blocked.
+An optional `SlotLease.assertCurrent` checks invalidation immediately before
+durable mutations, including atomic promotion. Safe release requires no journal.
+
+Real Machine + fake transport + real SQLite tests now exercise receipt parsing,
+early ACK/final buffering, hung native dispatch, exact timeout thresholds and
+pacing, duplicates/refusals, stale callbacks, identity, restart/reconnect,
+background invalidation, contention and persistence failures. They do **not**
+prove firmware ordering, replay semantics or physical storage.
+
+**UNMEASURED software limits:** native dispatch (including its pacing gap),
+receipt after native resolution, and final completion each have a separate
+15,000 ms budget. Early receipts never bypass a hung native dispatch. Final
+completion must be a fresh attempt-scoped SLOTS_SAVED (0x25), not cached state,
+idle or three native successes. The existing 8-second brew ACK timer is not
+slot timing evidence.
+
+**Firmware-order assumption and hardware gate:** byte 9 is the command status
+(C2 ACK), not a slot ID. Serialization and one outstanding receipt reject
+observable out-of-window/duplicate receipts, but a delayed duplicate A arriving
+while B is outstanding is intrinsically indistinguishable from B's receipt.
+No software test clears that ambiguity. Native callback generations reject old
+registrations/known old peripheral scopes; the wire also carries no connection
+epoch to identify a same-peripheral old packet delivered as a new native event.
+Verify these ordering/lifecycle assumptions on actual iOS/Android BLE hardware.
 
 Full release testing should cover both iOS and Android. NFC regressions require
 physical devices and genuine cards; neither simulator proves card safety.
@@ -202,6 +364,167 @@ PRs' green checks:
 
 These are local integration results, not a GitHub CI run on this branch or
 device verification. No integration PR has been opened.
+
+Package 10's isolated worktree was additionally validated on 2026-10-09:
+
+- Final bounded feature and affected regression run: 34 iOS/Android project
+  suites passed, 1,002 tests passed and four existing tests skipped. Selectors
+  include the slot model/store/writer/hook, route/screen/surface tests and
+  affected home, editor, card, tile, shelf, selection and machine-panel tests.
+- Whole-worktree typecheck passed.
+- Changed-code lint passed with zero errors and one pre-existing
+  `no-require-imports` warning in the home test harness.
+- `git diff --check` passed; the shared Machine/protocol and Recipe/backup
+  files remain unchanged from the integration base.
+
+At that isolated feature checkpoint, no full release suite, new Expo Doctor run,
+native build or physical device verification was performed for package 10.
+Owner/UI wiring was still open then; the finalization below closes the software
+wiring gate only. All physical/native release gates above remain open.
+
+The single Copilot review on #207 found three software issues, reproduced on
+both Jest platforms and corrected: recipe-context preparation now claims
+navigation before assigning a slot; the Easy Mode route hides from
+accessibility while the global brew-note sheet is open; and marked shelf tiles
+retain `TILE_HEIGHT`, using a one-line visual marker with the full status in
+their accessibility label. No second review round was requested.
+
+Bounded production-port finalization was validated separately on 2026-10-09:
+
+```bash
+npx jest --runTestsByPath \
+  library/slots/__tests__/{machineSlotPort,slotWriter,SlotDatabase,slotModel}.test.ts \
+  library/machine/__tests__/{Machine,Machine.pause,Machine.bypass,Transport,protocol,frameLog}.test.ts \
+  hooks/__tests__/{useMachine,useMachine.persistence}.test.ts --runInBand --silent
+npm run typecheck
+npx eslint library/machine/{Machine,Transport,protocol,frameLog}.ts \
+  library/machine/__tests__/Transport.test.ts library/slots/{slotWriter,machineSlotPort}.ts \
+  library/slots/__tests__/machineSlotPort.test.ts constants/machine.ts
+git diff --check
+```
+
+All 24 project suites and 704 tests passed (both platforms); typecheck,
+changed-file lint and whitespace checks passed. The new production-port suite
+contains 47 cases per platform, using real Machine and SQLite rather than
+resolving mocked leases. Test-first failures were observed for the missing
+port/receipt decode and subsequent lifecycle refinements. Self-review tightened
+pre-journal invalidation, the final durable promotion boundary, pacing cleanup,
+standalone-action exclusion and stale native identity/handshake completion.
+No agents, full release suite, native build, deployment, push or merge were used.
+All hardware gates, code-only ACK ordering assumptions and parent wiring remain
+explicitly open; these counts are software evidence only.
+
+Owner/UI finalization was validated separately on 2026-10-09:
+
+```bash
+npx jest --runTestsByPath \
+  library/slots/__tests__/{machineSlotPort,slotWriter,SlotDatabase,slotModel}.test.ts \
+  library/machine/__tests__/{Machine,Machine.pause,Machine.bypass}.test.ts \
+  hooks/__tests__/{machineSlotOwner.test.tsx,useEasyModeSlots.test.ts,useMachine.test.ts,useMachine.persistence.test.ts,useBrew.test.ts,useBrewRun.test.ts,useLiveBrew.test.tsx} \
+  app/__tests__/easyMode.test.tsx \
+  components/__tests__/{EasyModeSlots,MachineSection,slotSurfaces}.test.tsx \
+  --runInBand --silent
+npm run typecheck
+git diff --name-only -- '*.ts' '*.tsx' | xargs npx eslint
+npx eslint hooks/__tests__/machineSlotOwner.test.tsx
+git diff --check
+```
+
+All 36 project suites and 874 tests passed across iOS and Android. Typecheck
+passed; changed-code lint had zero errors and the two existing
+`no-require-imports` warnings in the machine-section test harness. The new
+shared-owner suite uses real Machine, the installed port, actual notifications
+and real SQLite, including the route's A/B/C completion, busy/serial guards,
+non-active startup, background/drop, navigation, restart reservation, explicit
+recovery and settings-forget refusal. Test-first failures reproduced both
+raw-dose paths, displaced warning, missing owner wiring, ambient lock crash,
+unsafe brew retry, retargeting during acquisition and hidden settings refusal.
+
+The earlier independent production-port review selector covered **450 tests**,
+not the initially reported 492. That review run, the 704-test port finalization
+above and this 874-test owner run are distinct evidence sets.
+
+The three automated #207 review fixes are preserved. No new automated review
+round, agent, push, main merge, deployment, native build or full release suite
+was used. The new domain/UI/owner changes received local self-review; another
+independent review has not been performed. App version, native configuration,
+NFC/Recipe serialization and BACKUP_VERSION remain unchanged.
+
+Production software wiring is complete, but the 15-second budgets remain
+unmeasured and code-only receipt ambiguity/unknown-receipt recovery still
+require hardware evidence. No automatic reset or replay was added. Parent
+integration and its full release validation remain separate: integration/2.1.0
+is checked out in another worktree, excluded from this task.
+
+### Bounded P2: slot-refused live attempt ownership
+
+Follow-up on `integration/finalize-easy-mode-slots`, based on merge head
+`de2ea66e` (including reviewed overflow #209 at `3c6f0230`). An incomplete
+slot journal correctly refused configuration with `SlotOperationError`, before
+`Machine.brew` or any brew frame. But `useBrew` only published an error: the
+provider's synthetic `waking` attempt never ended. Recovery could clear the
+reservation without clearing that phantom owner, so later explicit starts were
+ignored and neither CANCEL nor mini-bar dismissal could retire it.
+
+`useBrew` now reports that specific refusal to its attempt owner, including the
+explicit PRO retry entry and the existing preflight retry's final catch.
+`useBrewRun` checks the machine and run generation, stops its recorder without
+emitting, cancels/disposes its overflow controller and timer, unsubscribes its
+phase listener, and publishes an **app-local** `failed/blocked/busy` snapshot
+with the original recovery instruction. This uses the existing visible refusal,
+retry and dismissal UI; it never changes `Machine.phase` or writes a history row.
+Later hardware phases cannot revive that refused attempt, and a retired
+callback cannot end the next explicit generation.
+
+The durable journal and transport exclusion remain authoritative until safe
+recovery. Recovery sends only its stored slot frames, and clearing the journal
+does not replay rejected settings or brew commands. The next explicit start
+applies current configuration and sends exactly one recipe/commit. No provider
+generation bump or automatic retry was added to the refusal/recovery path.
+Existing preflight recorder/controller replacement and manual-pause failure
+rollback from #209 are preserved.
+
+Seven new cases run on each platform: ordinary and overflow-configured
+refusal/recovery, both start entries against an independently running real
+Machine, and stale callback delivery after a new explicit generation. The
+provider integration uses real `useBrew`, `useBrewRun`, `useLiveBrew`,
+`useMachine`, the installed slot port and SQLite stores. It checks zero refused
+attempt traffic/reconnects, terminal/dismissible ownership, no recording even
+when another real brew subsequently finishes, released controller listeners
+and intervals, continuing reservation/busy exclusion, atomic stored slot
+completion, no implicit replay, and one later real `8001`/`8002` sequence.
+The existing slot suites retain the three-receipts-plus-SLOTS_SAVED atomic gate.
+
+Test-first runs reproduced eight `waking` failures across both platforms.
+Removing only the PRO-entry refusal callback separately reproduced four more
+`waking` failures; restoring it passed. Final targeted validation:
+
+```bash
+npx jest --runTestsByPath \
+  hooks/__tests__/{machineSlotOwner.test.tsx,useBrew.test.ts,useBrewRun.test.ts,useLiveBrew.test.tsx,useMachine.test.ts,useMachine.persistence.test.ts,useOverflowProtection.test.ts,useEasyModeSlots.test.ts} \
+  library/slots/__tests__/{machineSlotPort,slotWriter,SlotDatabase,slotModel}.test.ts \
+  library/machine/__tests__/{Machine,Machine.pause,Machine.bypass,Transport}.test.ts \
+  --runInBand --silent
+npm run typecheck
+npx eslint hooks/useBrew.ts hooks/useBrewRun.ts hooks/useOverflowProtection.ts \
+  hooks/__tests__/machineSlotOwner.test.tsx hooks/__tests__/useLiveBrew.test.tsx
+git diff --check
+```
+
+**32 project suites / 1,016 tests passed**, both iOS and Android, no skips or
+snapshots (24.884 s). The narrow provider selector passed 12 executions; the
+generation callback adds two more in the combined run. Typecheck and whitespace
+passed; changed-code lint has zero errors and the existing `openRecorder`
+exhaustive-deps warning. Logs are session artifacts `slot-owner-refusal-red.log`,
+`slot-owner-pro-refusal-red.log`, `slot-owner-refusal-green.log` and
+`slot-owner-refusal-targeted.log`. Local self-review found no unresolved software
+finding in this bounded fix. Prior feature checkpoints/counts above are retained,
+not superseded by these narrower checks.
+
+No agents, other worktrees, push, PR, main changes, deployment or merge were used.
+Machine frame bytes, timing budgets, recovery protocol, native version and
+approved design/specification documents are unchanged. The full parent
+integration gate and previously listed physical/native release gates remain open.
 
 ## Custom overflow v1 completion (Task 10)
 

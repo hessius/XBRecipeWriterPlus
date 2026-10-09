@@ -5,6 +5,7 @@ import {AppState} from "react-native";
 import {LiveBrewProvider, STOPPED_BAR_MS, useLiveBrew} from "@/hooks/useLiveBrew";
 import type {BrewRecord, BrewSample} from "@/library/brew/BrewRecord";
 import type {BrewPhase} from "@/library/machine/Machine";
+import {SlotOperationError} from "@/library/machine/errors";
 import type {Notification} from "@/library/machine/protocol";
 import Pour from "@/library/Pour";
 import Recipe from "@/library/Recipe";
@@ -162,6 +163,32 @@ describe("LiveBrewProvider", () => {
         r.overflowProtection = {retainedGrams: 50, checkSeconds: 15};
         await act(async () => { result.current.start(r); });
         expect(global.__brewer.brew).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores a retired attempt's refusal callback after an explicit new brew", async () => {
+        const h = harness();
+        const callbacks: ((error: SlotOperationError) => void)[] = [];
+        global.__brewer.brew = jest.fn(async (_recipe, _retry, refusal) => {
+            if (refusal !== undefined) callbacks.push(refusal);
+        });
+        const {result} = await renderHook(() => useLiveBrew(), {
+            wrapper: ({children}) => <LiveBrewProvider store={h.store}>{children}</LiveBrewProvider>
+        });
+        const r = recipe();
+        await act(async () => { result.current.start(r); });
+        expect(callbacks).toHaveLength(1);
+        await act(async () => { callbacks[0](new SlotOperationError("Recover Easy Mode first.")); });
+        expect(result.current.run?.phase.name).toBe("failed");
+        expect(h.listenerCounts()[0]).toBe(0);
+        expect(h.written).toEqual([]);
+        await act(async () => { result.current.start(r); });
+        expect(callbacks).toHaveLength(2);
+        await h.setPhase({name: "pouring", pour: 1, pours: 2});
+        const listeners = h.listenerCounts();
+        await act(async () => { callbacks[0](new SlotOperationError("Old refusal.")); });
+        expect(result.current.run?.phase.name).toBe("pouring");
+        expect(h.listenerCounts()).toEqual(listeners);
+        expect(global.__brewer.brew).toHaveBeenCalledTimes(2);
     });
 
     it("disposes protection when a finished run is dismissed without a replacement brew", async () => {
